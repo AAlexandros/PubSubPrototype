@@ -1,0 +1,26 @@
+services:
+  cardano-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        CARDANO_TESTNET_VERSION: ${CARDANO_TESTNET_VERSION:-11.0.1}
+    image: ${CARDANO_TESTNET_IMAGE:-pubsub-cardano-testnet:11.0.1}
+    volumes:
+      - ./runtime:/devnet/runtime
+      - ./keys:/devnet/keys
+      - cardano-devnet-state:/devnet/state
+    environment:
+      CARDANO_NETWORK_MAGIC: ${CARDANO_NETWORK_MAGIC:-42}
+      CARDANO_TESTNET_NUM_POOL_NODES: ${CARDANO_TESTNET_NUM_POOL_NODES:-1}
+      CARDANO_TESTNET_SLOT_LENGTH: ${CARDANO_TESTNET_SLOT_LENGTH:-0.2}
+      CARDANO_TESTNET_EPOCH_LENGTH: ${CARDANO_TESTNET_EPOCH_LENGTH:-500}
+      CARDANO_TESTNET_OUTPUT_DIR: /devnet/runtime/testnet
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /devnet/runtime/testnet/socket/node1/sock"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  cardano-devnet-state:

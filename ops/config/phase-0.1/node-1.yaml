@@ -1,0 +1,15 @@
+node:
+  name: node-1
+  listenHost: 0.0.0.0
+  listenPort: 7001
+  identityPath: /data/identity
+peers:
+  - host: pubsub-node-2
+    port: 7002
+  - host: pubsub-node-3
+    port: 7003
+transport:
+  pingIntervalMs: 5000
+  pingTimeoutMs: 3000
+  reconnectInitialMs: 1000
+  reconnectMaxMs: 10000

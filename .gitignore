@@ -1,0 +1,38 @@
+.gradle/
+.gradle-user-home/
+build/
+**/build/
+**/bin/
+
+runtime/
+logs/
+*.log
+
+# Generated acceptance output.
+implementation-reports/evidence/
+
+# Current devnet runtime tree.
+ops/infra/devnet/runtime/
+ops/infra/devnet/state/
+ops/infra/devnet/keys/
+ops/infra/devnet/genesis/
+ops/infra/devnet;*/
+
+# Legacy devnet runtime paths kept ignored for older checkouts.
+infra/devnet/runtime/
+infra/devnet/state/
+infra/devnet/keys/
+infra/devnet/genesis/
+
+**/identity/
+**/identity.json
+**/*.skey
+**/*.vkey
+**/*.addr
+
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+*.tmp

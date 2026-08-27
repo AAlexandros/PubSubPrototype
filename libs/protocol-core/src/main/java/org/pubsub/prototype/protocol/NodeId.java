@@ -8,6 +8,7 @@ import java.util.regex.Pattern;
 
 public record NodeId(String value) {
     private static final Pattern LOWERCASE_SHA256_HEX = Pattern.compile("[0-9a-f]{64}");
+    private static final String HASH_ALGORITHM = "SHA-256";
 
     public NodeId {
         Objects.requireNonNull(value, "value");
@@ -18,10 +19,10 @@ public record NodeId(String value) {
 
     public static NodeId fromPublicKey(PublicKey publicKey) {
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            MessageDigest digest = MessageDigest.getInstance(HASH_ALGORITHM);
             return new NodeId(Hex.encode(digest.digest(publicKey.getEncoded())));
         } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("SHA-256 is not available", ex);
+            throw new IllegalStateException(String.format("%s is not available", HASH_ALGORITHM), ex);
         }
     }
 }

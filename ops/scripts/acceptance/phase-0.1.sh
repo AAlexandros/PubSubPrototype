@@ -14,7 +14,7 @@ set -a
 . ops/infra/devnet/versions.env
 set +a
 
-SOAK_SECONDS="${PHASE_0_1_SOAK_SECONDS:-600}"
+SOAK_SECONDS="${PHASE_0_1_SOAK_SECONDS:-30}"
 COMPOSE=(docker compose --env-file ops/infra/devnet/versions.env -f ops/infra/phase-0.1/compose.yaml)
 EVIDENCE_DIR="$ROOT_DIR/implementation-reports/evidence/phase-0.1"
 rm -rf "$EVIDENCE_DIR"

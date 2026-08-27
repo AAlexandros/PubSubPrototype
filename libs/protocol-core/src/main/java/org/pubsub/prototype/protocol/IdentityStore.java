@@ -19,6 +19,7 @@ import java.util.Base64;
 public final class IdentityStore {
     private static final ObjectMapper MAPPER = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
     private static final String IDENTITY_FILE = "identity.json";
+    private static final String KEY_GENERATION_ALGORITHM = "Ed25519";
 
     private IdentityStore() {
     }
@@ -38,7 +39,7 @@ public final class IdentityStore {
 
     private static NodeIdentity read(Path file) throws IOException, GeneralSecurityException {
         StoredIdentity stored = MAPPER.readValue(file.toFile(), StoredIdentity.class);
-        KeyFactory factory = KeyFactory.getInstance("Ed25519");
+        KeyFactory factory = KeyFactory.getInstance(KEY_GENERATION_ALGORITHM);
         PublicKey publicKey = factory.generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(stored.publicKey)));
         PrivateKey privateKey = factory.generatePrivate(new PKCS8EncodedKeySpec(Base64.getDecoder().decode(stored.privateKey)));
         KeyPair keyPair = new KeyPair(publicKey, privateKey);
@@ -46,7 +47,7 @@ public final class IdentityStore {
     }
 
     private static NodeIdentity writeNew(Path file) throws IOException, GeneralSecurityException {
-        KeyPairGenerator generator = KeyPairGenerator.getInstance("Ed25519");
+        KeyPairGenerator generator = KeyPairGenerator.getInstance(KEY_GENERATION_ALGORITHM);
         KeyPair keyPair = generator.generateKeyPair();
         StoredIdentity stored = new StoredIdentity(
                 Base64.getEncoder().encodeToString(keyPair.getPublic().getEncoded()),

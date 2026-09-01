@@ -4,12 +4,21 @@ build/
 **/build/
 **/bin/
 
+.tools/
+
 runtime/
 logs/
 *.log
 
 # Generated acceptance output.
 implementation-reports/evidence/
+
+# Generated Aiken/Cardano contract output.
+contracts/topic-registry/check.out
+contracts/topic-registry/check.err
+contracts/topic-registry/ps-check.out
+contracts/topic-registry/ps-check.err
+contracts/topic-registry/plutus.json
 
 # Current devnet runtime tree.
 ops/infra/devnet/runtime/
@@ -23,6 +32,9 @@ infra/devnet/runtime/
 infra/devnet/state/
 infra/devnet/keys/
 infra/devnet/genesis/
+
+# aiken binaries and tarball
+.tools/*
 
 **/identity/
 **/identity.json

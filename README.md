@@ -13,6 +13,7 @@ Java 21 prototype for a Cardano-backed Pub/Sub network. Phase 0.1 is implemented
 - `ops/scripts/`: phase runtime and acceptance entrypoints.
 - `specs/`: source specifications and phase task notes.
 - `implementation-reports/`: implementation reports and acceptance evidence.
+- `documentation/`: supplementary documentation, including [`documentation/scripts.md`](documentation/scripts.md), a full reference of every script in the repository.
 
 ## Requirements
 

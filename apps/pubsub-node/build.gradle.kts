@@ -4,6 +4,8 @@ plugins {
 
 dependencies {
     implementation(project(":libs:protocol-core"))
+    implementation(project(":libs:registry-api"))
+    implementation(project(":libs:registry-cardano"))
     implementation(project(":libs:transport-netty"))
     implementation("org.yaml:snakeyaml:2.2")
     implementation("org.slf4j:slf4j-api:2.0.13")

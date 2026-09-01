@@ -13,3 +13,8 @@ transport:
   pingTimeoutMs: 3000
   reconnectInitialMs: 1000
   reconnectMaxMs: 10000
+registry:
+  enabled: true
+  runtimeDir: /registry
+  signer: node-1
+  pollIntervalMs: 1000

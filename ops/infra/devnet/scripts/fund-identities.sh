@@ -3,6 +3,7 @@ set -euo pipefail
 . "$(dirname "$0")/common.sh"
 
 MIN_LOVELACE="${DEVNET_IDENTITY_MIN_LOVELACE:-10000000}"
+COLLATERAL_LOVELACE="${DEVNET_IDENTITY_COLLATERAL_LOVELACE:-5000000}"
 FUNDING_DIR="$RUNTIME_DIR/funding"
 mkdir -p "$FUNDING_DIR"
 
@@ -16,8 +17,9 @@ all_funded() {
   local missing=0
   for name in registry-deployer node-1 node-2 node-3; do
     balance="$(identity_balance_lovelace "$name")"
+    utxo_count="$(identity_utxo_count "$name")"
     echo "$name balance=$balance address=$(cat "$KEYS_DIR/$name/payment.addr")"
-    if [ "$balance" -lt "$MIN_LOVELACE" ]; then
+    if [ "$balance" -lt $((MIN_LOVELACE + COLLATERAL_LOVELACE)) ] || [ "$utxo_count" -lt 2 ]; then
       missing=1
     fi
   done
@@ -91,7 +93,7 @@ candidate_address() {
 }
 
 select_funding_source() {
-  local needed=$((MIN_LOVELACE * 4 + 5000000))
+  local needed=$(((MIN_LOVELACE + COLLATERAL_LOVELACE) * 4 + 5000000))
   while IFS=$'\t' read -r skey vkey explicit_addr; do
     [ -n "$skey" ] && [ -f "$skey" ] && [ -n "$vkey" ] && [ -f "$vkey" ] || continue
     if addr="$(candidate_address "$skey" "$vkey" "$explicit_addr")"; then
@@ -130,7 +132,7 @@ fi
 tx_body="$FUNDING_DIR/fund-identities.txbody"
 tx_signed="$FUNDING_DIR/fund-identities.tx"
 fee="${DEVNET_FUNDING_FEE_LOVELACE:-200000}"
-target_total=$((MIN_LOVELACE * 4))
+target_total=$(((MIN_LOVELACE + COLLATERAL_LOVELACE) * 4))
 source_balance="$(address_balance_lovelace "$funding_addr")"
 change=$((source_balance - target_total - fee))
 if [ "$change" -le 0 ]; then
@@ -144,6 +146,7 @@ for txin in "${txins[@]}"; do
 done
 for name in registry-deployer node-1 node-2 node-3; do
   args+=(--tx-out "$(cat "$KEYS_DIR/$name/payment.addr")+$MIN_LOVELACE")
+  args+=(--tx-out "$(cat "$KEYS_DIR/$name/payment.addr")+$COLLATERAL_LOVELACE")
 done
 args+=(--tx-out "$funding_addr+$change")
 

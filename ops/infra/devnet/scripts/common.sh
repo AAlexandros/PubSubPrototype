@@ -134,6 +134,13 @@ identity_balance_lovelace() {
   address_balance_lovelace "$addr"
 }
 
+identity_utxo_count() {
+  local name="$1"
+  local addr
+  addr="$(cat "$KEYS_DIR/$name/payment.addr")"
+  address_utxos "$addr" | wc -l | tr -d ' '
+}
+
 address_balance_lovelace() {
   local addr="$1"
   cardano_cli query utxo --address "$addr" --testnet-magic "$NETWORK_MAGIC" \

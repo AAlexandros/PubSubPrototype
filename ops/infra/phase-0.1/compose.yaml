@@ -13,6 +13,7 @@ services:
     command: ["/config/node-1.yaml"]
     volumes:
       - ../../config/phase-0.1/node-1.yaml:/config/node-1.yaml:ro
+      - ../devnet/runtime/registry:/registry
       - pubsub-node-1-identity:/data/identity
     ports:
       - "7001:7001"
@@ -26,6 +27,7 @@ services:
     command: ["/config/node-2.yaml"]
     volumes:
       - ../../config/phase-0.1/node-2.yaml:/config/node-2.yaml:ro
+      - ../devnet/runtime/registry:/registry
       - pubsub-node-2-identity:/data/identity
     ports:
       - "7002:7002"
@@ -39,6 +41,7 @@ services:
     command: ["/config/node-3.yaml"]
     volumes:
       - ../../config/phase-0.1/node-3.yaml:/config/node-3.yaml:ro
+      - ../devnet/runtime/registry:/registry
       - pubsub-node-3-identity:/data/identity
     ports:
       - "7003:7003"

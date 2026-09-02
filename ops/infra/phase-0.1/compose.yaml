@@ -16,7 +16,8 @@ services:
       - ../devnet/runtime/registry:/registry
       - pubsub-node-1-identity:/data/identity
     ports:
-      - "7001:7001"
+      - "7001:7000"
+      - "127.0.0.1:8001:8000"
 
   pubsub-node-2:
     build:
@@ -30,7 +31,8 @@ services:
       - ../devnet/runtime/registry:/registry
       - pubsub-node-2-identity:/data/identity
     ports:
-      - "7002:7002"
+      - "7002:7000"
+      - "127.0.0.1:8002:8000"
 
   pubsub-node-3:
     build:
@@ -44,7 +46,8 @@ services:
       - ../devnet/runtime/registry:/registry
       - pubsub-node-3-identity:/data/identity
     ports:
-      - "7003:7003"
+      - "7003:7000"
+      - "127.0.0.1:8003:8000"
 
 volumes:
   cardano-devnet-state:

@@ -15,6 +15,7 @@ dependencyResolutionManagement {
 rootProject.name = "pubsub-prototype"
 
 include("libs:protocol-core")
+include("libs:event-core")
 include("libs:registry-api")
 include("libs:registry-cardano")
 include("libs:transport-netty")

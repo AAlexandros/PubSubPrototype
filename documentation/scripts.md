@@ -13,6 +13,8 @@ This document describes every automation script in the repository: what it does,
 
 These scripts start, stop, and observe the local three-node Pub/Sub topology together with the Cardano devnet.
 
+The Pub/Sub containers all listen on the same internal ports (`7000` for peer transport and `8000` for the control API). Docker Compose maps those to distinct localhost ports (`7001..7003` and `8001..8003`) so all three nodes can be reached from the host at the same time.
+
 | Script | Purpose | Created | Phase |
 |---|---|---|---|
 | [`phase-0.1-up.sh`](../ops/scripts/phase-0.1-up.sh) | Builds the Java application, starts the Cardano devnet, waits for it to become healthy, funds the phase identities, then starts the three Pub/Sub nodes. | Written to satisfy the "Run Phase 0.1 Locally" requirement in `specs/phase-0.1.md`. | Phase 0.1 |
@@ -25,7 +27,9 @@ These scripts start, stop, and observe the local three-node Pub/Sub topology tog
 |---|---|---|---|
 | [`ops/scripts/acceptance/phase-0.1.sh`](../ops/scripts/acceptance/phase-0.1.sh) | Full Phase 0.1 acceptance flow: clean build and tests, devnet reset/start/health-check, identity funding validation, full-mesh connectivity check, PING/PONG exchange with RTT logging, and a stop/restart reconnection check. Writes evidence to `implementation-reports/evidence/phase-0.1/`. Soak duration is configurable via `PHASE_0_1_SOAK_SECONDS` (default 30s). | Written for the Phase 0.1 acceptance checklist in `specs/phase-0.1.md`. | Phase 0.1, strengthened in Phase 0.1.1 (real devnet integration) and Phase 0.1.2 (final integration/acceptance hardening) |
 | [`scripts/acceptance/phase-0.2.sh`](../scripts/acceptance/phase-0.2.sh) | Full Phase 0.2 acceptance flow: extends Phase 0.1 acceptance with Cardano registry initialization, registry polling on all nodes, topic CRUD operations, authorization-matrix enforcement checks, and rejection of malicious/direct transactions. Writes evidence to `implementation-reports/evidence/phase-0.2/`. | Written for the Phase 0.2 acceptance checklist in `specs/phase-0.2.md`. | Phase 0.2, updated in Phase 0.2.1 to exercise the real Cardano-backed registry and validator rejection paths |
+| [`scripts/acceptance/phase-0.3.sh`](../scripts/acceptance/phase-0.3.sh) | Full Phase 0.3 acceptance flow: deploys the registry, starts three nodes, registers a node event-signing key, publishes signed events, verifies dissemination/deduplication, exercises unauthorized and tampered-event rejection, checks open/deleted topics, and confirms publisher sequence continuity after restart. Writes evidence to `implementation-reports/evidence/phase-0.3/`. | Written for the Phase 0.3 acceptance checklist in `specs/phase-0.3.md`. | Phase 0.3 |
 | [`ops/scripts/acceptance/phase-0.2.sh`](../ops/scripts/acceptance/phase-0.2.sh) | Thin wrapper that forwards to `scripts/acceptance/phase-0.2.sh`, keeping all acceptance entrypoints discoverable under `ops/scripts/acceptance/`. | Added alongside the Phase 0.2 acceptance flow. | Phase 0.2 |
+| [`ops/scripts/acceptance/phase-0.3.sh`](../ops/scripts/acceptance/phase-0.3.sh) | Thin wrapper that forwards to `scripts/acceptance/phase-0.3.sh`, keeping the full Phase 0.3 acceptance entrypoint discoverable beside the earlier phase wrappers. | Added alongside the Phase 0.3 acceptance flow. | Phase 0.3 |
 
 ## Cardano devnet infrastructure — `ops/infra/devnet/`
 
@@ -60,12 +64,22 @@ Introduced in Phase 0.2 to give operators/tests a CLI surface over the on-chain 
 | [`direct-last-owner-removal.sh`](../scripts/registry/direct-last-owner-removal.sh) | Constructs a direct Cardano transaction that attempts to remove the last owner via a zero-owner output datum, bypassing the Java API's own safety check. Used only to prove the Aiken validator itself rejects the invariant violation. | Added as negative-path test tooling for the on-chain validator. | Phase 0.2.1 |
 | [`add-admin.sh`](../scripts/registry/add-admin.sh) | Adds an admin to a topic (owner-or-admin mutation). Usage: `add-admin.sh <signer> <topicId> <admin>`. | Listed in `specs/phase-0.2.md` as a required registry entry point. | Phase 0.2 |
 | [`remove-admin.sh`](../scripts/registry/remove-admin.sh) | Removes an admin from a topic (owner-or-admin mutation). Usage: `remove-admin.sh <signer> <topicId> <admin>`. | Listed in `specs/phase-0.2.md` as a required registry entry point. | Phase 0.2 |
-| [`add-publisher.sh`](../scripts/registry/add-publisher.sh) | Adds a publisher to a topic (owner-or-admin mutation). Usage: `add-publisher.sh <signer> <topicId> <publisher>`. | Listed in `specs/phase-0.2.md` as a required registry entry point. | Phase 0.2 |
+| [`add-publisher.sh`](../scripts/registry/add-publisher.sh) | Adds a publisher to a topic (owner-or-admin mutation). Usage: `add-publisher.sh <signer> <topicId> <publisher>`, or `add-publisher.sh --node <signer> <topicId> <node>` to register that node's Ed25519 event publisher key ID. | Listed in `specs/phase-0.2.md` as a required registry entry point. | Phase 0.2, updated in Phase 0.3 |
 | [`remove-publisher.sh`](../scripts/registry/remove-publisher.sh) | Removes a publisher from a topic (owner-or-admin mutation). Usage: `remove-publisher.sh <signer> <topicId> <publisher>`. | Listed in `specs/phase-0.2.md` as a required registry entry point. | Phase 0.2 |
 | [`set-replication-factor.sh`](../scripts/registry/set-replication-factor.sh) | Sets a topic's replication factor (owner-or-admin mutation, must stay positive). Usage: `set-replication-factor.sh <signer> <topicId> <replication_factor>`. | Listed in `specs/phase-0.2.md` as a required registry entry point. | Phase 0.2 |
 | [`set-retention-period.sh`](../scripts/registry/set-retention-period.sh) | Sets a topic's retention period (owner-or-admin mutation, must stay positive). Usage: `set-retention-period.sh <signer> <topicId> <retention_period>`. | Listed in `specs/phase-0.2.md` as a required registry entry point. | Phase 0.2 |
 | [`query.sh`](../scripts/registry/query.sh) | Queries registry state. Supports `--utxos` (list registry UTxOs), `--all` (all topics), `--topic <topicId>` (one topic), or a default summary view. | Listed in `specs/phase-0.2.md` as a required registry entry point. | Phase 0.2, updated in Phase 0.2.1 |
 | [`export-aiken-scripts.mjs`](../scripts/registry/export-aiken-scripts.mjs) | Node.js utility that extracts compiled Aiken validator scripts from the `plutus.json` blueprint and writes them out as individual `PlutusScriptV3` JSON files under `contracts/topic-registry/build/cardano-cli/` for use by `cardano-cli`. | Added to bridge Aiken's build output to the Cardano CLI's expected script format. | Phase 0.2, updated in Phase 0.2.1 |
+
+## Event operations — `scripts/events/`
+
+Introduced in Phase 0.3 to publish and inject signed event envelopes through a node's localhost control API.
+
+| Script | Purpose | Created | Phase |
+|---|---|---|---|
+| [`publish.sh`](../scripts/events/publish.sh) | Publishes an event through `POST /v1/events/publish`. Supports plain-text or base64 payloads, plus acceptance-only `--force-broadcast` and `--tamper-signature` flags for receiver-side validation tests. | Written for the Phase 0.3 node control API and negative-path acceptance requirements. | Phase 0.3 |
+| [`inject.sh`](../scripts/events/inject.sh) | Re-broadcasts a previously captured event envelope through `POST /v1/events/inject`, used by acceptance to prove duplicate suppression against the exact same event ID. | Written for the Phase 0.3 duplicate suppression acceptance check. | Phase 0.3 |
+| [`publisher-key-id.sh`](../scripts/events/publisher-key-id.sh) | Reads a running node's Ed25519 event publisher key ID from `GET /v1/events/publisher-key-id`, used when registering node publishers in the Cardano Topic Registry. | Written for the Phase 0.3 publisher identity decision. | Phase 0.3 |
 
 ## Aiken smart contracts — `contracts/topic-registry/`
 
@@ -84,3 +98,4 @@ Not shell scripts, but the on-chain logic that the registry scripts above build,
 | Phase 0.1.2 | [`specs/phase-0.1.2.md`](../specs/phase-0.1.2.md) | [`implementation-reports/phase-0.1.2-implementation-report.md`](../implementation-reports/phase-0.1.2-implementation-report.md) | `fund-identities.sh` hardened further; Phase 0.1 acceptance flow strengthened |
 | Phase 0.2 | [`specs/phase-0.2.md`](../specs/phase-0.2.md) | [`implementation-reports/phase-0.2-implementation-report.md`](../implementation-reports/phase-0.2-implementation-report.md) | All `scripts/registry/*.sh` CRUD/query entry points, `export-aiken-scripts.mjs`, `scripts/acceptance/phase-0.2.sh`, `ops/scripts/acceptance/phase-0.2.sh` wrapper |
 | Phase 0.2.1 | [`specs/phase-0.2.1.md`](../specs/phase-0.2.1.md) | [`implementation-reports/phase-0.2.1-implementation-report.md`](../implementation-reports/phase-0.2.1-implementation-report.md) | `scripts/registry/common.sh`, `build-aiken-wsl.sh`, `direct-last-owner-removal.sh` added; registry scripts updated to operate against the real Cardano ledger and the Aiken validator |
+| Phase 0.3 | [`specs/phase-0.3.md`](../specs/phase-0.3.md) | [`implementation-reports/phase-0.3-implementation-report.md`](../implementation-reports/phase-0.3-implementation-report.md) | `scripts/events/*.sh`, `scripts/acceptance/phase-0.3.sh`, `ops/scripts/acceptance/phase-0.3.sh`, event publisher registration support in `add-publisher.sh` |

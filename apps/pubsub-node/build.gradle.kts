@@ -4,6 +4,7 @@ plugins {
 
 dependencies {
     implementation(project(":libs:protocol-core"))
+    implementation(project(":libs:event-core"))
     implementation(project(":libs:registry-api"))
     implementation(project(":libs:registry-cardano"))
     implementation(project(":libs:transport-netty"))

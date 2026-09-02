@@ -6,7 +6,7 @@ import org.pubsub.prototype.transport.TransportConfig;
 import java.nio.file.Path;
 import java.util.List;
 
-record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection transport) {
+record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection transport, RegistrySection registry) {
     TransportConfig toTransportConfig() {
         return new TransportConfig(
                 node.name,
@@ -22,6 +22,10 @@ record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection tr
 
     Path identityPath() {
         return Path.of(node.identityPath);
+    }
+
+    boolean registryEnabled() {
+        return registry != null && registry.enabled;
     }
 
     static final class NodeSection {
@@ -41,5 +45,12 @@ record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection tr
         public long pingTimeoutMs;
         public long reconnectInitialMs;
         public long reconnectMaxMs;
+    }
+
+    static final class RegistrySection {
+        public boolean enabled;
+        public String runtimeDir;
+        public String signer;
+        public long pollIntervalMs;
     }
 }

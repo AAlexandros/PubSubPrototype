@@ -18,7 +18,6 @@ COMPOSE=(docker compose --env-file ops/infra/devnet/versions.env -f ops/infra/ph
 EVIDENCE_DIR="$ROOT_DIR/implementation-reports/evidence/phase-0.2"
 REGISTRY_RUNTIME_DIR="$ROOT_DIR/ops/infra/devnet/runtime/registry"
 export REGISTRY_RUNTIME_DIR
-export PUBSUB_REGISTRY_ALLOW_FILE_BACKEND=false
 
 rm -rf "$EVIDENCE_DIR" "$REGISTRY_RUNTIME_DIR"
 mkdir -p "$EVIDENCE_DIR" "$REGISTRY_RUNTIME_DIR"

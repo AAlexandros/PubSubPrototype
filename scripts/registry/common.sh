@@ -4,7 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REGISTRY_RUNTIME_DIR="${REGISTRY_RUNTIME_DIR:-$ROOT_DIR/ops/infra/devnet/runtime/registry}"
 export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$ROOT_DIR/.gradle-user-home}"
-export PUBSUB_REGISTRY_ALLOW_FILE_BACKEND="${PUBSUB_REGISTRY_ALLOW_FILE_BACKEND:-false}"
 
 host_path() {
   if command -v wslpath >/dev/null 2>&1; then

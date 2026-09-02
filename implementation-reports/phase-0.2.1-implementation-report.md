@@ -10,7 +10,7 @@ Phase 0.2.1 is implemented and the Phase 0.2 acceptance flow passed end to end.
 
 The registry now creates topic identity by minting one unique topic token under the Aiken topic policy from a unique creation UTxO. Topic mutations are submitted as Cardano transactions that spend and recreate the topic script UTxO with an updated inline datum. Pub/Sub nodes observe the registry from Cardano script UTxOs through a read-only cache when they cannot run `cardano-cli` directly inside their containers.
 
-The file-backed registry remains available only as an explicitly enabled development backend. Phase 0.2 acceptance disables it, so acceptance fails when the Cardano registry path is unavailable.
+The file-backed registry fallback has been removed. Registry reads and mutations now require the Cardano registry path, with only the script UTxO cache used for read recovery.
 
 ## Completed
 
@@ -38,7 +38,7 @@ The file-backed registry remains available only as an explicitly enabled develop
 - Added Docker-backed `cardano-cli latest` execution for the local devnet.
 - Added registry transaction logging for submitted Cardano transactions.
 - Added bounded process execution and bounded Docker log polling to avoid stalled acceptance runs.
-- Isolated registry backends as Cardano-backed production behavior and explicitly enabled development fallback behavior.
+- Removed the file-backed registry fallback from the production registry adapter.
 - Updated node polling so nodes observe Cardano script UTxOs through the registry UTxO cache.
 - Added malicious/direct transaction coverage for an unauthorized `node-3` script-spend attempt.
 - Added malicious/direct transaction coverage for a zero-owner output datum that bypasses the Java API and is expected to fail at the Aiken validator.
@@ -135,4 +135,4 @@ Passed end to end, with evidence captured in `implementation-reports/evidence/ph
 
 - The acceptance run proves real on-chain create, update, delete, second-create, node observation, unauthorized direct transaction rejection, and direct zero-owner datum rejection.
 - The Java API still rejects last-owner removal before transaction construction. The direct malformed transaction case exists specifically to prove the same invariant at the validator boundary.
-- The file-backed backend is no longer an acceptance fallback. It is limited to explicitly enabled development/testing use.
+- The registry adapter no longer includes a file-backed development/testing backend.

@@ -32,34 +32,44 @@ final class NodeConfigLoader {
         }
 
         NodeConfig.NodeSection node = new NodeConfig.NodeSection();
-        Map<String, Object> nodeMap = section(root, "node");
-        node.name = stringValue(nodeMap, "name");
-        node.listenHost = stringValue(nodeMap, "listenHost");
-        node.listenPort = intValue(nodeMap, "listenPort");
-        node.identityPath = stringValue(nodeMap, "identityPath");
+        Map<String, Object> nodeMap = section(root, NodeConfigField.NODE);
+        node.name = stringValue(nodeMap, NodeConfigField.NAME);
+        node.listenHost = stringValue(nodeMap, NodeConfigField.LISTEN_HOST);
+        node.listenPort = intValue(nodeMap, NodeConfigField.LISTEN_PORT);
+        node.identityPath = stringValue(nodeMap, NodeConfigField.IDENTITY_PATH);
 
-        List<NodeConfig.PeerSection> peers = ((List<Map<String, Object>>) root.getOrDefault("peers", List.of()))
+        List<NodeConfig.PeerSection> peers = ((List<Map<String, Object>>) root.getOrDefault(NodeConfigField.PEERS.yamlName(), List.of()))
                 .stream()
                 .map(peerMap -> {
                     NodeConfig.PeerSection peer = new NodeConfig.PeerSection();
-                    peer.host = stringValue(peerMap, "host");
-                    peer.port = intValue(peerMap, "port");
+                    peer.host = stringValue(peerMap, NodeConfigField.HOST);
+                    peer.port = intValue(peerMap, NodeConfigField.PORT);
                     return peer;
                 })
                 .toList();
 
         NodeConfig.TransportSection transport = new NodeConfig.TransportSection();
-        Map<String, Object> transportMap = section(root, "transport");
-        transport.pingIntervalMs = longValue(transportMap, "pingIntervalMs");
-        transport.pingTimeoutMs = longValue(transportMap, "pingTimeoutMs");
-        transport.reconnectInitialMs = longValue(transportMap, "reconnectInitialMs");
-        transport.reconnectMaxMs = longValue(transportMap, "reconnectMaxMs");
+        Map<String, Object> transportMap = section(root, NodeConfigField.TRANSPORT);
+        transport.pingIntervalMs = longValue(transportMap, NodeConfigField.PING_INTERVAL_MS);
+        transport.pingTimeoutMs = longValue(transportMap, NodeConfigField.PING_TIMEOUT_MS);
+        transport.reconnectInitialMs = longValue(transportMap, NodeConfigField.RECONNECT_INITIAL_MS);
+        transport.reconnectMaxMs = longValue(transportMap, NodeConfigField.RECONNECT_MAX_MS);
 
-        return new NodeConfig(node, peers, transport);
+        NodeConfig.RegistrySection registry = null;
+        Map<String, Object> registryMap = section(root, NodeConfigField.REGISTRY);
+        if (!registryMap.isEmpty()) {
+            registry = new NodeConfig.RegistrySection();
+            registry.enabled = booleanValue(registryMap, NodeConfigField.ENABLED, false);
+            registry.runtimeDir = stringValue(registryMap, NodeConfigField.RUNTIME_DIR);
+            registry.signer = stringValue(registryMap, NodeConfigField.SIGNER);
+            registry.pollIntervalMs = longValue(registryMap, NodeConfigField.POLL_INTERVAL_MS, 2000);
+        }
+
+        return new NodeConfig(node, peers, transport, registry);
     }
 
-    private static Map<String, Object> section(Map<String, Object> root, String name) {
-        Object value = root.get(name);
+    private static Map<String, Object> section(Map<String, Object> root, NodeConfigField name) {
+        Object value = root.get(name.yamlName());
         if (value instanceof Map<?, ?> map) {
             @SuppressWarnings("unchecked")
             Map<String, Object> typed = (Map<String, Object>) map;
@@ -68,19 +78,35 @@ final class NodeConfigLoader {
         return Map.of();
     }
 
-    private static String stringValue(Map<String, Object> map, String name) {
-        Object value = map.get(name);
+    private static String stringValue(Map<String, Object> map, NodeConfigField name) {
+        Object value = map.get(name.yamlName());
         return value == null ? null : value.toString();
     }
 
-    private static int intValue(Map<String, Object> map, String name) {
-        Object value = map.get(name);
+    private static int intValue(Map<String, Object> map, NodeConfigField name) {
+        Object value = map.get(name.yamlName());
         return value instanceof Number number ? number.intValue() : Integer.parseInt(value.toString());
     }
 
-    private static long longValue(Map<String, Object> map, String name) {
-        Object value = map.get(name);
+    private static long longValue(Map<String, Object> map, NodeConfigField name) {
+        Object value = map.get(name.yamlName());
         return value instanceof Number number ? number.longValue() : Long.parseLong(value.toString());
+    }
+
+    private static long longValue(Map<String, Object> map, NodeConfigField name, long defaultValue) {
+        Object value = map.get(name.yamlName());
+        if (value == null) {
+            return defaultValue;
+        }
+        return value instanceof Number number ? number.longValue() : Long.parseLong(value.toString());
+    }
+
+    private static boolean booleanValue(Map<String, Object> map, NodeConfigField name, boolean defaultValue) {
+        Object value = map.get(name.yamlName());
+        if (value == null) {
+            return defaultValue;
+        }
+        return value instanceof Boolean bool ? bool : Boolean.parseBoolean(value.toString());
     }
 
     private static void validate(NodeConfig config) {
@@ -88,10 +114,59 @@ final class NodeConfigLoader {
             throw new IllegalArgumentException("Config must define node and transport sections");
         }
         if (config.node().name == null || config.node().name.isBlank()) {
-            throw new IllegalArgumentException("node.name is required");
+            throw new IllegalArgumentException(fieldPath(NodeConfigField.NODE, NodeConfigField.NAME) + " is required");
         }
         if (config.node().identityPath == null || config.node().identityPath.isBlank()) {
-            throw new IllegalArgumentException("node.identityPath is required");
+            throw new IllegalArgumentException(fieldPath(NodeConfigField.NODE, NodeConfigField.IDENTITY_PATH) + " is required");
+        }
+        if (config.registryEnabled()) {
+            if (config.registry().runtimeDir == null || config.registry().runtimeDir.isBlank()) {
+                throw new IllegalArgumentException(fieldPath(NodeConfigField.REGISTRY, NodeConfigField.RUNTIME_DIR)
+                        + " is required when registry is enabled");
+            }
+            if (config.registry().signer == null || config.registry().signer.isBlank()) {
+                throw new IllegalArgumentException(fieldPath(NodeConfigField.REGISTRY, NodeConfigField.SIGNER)
+                        + " is required when registry is enabled");
+            }
+            if (config.registry().pollIntervalMs <= 0) {
+                throw new IllegalArgumentException(fieldPath(NodeConfigField.REGISTRY, NodeConfigField.POLL_INTERVAL_MS)
+                        + " must be greater than zero");
+            }
+        }
+    }
+
+    private static String fieldPath(NodeConfigField section, NodeConfigField field) {
+        return section.yamlName() + "." + field.yamlName();
+    }
+
+    private enum NodeConfigField {
+        NODE("node"),
+        PEERS("peers"),
+        TRANSPORT("transport"),
+        REGISTRY("registry"),
+        NAME("name"),
+        LISTEN_HOST("listenHost"),
+        LISTEN_PORT("listenPort"),
+        IDENTITY_PATH("identityPath"),
+        HOST("host"),
+        PORT("port"),
+        PING_INTERVAL_MS("pingIntervalMs"),
+        PING_TIMEOUT_MS("pingTimeoutMs"),
+        RECONNECT_INITIAL_MS("reconnectInitialMs"),
+        RECONNECT_MAX_MS("reconnectMaxMs"),
+        ENABLED("enabled"),
+        RUNTIME_DIR("runtimeDir"),
+        SIGNER("signer"),
+        POLL_INTERVAL_MS("pollIntervalMs");
+
+        private final String yamlName;
+
+        NodeConfigField(String yamlName) {
+            this.yamlName = yamlName;
+        }
+
+        String yamlName() {
+            return yamlName;
         }
     }
 }

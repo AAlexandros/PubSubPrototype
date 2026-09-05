@@ -97,7 +97,7 @@ final class CardanoTransactionBuilder {
         String tokenName = creationTokenName(creationSeed);
         TopicId topicId = new TopicId(tokenName);
         TopicState topic = new TopicState(topicId, request.name(), resolveActorHashes(List.of(config.signer())),
-                resolveActorHashes(request.admins()), resolveActorHashes(request.publishers()),
+                resolveActorHashes(request.admins()), rawPublisherKeyIds(request.publishers()),
                 request.replicationFactor(), request.retentionPeriod(), true);
         Path datum = writeDatum(topic, "create-" + topicId);
         Path body = artifactUnchecked("create-" + topicId + ".txbody");
@@ -263,6 +263,9 @@ final class CardanoTransactionBuilder {
         if (!mutation.operation().hasActorValue()) {
             return mutation;
         }
+        if (mutation.operation() == TopicOperation.ADD_PUBLISHER || mutation.operation() == TopicOperation.REMOVE_PUBLISHER) {
+            return new TopicMutation(mutation.operation(), rawPublisherKeyId(mutation.value()));
+        }
         return new TopicMutation(mutation.operation(), resolveActorHash(mutation.value()));
     }
 
@@ -279,6 +282,21 @@ final class CardanoTransactionBuilder {
             return actor.toLowerCase();
         }
         return keyHashCache.computeIfAbsent(actor, name -> CardanoIdentity.load(config, name).vkeyHash(cli));
+    }
+
+    private static List<String> rawPublisherKeyIds(List<String> publishers) {
+        List<String> values = new ArrayList<>();
+        for (String publisher : publishers) {
+            values.add(rawPublisherKeyId(publisher));
+        }
+        return List.copyOf(values);
+    }
+
+    private static String rawPublisherKeyId(String publisher) {
+        if (!publisher.matches("[0-9a-fA-F]{64}")) {
+            throw new RegistryConflictException("publisher must be a 256-bit event key ID: " + publisher);
+        }
+        return publisher.toLowerCase();
     }
 
     private Path artifact(String filename) throws IOException {

@@ -5,6 +5,9 @@ import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.protocol.IdentityStore;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.NodeIdentity;
+import org.pubsub.prototype.event.EventEnvelope;
+import org.pubsub.prototype.event.EventPublisher;
+import org.pubsub.prototype.registry.TopicId;
 
 import java.io.OutputStream;
 import java.net.ServerSocket;
@@ -14,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
+import java.time.Clock;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -64,6 +68,27 @@ class PubSubTransportIntegrationTest {
         }
     }
 
+    @Test
+    void eventTransmitsBetweenNodes() throws Exception {
+        int p1 = freePort();
+        int p2 = freePort();
+        Probe l1 = new Probe();
+        Probe l2 = new Probe();
+        NodeIdentity identity = identity("publisher");
+        EventEnvelope event = new EventPublisher(identity.keyPair(), Clock.systemUTC(), tempDir.resolve("events"))
+                .publish(new TopicId("b".repeat(64)), "hello".getBytes());
+
+        try (PubSubTransport n1 = node("node-1", p1, List.of(peer(p2)), identity, l1);
+             PubSubTransport n2 = node("node-2", p2, List.of(peer(p1)), identity("n2"), l2)) {
+            n1.start();
+            n2.start();
+
+            assertEventually(() -> n1.activePeerCount() == 1 && n2.activePeerCount() == 1);
+            n1.broadcastEvent(event);
+            assertEventually(() -> l2.events.contains(event.eventId()));
+        }
+    }
+
     private PubSubTransport node(String name, int port, List<PeerEndpoint> peers, NodeIdentity identity, Probe probe) {
         return new PubSubTransport(new TransportConfig(name, "127.0.0.1", port, peers, 100, 1000, 50, 200), identity, probe);
     }
@@ -99,10 +124,16 @@ class PubSubTransportIntegrationTest {
 
     private static final class Probe implements TransportListener {
         private final Set<NodeId> pongs = ConcurrentHashMap.newKeySet();
+        private final Set<String> events = ConcurrentHashMap.newKeySet();
 
         @Override
         public void pongReceived(NodeId nodeId, long rttMs) {
             pongs.add(nodeId);
+        }
+
+        @Override
+        public void eventReceived(NodeId peerNodeId, EventEnvelope event) {
+            events.add(event.eventId());
         }
     }
 }

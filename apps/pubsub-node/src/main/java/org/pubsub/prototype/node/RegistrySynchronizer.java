@@ -4,6 +4,7 @@ import org.pubsub.prototype.registry.RegistrySnapshot;
 import org.pubsub.prototype.registry.TopicId;
 import org.pubsub.prototype.registry.TopicState;
 import org.pubsub.prototype.registry.cardano.CardanoTopicRegistry;
+import org.pubsub.prototype.event.TopicStateProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,7 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-final class RegistrySynchronizer implements AutoCloseable {
+final class RegistrySynchronizer implements TopicStateProvider, AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(RegistrySynchronizer.class);
 
     private final CardanoTopicRegistry registry;
@@ -24,7 +25,7 @@ final class RegistrySynchronizer implements AutoCloseable {
         thread.setDaemon(true);
         return thread;
     });
-    private Map<TopicId, TopicState> cachedTopics = Map.of();
+    private volatile Map<TopicId, TopicState> cachedTopics = Map.of();
     private boolean syncedOnce;
 
     RegistrySynchronizer(CardanoTopicRegistry registry, long pollIntervalMs) {
@@ -36,9 +37,14 @@ final class RegistrySynchronizer implements AutoCloseable {
         executor.scheduleWithFixedDelay(this::pollSafely, 0, pollIntervalMs, TimeUnit.MILLISECONDS);
     }
 
+    @Override
+    public java.util.Optional<TopicState> topic(TopicId topicId) {
+        return java.util.Optional.ofNullable(cachedTopics.get(topicId));
+    }
+
     private void pollSafely() {
         try {
-            RegistrySnapshot snapshot = registry.snapshot();
+            RegistrySnapshot snapshot = registry.snapshotIncludingTombstones();
             Map<TopicId, TopicState> next = byId(snapshot.topics());
             if (!syncedOnce || !next.equals(cachedTopics)) {
                 logChanges(cachedTopics, next);

@@ -4,5 +4,6 @@ public enum MessageType {
     HELLO,
     HELLO_ACK,
     PING,
-    PONG
+    PONG,
+    EVENT
 }

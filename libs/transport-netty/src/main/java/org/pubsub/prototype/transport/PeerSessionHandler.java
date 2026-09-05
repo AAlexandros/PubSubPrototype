@@ -7,6 +7,7 @@ import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.NodeIdentity;
 import org.pubsub.prototype.protocol.ProtocolException;
 import org.pubsub.prototype.protocol.ProtocolMessage;
+import org.pubsub.prototype.event.EventEnvelope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +57,7 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
                 case HELLO_ACK -> handleHelloAck(message);
                 case PING -> handlePing(ctx, message);
                 case PONG -> handlePong(message);
+                case EVENT -> handleEvent(message);
             }
         } catch (ProtocolException ex) {
             LOG.warn("PEER_DISCONNECTED reason=protocol_error message={}", ex.getMessage());
@@ -129,6 +131,20 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
         long rttMs = Duration.between(pending.sentAt, Instant.now()).toMillis();
         LOG.info("PONG_RECEIVED peer={} requestId={} rttMs={}", peerLabel(), message.requestId(), rttMs);
         transport.recordPong(remoteNodeId, rttMs);
+    }
+
+    private void handleEvent(ProtocolMessage message) {
+        if (!active) {
+            throw new ProtocolException("EVENT before handshake");
+        }
+        transport.recordEvent(remoteNodeId, message.event());
+    }
+
+    void sendEvent(EventEnvelope event) {
+        if (!active || context == null || !context.channel().isActive()) {
+            return;
+        }
+        context.writeAndFlush(ProtocolMessage.event(event));
     }
 
     @Override

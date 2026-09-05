@@ -15,6 +15,7 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.NodeIdentity;
+import org.pubsub.prototype.event.EventEnvelope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,6 +66,24 @@ public final class PubSubTransport implements AutoCloseable {
 
     public int activePeerCount() {
         return activePeers.size();
+    }
+
+    public void broadcastEvent(EventEnvelope event) {
+        for (PeerSessionHandler handler : activePeers.values()) {
+            handler.sendEvent(event);
+        }
+    }
+
+    public void forwardEvent(EventEnvelope event, NodeId exceptPeer) {
+        for (Map.Entry<NodeId, PeerSessionHandler> entry : activePeers.entrySet()) {
+            if (!entry.getKey().equals(exceptPeer)) {
+                entry.getValue().sendEvent(event);
+            }
+        }
+    }
+
+    void recordEvent(NodeId nodeId, EventEnvelope event) {
+        listener.eventReceived(nodeId, event);
     }
 
     void registerActive(NodeId nodeId, PeerSessionHandler handler) {

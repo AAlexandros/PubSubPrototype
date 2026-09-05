@@ -56,6 +56,11 @@ public final class ProtocolCodec {
                     throw new ProtocolException(message.type() + " requestId and sentAt are required");
                 }
             }
+            case EVENT -> {
+                if (message.event() == null) {
+                    throw new ProtocolException("EVENT envelope is required");
+                }
+            }
         }
     }
 

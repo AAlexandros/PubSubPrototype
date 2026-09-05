@@ -50,7 +50,7 @@ final class AikenScriptDataCodec {
         fields.add(bytes(HEX.formatHex(name.getBytes(StandardCharsets.UTF_8))));
         fields.add(bytesList(owners, keyHashResolver));
         fields.add(bytesList(admins, keyHashResolver));
-        fields.add(bytesList(publishers, keyHashResolver));
+        fields.add(rawBytesList(publishers));
         fields.add(integer(replicationFactor));
         fields.add(integer(retentionPeriod));
         fields.add(constructor(active ? 1 : 0));
@@ -92,8 +92,8 @@ final class AikenScriptDataCodec {
             case REMOVE_OWNER -> oneFieldConstructor(2, bytes(keyHashResolver.apply(mutation.value())));
             case ADD_ADMIN -> oneFieldConstructor(3, bytes(keyHashResolver.apply(mutation.value())));
             case REMOVE_ADMIN -> oneFieldConstructor(4, bytes(keyHashResolver.apply(mutation.value())));
-            case ADD_PUBLISHER -> oneFieldConstructor(5, bytes(keyHashResolver.apply(mutation.value())));
-            case REMOVE_PUBLISHER -> oneFieldConstructor(6, bytes(keyHashResolver.apply(mutation.value())));
+            case ADD_PUBLISHER -> oneFieldConstructor(5, bytes(mutation.value()));
+            case REMOVE_PUBLISHER -> oneFieldConstructor(6, bytes(mutation.value()));
             case SET_REPLICATION_FACTOR -> oneFieldConstructor(7, integer(Integer.parseInt(mutation.value())));
             case SET_RETENTION_PERIOD -> oneFieldConstructor(8, integer(Long.parseLong(mutation.value())));
         });
@@ -115,6 +115,14 @@ final class AikenScriptDataCodec {
         ArrayNode list = mapper.createArrayNode();
         for (String value : values) {
             list.add(bytes(keyHashResolver.apply(value)));
+        }
+        return listNode(list);
+    }
+
+    private ObjectNode rawBytesList(List<String> values) {
+        ArrayNode list = mapper.createArrayNode();
+        for (String value : values) {
+            list.add(bytes(value));
         }
         return listNode(list);
     }

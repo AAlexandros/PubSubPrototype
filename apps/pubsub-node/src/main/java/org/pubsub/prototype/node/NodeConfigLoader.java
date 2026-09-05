@@ -65,7 +65,16 @@ final class NodeConfigLoader {
             registry.pollIntervalMs = longValue(registryMap, NodeConfigField.POLL_INTERVAL_MS, 2000);
         }
 
-        return new NodeConfig(node, peers, transport, registry);
+        NodeConfig.ControlSection control = null;
+        Map<String, Object> controlMap = section(root, NodeConfigField.CONTROL);
+        if (!controlMap.isEmpty()) {
+            control = new NodeConfig.ControlSection();
+            control.host = stringValue(controlMap, NodeConfigField.HOST);
+            Object port = controlMap.get(NodeConfigField.PORT.yamlName());
+            control.port = port == null ? 8000 : intValue(controlMap, NodeConfigField.PORT);
+        }
+
+        return new NodeConfig(node, peers, transport, registry, control);
     }
 
     private static Map<String, Object> section(Map<String, Object> root, NodeConfigField name) {
@@ -144,6 +153,7 @@ final class NodeConfigLoader {
         PEERS("peers"),
         TRANSPORT("transport"),
         REGISTRY("registry"),
+        CONTROL("control"),
         NAME("name"),
         LISTEN_HOST("listenHost"),
         LISTEN_PORT("listenPort"),

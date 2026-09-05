@@ -44,7 +44,7 @@ class ProtocolCodecTest {
 
     @Test
     void rejectsIncompleteHello() {
-        ProtocolMessage bad = new ProtocolMessage(MessageType.HELLO, ProtocolMessage.VERSION, nodeId.value(), null, null, null);
+        ProtocolMessage bad = new ProtocolMessage(MessageType.HELLO, ProtocolMessage.VERSION, nodeId.value(), null, null, null, null);
 
         assertThrows(ProtocolException.class, () -> codec.encode(bad));
     }

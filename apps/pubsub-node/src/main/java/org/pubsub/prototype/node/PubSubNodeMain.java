@@ -6,6 +6,7 @@ import org.pubsub.prototype.registry.cardano.CardanoRegistryConfig;
 import org.pubsub.prototype.registry.cardano.CardanoTopicRegistry;
 import org.pubsub.prototype.event.TopicStateProvider;
 import org.pubsub.prototype.transport.PubSubTransport;
+import org.pubsub.prototype.sampling.PeerDescriptor;
 
 import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
@@ -35,9 +36,14 @@ public final class PubSubNodeMain {
         }
         TopicStateProvider topics = registrySynchronizer == null ? topicId -> java.util.Optional.empty() : registrySynchronizer;
         NodeEventService eventService = new NodeEventService(identity, config.identityPath(), topics);
-        PubSubTransport transport = new PubSubTransport(config.toTransportConfig(), identity, eventService);
+        PeerSamplingRuntime sampling = config.sampling() == null ? null : new PeerSamplingRuntime(
+                new PeerDescriptor(identity.nodeId().value(),
+                        config.sampling().advertisedHost, config.node().listenPort), config.sampling(), eventService);
+        PubSubTransport transport = new PubSubTransport(config.toTransportConfig(), identity, sampling == null ? eventService : sampling);
+        if (sampling != null) sampling.attach(transport);
         eventService.attachTransport(transport);
         EventControlServer controlServer = new EventControlServer(config.controlHost(), config.controlPort(), eventService);
+        if (sampling != null) controlServer.addSampling(sampling.sampling(), identity.nodeId().value(), config.sampling().viewSize);
         controlServer.start();
         RegistrySynchronizer finalRegistrySynchronizer = registrySynchronizer;
         EventControlServer finalControlServer = controlServer;
@@ -47,10 +53,12 @@ public final class PubSubNodeMain {
             if (finalRegistrySynchronizer != null) {
                 finalRegistrySynchronizer.close();
             }
+            if (sampling != null) sampling.close();
             transport.close();
             stop.countDown();
         }, "shutdown"));
         transport.start();
+        if (sampling != null) sampling.start();
         stop.await();
     }
 }

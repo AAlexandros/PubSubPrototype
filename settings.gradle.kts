@@ -20,3 +20,6 @@ include("libs:registry-api")
 include("libs:registry-cardano")
 include("libs:transport-netty")
 include("apps:pubsub-node")
+
+include("libs:peer-sampling-api")
+include("libs:securecyclon")

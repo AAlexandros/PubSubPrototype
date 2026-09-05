@@ -6,7 +6,7 @@ import org.pubsub.prototype.transport.TransportConfig;
 import java.nio.file.Path;
 import java.util.List;
 
-record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection transport, RegistrySection registry, ControlSection control) {
+record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection transport, RegistrySection registry, ControlSection control, SamplingSection sampling) {
     TransportConfig toTransportConfig() {
         return new TransportConfig(
                 node.name,
@@ -34,6 +34,15 @@ record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection tr
 
     int controlPort() {
         return control == null || control.port == 0 ? 8000 : control.port;
+    }
+
+    static final class SamplingSection {
+        public String advertisedHost;
+        public int viewSize = 2;
+        public int swapLength = 2;
+        public long cycleIntervalMs = 2000;
+        public int ageThreshold = 10;
+        public long randomSeed = 0;
     }
 
     static final class NodeSection {

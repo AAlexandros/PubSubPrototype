@@ -56,6 +56,10 @@ public final class ProtocolCodec {
                     throw new ProtocolException(message.type() + " requestId and sentAt are required");
                 }
             }
+            case SECURECYCLON_REQUEST, SECURECYCLON_RESPONSE, SECURECYCLON_REPORT -> {
+                if (message.requestId() == null || message.exchange() == null)
+                    throw new ProtocolException("SecureCyclon requestId and exchange required");
+            }
             case EVENT -> {
                 if (message.event() == null) {
                     throw new ProtocolException("EVENT envelope is required");

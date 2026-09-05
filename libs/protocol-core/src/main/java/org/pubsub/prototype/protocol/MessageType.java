@@ -5,5 +5,8 @@ public enum MessageType {
     HELLO_ACK,
     PING,
     PONG,
+    SECURECYCLON_REQUEST,
+    SECURECYCLON_RESPONSE,
+    SECURECYCLON_REPORT,
     EVENT
 }

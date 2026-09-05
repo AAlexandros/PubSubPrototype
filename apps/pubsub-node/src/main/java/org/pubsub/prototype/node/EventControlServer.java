@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.registry.TopicId;
+import org.pubsub.prototype.sampling.PeerSamplingService;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -31,6 +32,16 @@ final class EventControlServer implements AutoCloseable {
             thread.setDaemon(true);
             return thread;
         }));
+    }
+
+    void addSampling(PeerSamplingService sampling, String nodeId, int capacity) {
+        server.createContext("/v1/peer-sampling/view", exchange -> {
+            if (!"GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, Map.of("error", "method_not_allowed"));
+                return;
+            }
+            respond(exchange, 200, Map.of("nodeId", nodeId, "capacity", capacity, "view", sampling.view()));
+        });
     }
 
     void start() {

@@ -1,5 +1,9 @@
 package org.pubsub.prototype.transport;
 
+import org.pubsub.prototype.sampling.PeerDescriptor;
+import org.pubsub.prototype.protocol.ProtocolMessage;
+import org.pubsub.prototype.protocol.ProtocolException;
+import java.util.Set;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -38,6 +42,45 @@ public final class PubSubTransport implements AutoCloseable {
     private final Map<NodeId, PeerSessionHandler> activePeers = new ConcurrentHashMap<>();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Channel serverChannel;
+    private PeerDescriptor advertised;
+    private final Map<NodeId, ProtocolMessage> queued = new ConcurrentHashMap<>();
+    private final Map<String, NodeId> expected = new ConcurrentHashMap<>();
+    private final Set<String> connecting = ConcurrentHashMap.newKeySet();
+
+    public void advertise(PeerDescriptor peer) {
+        if (!peer.nodeId().equals(identity.nodeId().value())) throw new IllegalArgumentException("Identity mismatch");
+        advertised = peer;
+    }
+    PeerDescriptor advertised() { return advertised; }
+
+    public void sendSampling(PeerDescriptor peer, ProtocolMessage message) {
+        NodeId id = new NodeId(peer.nodeId());
+        PeerSessionHandler handler = activePeers.get(id);
+        if (handler != null) { handler.sendMessage(message); return; }
+        PeerEndpoint endpoint = new PeerEndpoint(peer.host(), peer.port());
+        expected.put(endpoint.key(), id);
+        queued.put(id, message);
+        connect(endpoint);
+    }
+    public void replySampling(NodeId peer, ProtocolMessage message) {
+        PeerSessionHandler handler = activePeers.get(peer);
+        if (handler != null) handler.sendMessage(message);
+    }
+    void recordSampling(NodeId peer, ProtocolMessage message) {
+        listener.samplingReceived(peer, message);
+    }
+    void resolved(PeerEndpoint endpoint, NodeId id, PeerDescriptor descriptor) {
+        if (endpoint != null && expected.containsKey(endpoint.key()) && !expected.get(endpoint.key()).equals(id))
+            throw new ProtocolException("Learned endpoint identity mismatch");
+        if (descriptor != null && !descriptor.nodeId().equals(id.value()))
+            throw new ProtocolException("Advertised identity mismatch");
+        if (endpoint != null && descriptor != null && config.peers().contains(endpoint)) listener.seedResolved(descriptor);
+    }
+    private void flushQueued(NodeId id, PeerSessionHandler handler) {
+        var message = queued.remove(id);
+        if (message != null) handler.sendMessage(message);
+    }
+
 
     public PubSubTransport(TransportConfig config, NodeIdentity identity, TransportListener listener) {
         this.config = Objects.requireNonNull(config, "config");
@@ -86,22 +129,25 @@ public final class PubSubTransport implements AutoCloseable {
         listener.eventReceived(nodeId, event);
     }
 
-    void registerActive(NodeId nodeId, PeerSessionHandler handler) {
+    boolean registerActive(NodeId nodeId, PeerSessionHandler handler) {
         while (true) {
             PeerSessionHandler previous = activePeers.putIfAbsent(nodeId, handler);
             if (previous == null || previous == handler) {
+                flushQueued(nodeId, handler);
                 listener.peerConnected(nodeId);
-                return;
+                return true;
             }
             if (handler.isPreferredOver(previous)) {
                 if (activePeers.replace(nodeId, previous, handler)) {
                     previous.closeWithoutReconnect();
+                    flushQueued(nodeId, handler);
                     listener.peerConnected(nodeId);
-                    return;
+                    return true;
                 }
             } else {
                 handler.closeWithoutReconnect();
-                return;
+                flushQueued(nodeId, previous);
+                return false;
             }
         }
     }
@@ -117,7 +163,7 @@ public final class PubSubTransport implements AutoCloseable {
     }
 
     void scheduleReconnect(PeerEndpoint endpoint) {
-        if (!running.get() || endpoint == null) {
+        if (!running.get() || endpoint == null || !config.peers().contains(endpoint)) {
             return;
         }
         ReconnectBackoff backoff = backoffs.computeIfAbsent(endpoint.key(),
@@ -135,16 +181,26 @@ public final class PubSubTransport implements AutoCloseable {
     }
 
     private void connect(PeerEndpoint endpoint) {
-        if (!running.get()) {
+        if (!running.get() || !connecting.add(endpoint.key())) {
             return;
         }
         Bootstrap bootstrap = new Bootstrap()
                 .group(workerGroup)
                 .channel(NioSocketChannel.class)
                 .option(ChannelOption.SO_KEEPALIVE, true)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 3000)
                 .handler(initializer(endpoint, true));
         bootstrap.connect(endpoint.host(), endpoint.port()).addListener((ChannelFuture future) -> {
-            if (!future.isSuccess()) {
+            if (future.isSuccess()) {
+                future.channel().closeFuture().addListener(ignored -> {
+                    connecting.remove(endpoint.key());
+                    NodeId id = expected.remove(endpoint.key());
+                    if (id != null) queued.remove(id);
+                });
+            } else {
+                connecting.remove(endpoint.key());
+                NodeId id = expected.remove(endpoint.key());
+                if (id != null) queued.remove(id);
                 scheduleReconnect(endpoint);
             }
         });
@@ -169,6 +225,9 @@ public final class PubSubTransport implements AutoCloseable {
             handler.closeWithoutReconnect();
         }
         activePeers.clear();
+        queued.clear();
+        expected.clear();
+        connecting.clear();
         if (serverChannel != null) {
             serverChannel.close();
         }

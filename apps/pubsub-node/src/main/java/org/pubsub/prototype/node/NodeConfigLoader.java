@@ -74,7 +74,17 @@ final class NodeConfigLoader {
             control.port = port == null ? 8000 : intValue(controlMap, NodeConfigField.PORT);
         }
 
-        return new NodeConfig(node, peers, transport, registry, control);
+        NodeConfig.SamplingSection sampling = null;
+        if (root.get("peerSampling") instanceof Map<?, ?> map) {
+            sampling = new NodeConfig.SamplingSection();
+            sampling.advertisedHost = (String) map.get("advertisedHost");
+            if (map.get("viewSize") instanceof Number n) sampling.viewSize = n.intValue();
+            if (map.get("swapLength") instanceof Number n) sampling.swapLength = n.intValue();
+            if (map.get("cycleIntervalMs") instanceof Number n) sampling.cycleIntervalMs = n.longValue();
+            if (map.get("ageThreshold") instanceof Number n) sampling.ageThreshold = n.intValue();
+            if (map.get("randomSeed") instanceof Number n) sampling.randomSeed = n.longValue();
+        }
+        return new NodeConfig(node, peers, transport, registry, control, sampling);
     }
 
     private static Map<String, Object> section(Map<String, Object> root, NodeConfigField name) {

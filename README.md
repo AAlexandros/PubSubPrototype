@@ -103,6 +103,34 @@ That file includes:
 
 `fund-identities.sh` locates a generated testnet funding UTxO, submits real funding transactions, waits for confirmation, and fails if the target identities are not funded.
 
+## SecureCyclon peer sampling (Phase 0.4)
+
+Run the three-node acceptance with:
+
+```bash
+./scripts/acceptance/phase-0.4.sh
+```
+
+The phase-specific configuration in `ops/config/phase-0.4/` is asymmetric:
+node-1 has no seeds; node-2 and node-3 each seed from node-1. Both leaf nodes
+learn further peers through SecureCyclon. The phase's Compose file is
+`ops/infra/phase-0.4/compose.yaml` and uses the existing identity volumes.
+
+`peerSampling` configures `advertisedHost`, `viewSize`, `swapLength`,
+`cycleIntervalMs`, `ageThreshold`, and `randomSeed`. The advertised host must be
+reachable by the other nodes. Old configurations without this section retain
+their previous behavior. Higher layers consume `PeerSamplingService`; the
+read-only `GET /v1/peer-sampling/view` control endpoint exposes snapshots.
+
+Acceptance archives previous generated devnet state under `.tools/phase-0.4-devnet-backups/`,
+creates and funds a fresh Cardano test network, and captures results under
+`implementation-reports/evidence/phase-0.4/`. Pub/Sub identity volumes remain persistent.
+The containers remain running for inspection after acceptance.
+
+The temporary Phase 0.3 event forwarding path continues over established sessions;
+it is not the D2 dissemination layer. See [the protocol mapping](libs/securecyclon/README.md)
+for reference behavior and runtime adaptations.
+
 ## Current Status
 
-Phase 0.1.2 completed Phase 0.1 final integration and acceptance. The latest implementation report is `implementation-reports/phase-0.1.2-implementation-report.md`.
+Latest implementation report: [Phase 0.4](implementation-reports/phase-0.4-implementation-report.md).

@@ -3,6 +3,7 @@ plugins {
 }
 
 dependencies {
+    api(project(":libs:peer-sampling-api"))
     api(project(":libs:protocol-core"))
     api("io.netty:netty-all:4.1.112.Final")
     api("org.slf4j:slf4j-api:2.0.13")

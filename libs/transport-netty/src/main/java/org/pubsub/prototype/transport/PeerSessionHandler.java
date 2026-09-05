@@ -30,6 +30,7 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
     private ChannelHandlerContext context;
     private NodeId remoteNodeId;
     private ScheduledFuture<?> pingTask;
+    private ScheduledFuture<?> handshakeTimeout;
     private boolean active;
     private volatile boolean reconnectSuppressed;
 
@@ -44,8 +45,11 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
         this.context = ctx;
+        handshakeTimeout = ctx.executor().schedule(() -> {
+            if (!active) ctx.close();
+        }, 3000, TimeUnit.MILLISECONDS);
         if (outbound) {
-            ctx.writeAndFlush(ProtocolMessage.hello(identity.nodeId(), config.nodeName()));
+            ctx.writeAndFlush(ProtocolMessage.hello(identity.nodeId(), config.nodeName()).withDescriptor(transport.advertised()));
         }
     }
 
@@ -58,6 +62,10 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
                 case PING -> handlePing(ctx, message);
                 case PONG -> handlePong(message);
                 case EVENT -> handleEvent(message);
+                case SECURECYCLON_REQUEST, SECURECYCLON_RESPONSE, SECURECYCLON_REPORT -> {
+                    if (!active) throw new ProtocolException("SecureCyclon before handshake");
+                    transport.recordSampling(remoteNodeId, message);
+                }
             }
         } catch (ProtocolException ex) {
             LOG.warn("PEER_DISCONNECTED reason=protocol_error message={}", ex.getMessage());
@@ -66,17 +74,23 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
     }
 
     private void handleHello(ChannelHandlerContext ctx, ProtocolMessage message) {
+        if (outbound) throw new ProtocolException("Unexpected HELLO on outbound connection");
+        if (active) throw new ProtocolException("Repeated handshake");
         NodeId nodeId = new NodeId(message.nodeId());
+        transport.resolved(endpoint, nodeId, message.descriptor());
         if (nodeId.equals(identity.nodeId())) {
             throw new ProtocolException("Self-connections are not allowed");
         }
         remoteNodeId = nodeId;
-        ctx.writeAndFlush(ProtocolMessage.helloAck(identity.nodeId()));
+        ctx.writeAndFlush(ProtocolMessage.helloAck(identity.nodeId()).withDescriptor(transport.advertised()));
         activate();
     }
 
     private void handleHelloAck(ProtocolMessage message) {
+        if (!outbound) throw new ProtocolException("Unexpected HELLO_ACK on inbound connection");
+        if (active) throw new ProtocolException("Repeated handshake");
         NodeId nodeId = new NodeId(message.nodeId());
+        transport.resolved(endpoint, nodeId, message.descriptor());
         if (nodeId.equals(identity.nodeId())) {
             throw new ProtocolException("Self-connections are not allowed");
         }
@@ -90,7 +104,8 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
         }
         active = true;
         transport.resetBackoff(endpoint);
-        transport.registerActive(remoteNodeId, this);
+        if (handshakeTimeout != null) handshakeTimeout.cancel(false);
+        if (!transport.registerActive(remoteNodeId, this)) return;
         LOG.info("PEER_CONNECTED peer={}", remoteNodeId.value());
         pingTask = context.executor().scheduleAtFixedRate(this::sendPing, config.pingIntervalMs(), config.pingIntervalMs(), TimeUnit.MILLISECONDS);
     }
@@ -105,6 +120,7 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
             PendingPing removed = pendingPings.remove(requestId);
             if (removed != null) {
                 LOG.warn("PING_TIMEOUT peer={} requestId={}", peerLabel(), requestId);
+                context.close();
             }
         }, config.pingTimeoutMs(), TimeUnit.MILLISECONDS);
         pendingPings.put(requestId, new PendingPing(sentAt, timeout));
@@ -140,6 +156,10 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
         transport.recordEvent(remoteNodeId, message.event());
     }
 
+    void sendMessage(ProtocolMessage message) {
+        if (active && context != null && context.channel().isActive()) context.writeAndFlush(message);
+    }
+
     void sendEvent(EventEnvelope event) {
         if (!active || context == null || !context.channel().isActive()) {
             return;
@@ -157,6 +177,7 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        LOG.warn("SECURECYCLON_EXCHANGE_REJECTED nodeId={} peerNodeId={} reason=malformed_frame detail={}", identity.nodeId().value(), peerLabel(), cause.toString());
         LOG.warn("PEER_DISCONNECTED peer={} reason={}", peerLabel(), cause.toString());
         ctx.close();
     }
@@ -186,6 +207,7 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
     }
 
     private void cleanup() {
+        if (handshakeTimeout != null) handshakeTimeout.cancel(false);
         if (pingTask != null) {
             pingTask.cancel(false);
         }

@@ -64,6 +64,12 @@ public final class ProtocolCodec {
                 if (message.requestId() == null || message.navigation() == null)
                     throw new ProtocolException("Navigation requestId and exchange required");
             }
+            case DISSEMINATION_REQUEST, DISSEMINATION_RESPONSE -> {
+                if (message.requestId() == null || message.dissemination() == null)
+                    throw new ProtocolException("Dissemination requestId and exchange required");
+                if (message.dissemination().protocolVersion() != org.pubsub.prototype.dissemination.DisseminationEngine.PROTOCOL_VERSION)
+                    throw new ProtocolException("Unsupported dissemination exchange version");
+            }
             case EVENT -> {
                 if (message.event() == null) {
                     throw new ProtocolException("EVENT envelope is required");

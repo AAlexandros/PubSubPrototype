@@ -11,11 +11,14 @@ final class NodeTransportListener implements TransportListener {
     private final PeerSamplingRuntime sampling;
     private final NavigationRuntime navigation;
     private final NodeEventService events;
+    private final DisseminationRuntime dissemination;
 
-    NodeTransportListener(PeerSamplingRuntime sampling, NavigationRuntime navigation, NodeEventService events) {
+    NodeTransportListener(PeerSamplingRuntime sampling, NavigationRuntime navigation,
+                          DisseminationRuntime dissemination, NodeEventService events) {
         this.sampling = sampling;
         this.navigation = navigation;
         this.events = events;
+        this.dissemination = dissemination;
     }
 
     @Override
@@ -32,6 +35,9 @@ final class NodeTransportListener implements TransportListener {
             case NAVIGATION_REQUEST, NAVIGATION_RESPONSE -> {
                 if (navigation != null) navigation.messageReceived(peer, message);
             }
+            case DISSEMINATION_REQUEST, DISSEMINATION_RESPONSE -> {
+                if (dissemination != null) dissemination.messageReceived(peer, message);
+            }
             default -> {
             }
         }
@@ -40,5 +46,10 @@ final class NodeTransportListener implements TransportListener {
     @Override
     public void eventReceived(NodeId peerNodeId, EventEnvelope event) {
         events.eventReceived(peerNodeId, event);
+    }
+
+    @Override
+    public void peerDisconnected(NodeId nodeId) {
+        if (dissemination != null) dissemination.peerDisconnected(nodeId);
     }
 }

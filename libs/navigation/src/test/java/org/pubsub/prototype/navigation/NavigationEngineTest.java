@@ -89,4 +89,22 @@ class NavigationEngineTest {
 
         assertTrue(engine.cycle(100).isEmpty());
     }
+
+    @Test
+    void exposesOnlySameTopicCandidatesThroughPublicApi() {
+        NavigationEngine engine = engine("1", 7001, TOPICS.get(0));
+        engine.ingestSample("2".repeat(64), "127.0.0.1", 7002, 1);
+        NavigationExchange learned = new NavigationExchange(
+                new NavigationPeerDescriptor("2".repeat(64), "127.0.0.1", 7002,
+                        List.of(TOPICS.get(0)), 1),
+                List.of(TOPICS.get(0)),
+                List.of(new NavigationPeerDescriptor("3".repeat(64), "127.0.0.1", 7003,
+                        List.of(TOPICS.get(1)), 1)), NavigationEngine.PROTOCOL_VERSION);
+        engine.response("2".repeat(64), learned, 100);
+
+        assertEquals(List.of("2".repeat(64)),
+                engine.peersForTopic(TOPICS.get(0)).stream().map(NavigationPeerDescriptor::nodeId).toList());
+        assertTrue(engine.peersForTopic(TOPICS.get(1)).stream()
+                .allMatch(peer -> peer.subscribedTopicIds().contains(TOPICS.get(1))));
+    }
 }

@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -43,7 +44,7 @@ public final class PubSubTransport implements AutoCloseable {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Channel serverChannel;
     private PeerDescriptor advertised;
-    private final Map<NodeId, ProtocolMessage> queued = new ConcurrentHashMap<>();
+    private final Map<NodeId, ConcurrentLinkedQueue<ProtocolMessage>> queued = new ConcurrentHashMap<>();
     private final Map<String, NodeId> expected = new ConcurrentHashMap<>();
     private final Set<String> connecting = ConcurrentHashMap.newKeySet();
 
@@ -54,12 +55,21 @@ public final class PubSubTransport implements AutoCloseable {
     PeerDescriptor advertised() { return advertised; }
 
     public void sendSampling(PeerDescriptor peer, ProtocolMessage message) {
+        send(peer, message);
+    }
+
+    /** Sends an event only to the selected overlay peer, connecting dynamically when necessary. */
+    public void sendEvent(PeerDescriptor peer, EventEnvelope event) {
+        send(peer, ProtocolMessage.event(event));
+    }
+
+    private void send(PeerDescriptor peer, ProtocolMessage message) {
         NodeId id = new NodeId(peer.nodeId());
         PeerSessionHandler handler = activePeers.get(id);
         if (handler != null) { handler.sendMessage(message); return; }
         PeerEndpoint endpoint = new PeerEndpoint(peer.host(), peer.port());
         expected.put(endpoint.key(), id);
-        queued.put(id, message);
+        queued.computeIfAbsent(id, ignored -> new ConcurrentLinkedQueue<>()).add(message);
         connect(endpoint);
     }
     public void replySampling(NodeId peer, ProtocolMessage message) {
@@ -77,8 +87,11 @@ public final class PubSubTransport implements AutoCloseable {
         if (endpoint != null && descriptor != null && config.peers().contains(endpoint)) listener.seedResolved(descriptor);
     }
     private void flushQueued(NodeId id, PeerSessionHandler handler) {
-        var message = queued.remove(id);
-        if (message != null) handler.sendMessage(message);
+        var messages = queued.remove(id);
+        if (messages != null) {
+            ProtocolMessage message;
+            while ((message = messages.poll()) != null) handler.sendMessage(message);
+        }
     }
 
 

@@ -70,6 +70,10 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
                     if (!active) throw new ProtocolException("Navigation before handshake");
                     transport.recordSampling(remoteNodeId, message);
                 }
+                case DISSEMINATION_REQUEST, DISSEMINATION_RESPONSE -> {
+                    if (!active) throw new ProtocolException("Dissemination before handshake");
+                    transport.recordSampling(remoteNodeId, message);
+                }
             }
         } catch (ProtocolException ex) {
             LOG.warn("PEER_DISCONNECTED reason=protocol_error message={}", ex.getMessage());

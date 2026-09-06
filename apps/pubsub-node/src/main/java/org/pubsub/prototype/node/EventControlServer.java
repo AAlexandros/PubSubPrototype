@@ -20,6 +20,7 @@ final class EventControlServer implements AutoCloseable {
 
     private final HttpServer server;
     private final NodeEventService events;
+    private DisseminationRuntime dissemination;
 
     EventControlServer(String host, int port, NodeEventService events) throws IOException {
         this.events = events;
@@ -78,6 +79,7 @@ final class EventControlServer implements AutoCloseable {
                             return;
                         }
                         navigation.subscribe(new TopicId(topicId).value());
+                        if (dissemination != null) dissemination.subscribe(topicId);
                         respond(exchange, 200, Map.of("topicId", topicId, "subscribed", true));
                     }
                     case "DELETE" -> {
@@ -86,9 +88,44 @@ final class EventControlServer implements AutoCloseable {
                             return;
                         }
                         navigation.unsubscribe(new TopicId(topicId).value());
+                        if (dissemination != null) dissemination.unsubscribe(topicId);
                         respond(exchange, 200, Map.of("topicId", topicId, "subscribed", false));
                     }
                     default -> respond(exchange, 405, Map.of("error", "method_not_allowed"));
+                }
+            } catch (RuntimeException ex) {
+                respond(exchange, 400, Map.of("error", ex.getMessage()));
+            }
+        });
+    }
+
+    void addDissemination(DisseminationRuntime dissemination, String nodeId) {
+        this.dissemination = dissemination;
+        server.createContext("/v1/dissemination/view", exchange -> {
+            if (!"GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, Map.of("error", "method_not_allowed"));
+                return;
+            }
+            String prefix = "/v1/dissemination/view";
+            String path = exchange.getRequestURI().getPath();
+            String topicId = path.length() > prefix.length() ? path.substring(prefix.length() + 1) : "";
+            if (topicId.isEmpty()) {
+                respond(exchange, 200, Map.of("nodeId", nodeId, "views", dissemination.engine().views()));
+                return;
+            }
+            try {
+                String validTopicId = new TopicId(topicId).value();
+                var view = dissemination.engine().view(validTopicId);
+                if (view.isEmpty()) {
+                    respond(exchange, 404, Map.of("error", "dissemination_view_not_found", "topicId", validTopicId));
+                } else {
+                    Map<String, Object> response = new LinkedHashMap<>();
+                    response.put("nodeId", nodeId);
+                    response.put("topicId", view.get().topicId());
+                    response.put("predecessor", view.get().predecessor());
+                    response.put("successor", view.get().successor());
+                    response.put("randomPeers", view.get().randomPeers());
+                    respond(exchange, 200, response);
                 }
             } catch (RuntimeException ex) {
                 respond(exchange, 400, Map.of("error", ex.getMessage()));

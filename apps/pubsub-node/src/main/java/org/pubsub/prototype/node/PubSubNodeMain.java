@@ -51,14 +51,21 @@ public final class PubSubNodeMain {
                 config.navigation(),
                 finalRegistrySynchronizerForTopics == null ? List::of : finalRegistrySynchronizerForTopics::activeTopicIds,
                 finalSamplingForView == null ? List::of : () -> finalSamplingForView.sampling().view());
+        DisseminationRuntime dissemination = config.dissemination() == null ? null : new DisseminationRuntime(
+                identity.nodeId().value(), config.sampling().advertisedHost, config.node().listenPort,
+                config.dissemination(), navigation,
+                finalRegistrySynchronizerForTopics == null ? List::of : finalRegistrySynchronizerForTopics::activeTopicIds);
         PubSubTransport transport = new PubSubTransport(config.toTransportConfig(), identity,
-                new NodeTransportListener(sampling, navigation, eventService));
+                new NodeTransportListener(sampling, navigation, dissemination, eventService));
         if (sampling != null) sampling.attach(transport);
         if (navigation != null) navigation.attach(transport);
+        if (dissemination != null) dissemination.attach(transport);
         eventService.attachTransport(transport);
+        eventService.attachDissemination(dissemination);
         EventControlServer controlServer = new EventControlServer(config.controlHost(), config.controlPort(), eventService);
         if (sampling != null) controlServer.addSampling(sampling.sampling(), identity.nodeId().value(), config.sampling().viewSize);
         if (navigation != null) controlServer.addNavigation(navigation, identity.nodeId().value());
+        if (dissemination != null) controlServer.addDissemination(dissemination, identity.nodeId().value());
         controlServer.start();
         RegistrySynchronizer finalRegistrySynchronizer = registrySynchronizer;
         EventControlServer finalControlServer = controlServer;
@@ -70,12 +77,14 @@ public final class PubSubNodeMain {
             }
             if (sampling != null) sampling.close();
             if (navigation != null) navigation.close();
+            if (dissemination != null) dissemination.close();
             transport.close();
             stop.countDown();
         }, "shutdown"));
         transport.start();
         if (sampling != null) sampling.start();
         if (navigation != null) navigation.start();
+        if (dissemination != null) dissemination.start();
         stop.await();
     }
 }

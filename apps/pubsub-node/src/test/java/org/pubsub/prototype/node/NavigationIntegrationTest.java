@@ -79,7 +79,7 @@ class NavigationIntegrationTest {
                     () -> TOPICS, () -> samples);
             NodeEventService events = new NodeEventService(identity, dir.resolve(name + "-events"), topicId -> Optional.empty());
             transport = new PubSubTransport(new TransportConfig(name, "127.0.0.1", port, List.of(), 100, 500, 50, 100),
-                    identity, new NodeTransportListener(null, runtime, events));
+                    identity, new NodeTransportListener(null, runtime, null, events));
             runtime.attach(transport);
         }
 

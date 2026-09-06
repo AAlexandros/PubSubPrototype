@@ -89,6 +89,13 @@ public final class NavigationEngine {
         return view.snapshot();
     }
 
+    /** Public same-topic candidate API for higher layers; no Navigation internals are exposed. */
+    public synchronized List<NavigationPeerDescriptor> peersForTopic(String topicId) {
+        return view.flatten().stream()
+                .filter(peer -> peer.subscribedTopicIds().contains(topicId))
+                .toList();
+    }
+
     /** A raw SecureCyclon sample enters the candidate pool with unknown subscriptions until learned via gossip. */
     public synchronized void ingestSample(String peerNodeId, String peerHost, int peerPort, long now) {
         if (peerNodeId.equals(nodeId)) {

@@ -3,6 +3,7 @@ package org.pubsub.prototype.protocol;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.navigation.NavigationExchange;
+import org.pubsub.prototype.dissemination.DisseminationExchange;
 import org.pubsub.prototype.sampling.PeerDescriptor;
 import org.pubsub.prototype.securecyclon.Exchange;
 
@@ -20,23 +21,28 @@ public record ProtocolMessage(
         EventEnvelope event,
         PeerDescriptor descriptor,
         Exchange exchange,
-        NavigationExchange navigation
+        NavigationExchange navigation,
+        DisseminationExchange dissemination
 ) {
     public ProtocolMessage(MessageType type, int version, String nodeId, String nodeName,
                            UUID requestId, Instant sentAt, EventEnvelope event) {
-        this(type, version, nodeId, nodeName, requestId, sentAt, event, null, null, null);
+        this(type, version, nodeId, nodeName, requestId, sentAt, event, null, null, null, null);
     }
 
     public ProtocolMessage withDescriptor(PeerDescriptor peer) {
-        return new ProtocolMessage(type, version, nodeId, nodeName, requestId, sentAt, event, peer, exchange, navigation);
+        return new ProtocolMessage(type, version, nodeId, nodeName, requestId, sentAt, event, peer, exchange, navigation, dissemination);
     }
 
     public static ProtocolMessage gossip(MessageType type, UUID id, Exchange exchange) {
-        return new ProtocolMessage(type, VERSION, null, null, id, null, null, null, exchange, null);
+        return new ProtocolMessage(type, VERSION, null, null, id, null, null, null, exchange, null, null);
     }
 
     public static ProtocolMessage navigationGossip(MessageType type, UUID id, NavigationExchange navigation) {
-        return new ProtocolMessage(type, VERSION, null, null, id, null, null, null, null, navigation);
+        return new ProtocolMessage(type, VERSION, null, null, id, null, null, null, null, navigation, null);
+    }
+
+    public static ProtocolMessage disseminationGossip(MessageType type, UUID id, DisseminationExchange dissemination) {
+        return new ProtocolMessage(type, VERSION, null, null, id, null, null, null, null, null, dissemination);
     }
 
     public static final int VERSION = 1;

@@ -179,4 +179,17 @@ Results are captured under `implementation-reports/evidence/phase-0.5/`.
 
 ## Current Status
 
-Latest implementation report: [Phase 0.5](implementation-reports/phase-0.5-implementation-report.md).
+Phase 0.6 adds a per-topic Hybrid Dissemination overlay on top of Navigation.
+Each subscribed topic maintains cyclic predecessor/successor links plus
+configurable random same-topic links, exchanges vicinity gossip through
+`DISSEMINATION_REQUEST`/`DISSEMINATION_RESPONSE`, and forwards accepted events
+only to the topic overlay. Inspection is available through
+`GET /v1/dissemination/view` and `GET /v1/dissemination/view/{topicId}`.
+
+Run the full acceptance flow with:
+
+```bash
+./scripts/acceptance/phase-0.6.sh
+```
+
+Latest implementation report: [Phase 0.6](implementation-reports/phase-0.6-implementation-report.md).

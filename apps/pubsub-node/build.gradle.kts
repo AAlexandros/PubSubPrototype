@@ -6,6 +6,7 @@ dependencies {
     implementation(project(":libs:peer-sampling-api"))
     implementation(project(":libs:securecyclon"))
     implementation(project(":libs:navigation"))
+    implementation(project(":libs:dissemination"))
     implementation(project(":libs:protocol-core"))
     implementation(project(":libs:event-core"))
     implementation(project(":libs:registry-api"))

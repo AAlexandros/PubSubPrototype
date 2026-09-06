@@ -27,6 +27,7 @@ final class NodeEventService implements TransportListener {
     private final EventPublisher publisher;
     private final EventValidator validator;
     private PubSubTransport transport;
+    private DisseminationRuntime dissemination;
 
     NodeEventService(NodeIdentity identity, Path runtimeDir, TopicStateProvider topics) {
         this.publisher = new EventPublisher(identity.keyPair(), Clock.systemUTC(), runtimeDir);
@@ -35,6 +36,10 @@ final class NodeEventService implements TransportListener {
 
     void attachTransport(PubSubTransport transport) {
         this.transport = transport;
+    }
+
+    void attachDissemination(DisseminationRuntime dissemination) {
+        this.dissemination = dissemination;
     }
 
     EventEnvelope publish(TopicId topicId, byte[] payload, boolean forceBroadcast, boolean tamperSignature) {
@@ -47,7 +52,12 @@ final class NodeEventService implements TransportListener {
         if (result.accepted() || forceBroadcast) {
             LOG.info("EVENT_PUBLISHED eventId={} topicId={} publisherKeyId={} sequenceNumber={}",
                     event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber());
-            transport.broadcastEvent(event);
+            if (result.accepted()) {
+                LOG.info("EVENT_ACCEPTED eventId={} topicId={} publisherKeyId={} sequenceNumber={} peerNodeId=local",
+                        event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber());
+            }
+            if (forceBroadcast || dissemination == null) transport.broadcastEvent(event);
+            else dissemination.disseminate(event, null);
         }
         if (!result.accepted() && !forceBroadcast) {
             logRejection(event, publisherKeyId, result.reason(), null);
@@ -59,7 +69,8 @@ final class NodeEventService implements TransportListener {
     EventEnvelope inject(EventEnvelope event) {
         LOG.info("EVENT_PUBLISHED eventId={} topicId={} publisherKeyId={} sequenceNumber={}",
                 event.eventId(), event.topicId(), EventCrypto.publisherKeyId(event), event.sequenceNumber());
-        transport.broadcastEvent(event);
+        if (dissemination == null) transport.broadcastEvent(event);
+        else dissemination.disseminate(event, null);
         return event;
     }
 
@@ -76,7 +87,8 @@ final class NodeEventService implements TransportListener {
         if (result.accepted()) {
             LOG.info("EVENT_ACCEPTED eventId={} topicId={} publisherKeyId={} sequenceNumber={} peerNodeId={}",
                     event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber(), peerNodeId.value());
-            transport.forwardEvent(event, peerNodeId);
+            if (dissemination == null) transport.forwardEvent(event, peerNodeId);
+            else dissemination.disseminate(event, peerNodeId);
             LOG.info("EVENT_FORWARDED eventId={} topicId={} publisherKeyId={} sequenceNumber={} peerNodeId={}",
                     event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber(), peerNodeId.value());
         } else if (result.sequenceStatus() == EventSequenceStatus.DUPLICATE) {

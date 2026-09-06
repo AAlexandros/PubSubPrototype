@@ -7,7 +7,8 @@ import java.nio.file.Path;
 import java.util.List;
 
 record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection transport, RegistrySection registry,
-                   ControlSection control, SamplingSection sampling, NavigationSection navigation) {
+                   ControlSection control, SamplingSection sampling, NavigationSection navigation,
+                   DisseminationSection dissemination) {
     TransportConfig toTransportConfig() {
         return new TransportConfig(
                 node.name,
@@ -59,6 +60,13 @@ record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection tr
         public long cycleIntervalMs = 2000;
         public long staleAfterMs = 20000;
         public String subscriptionsPath;
+    }
+
+    static final class DisseminationSection {
+        public int randomLinkCount = 1;
+        public long cycleIntervalMs = 2000;
+        public long staleAfterMs = 20000;
+        public long randomSeed = 0;
     }
 
     static final class NodeSection {

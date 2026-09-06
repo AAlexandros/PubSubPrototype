@@ -93,7 +93,15 @@ final class NodeConfigLoader {
             if (map.get("staleAfterMs") instanceof Number n) navigation.staleAfterMs = n.longValue();
             if (map.get("subscriptionsPath") instanceof String s) navigation.subscriptionsPath = s;
         }
-        return new NodeConfig(node, peers, transport, registry, control, sampling, navigation);
+        NodeConfig.DisseminationSection dissemination = null;
+        if (root.get("dissemination") instanceof Map<?, ?> map) {
+            dissemination = new NodeConfig.DisseminationSection();
+            if (map.get("randomLinkCount") instanceof Number n) dissemination.randomLinkCount = n.intValue();
+            if (map.get("cycleIntervalMs") instanceof Number n) dissemination.cycleIntervalMs = n.longValue();
+            if (map.get("staleAfterMs") instanceof Number n) dissemination.staleAfterMs = n.longValue();
+            if (map.get("randomSeed") instanceof Number n) dissemination.randomSeed = n.longValue();
+        }
+        return new NodeConfig(node, peers, transport, registry, control, sampling, navigation, dissemination);
     }
 
     private static Map<String, Object> section(Map<String, Object> root, NodeConfigField name) {
@@ -159,6 +167,16 @@ final class NodeConfigLoader {
             if (config.registry().pollIntervalMs <= 0) {
                 throw new IllegalArgumentException(fieldPath(NodeConfigField.REGISTRY, NodeConfigField.POLL_INTERVAL_MS)
                         + " must be greater than zero");
+            }
+        }
+        if (config.dissemination() != null) {
+            if (config.navigation() == null || config.sampling() == null) {
+                throw new IllegalArgumentException("dissemination requires navigation and peerSampling");
+            }
+            if (config.dissemination().randomLinkCount < 1
+                    || config.dissemination().cycleIntervalMs < 1
+                    || config.dissemination().staleAfterMs < 1) {
+                throw new IllegalArgumentException("Invalid dissemination configuration");
             }
         }
     }

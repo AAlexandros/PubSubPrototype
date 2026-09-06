@@ -84,7 +84,16 @@ final class NodeConfigLoader {
             if (map.get("ageThreshold") instanceof Number n) sampling.ageThreshold = n.intValue();
             if (map.get("randomSeed") instanceof Number n) sampling.randomSeed = n.longValue();
         }
-        return new NodeConfig(node, peers, transport, registry, control, sampling);
+        NodeConfig.NavigationSection navigation = null;
+        if (root.get("navigation") instanceof Map<?, ?> map) {
+            navigation = new NodeConfig.NavigationSection();
+            if (map.get("capacity") instanceof Number n) navigation.capacity = n.intValue();
+            if (map.get("routingBase") instanceof Number n) navigation.routingBase = n.intValue();
+            if (map.get("cycleIntervalMs") instanceof Number n) navigation.cycleIntervalMs = n.longValue();
+            if (map.get("staleAfterMs") instanceof Number n) navigation.staleAfterMs = n.longValue();
+            if (map.get("subscriptionsPath") instanceof String s) navigation.subscriptionsPath = s;
+        }
+        return new NodeConfig(node, peers, transport, registry, control, sampling, navigation);
     }
 
     private static Map<String, Object> section(Map<String, Object> root, NodeConfigField name) {

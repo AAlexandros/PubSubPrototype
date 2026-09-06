@@ -1,0 +1,57 @@
+name: phase-0.1
+services:
+  cardano-node:
+    extends:
+      file: ../devnet/compose.yaml
+      service: cardano-node
+
+  pubsub-node-1:
+    build:
+      context: ../../..
+      dockerfile: apps/pubsub-node/Dockerfile
+    depends_on:
+      - cardano-node
+    command: ["/config/node-1.yaml"]
+    volumes:
+      - ../../config/phase-0.5/node-1.yaml:/config/node-1.yaml:ro
+      - ../devnet/runtime/registry:/registry
+      - pubsub-node-1-identity-0-5:/data/identity
+    ports:
+      - "7001:7000"
+      - "127.0.0.1:8001:8000"
+
+  pubsub-node-2:
+    build:
+      context: ../../..
+      dockerfile: apps/pubsub-node/Dockerfile
+    depends_on:
+      - cardano-node
+    command: ["/config/node-2.yaml"]
+    volumes:
+      - ../../config/phase-0.5/node-2.yaml:/config/node-2.yaml:ro
+      - ../devnet/runtime/registry:/registry
+      - pubsub-node-2-identity-0-5:/data/identity
+    ports:
+      - "7002:7000"
+      - "127.0.0.1:8002:8000"
+
+  pubsub-node-3:
+    build:
+      context: ../../..
+      dockerfile: apps/pubsub-node/Dockerfile
+    depends_on:
+      - cardano-node
+    command: ["/config/node-3.yaml"]
+    volumes:
+      - ../../config/phase-0.5/node-3.yaml:/config/node-3.yaml:ro
+      - ../devnet/runtime/registry:/registry
+      - pubsub-node-3-identity-0-5:/data/identity
+    ports:
+      - "7003:7000"
+      - "127.0.0.1:8003:8000"
+
+volumes:
+  cardano-devnet-state:
+  pubsub-node-1-identity-0-5:
+  pubsub-node-2-identity-0-5:
+  pubsub-node-3-identity-0-5:

@@ -42,6 +42,11 @@ final class RegistrySynchronizer implements TopicStateProvider, AutoCloseable {
         return java.util.Optional.ofNullable(cachedTopics.get(topicId));
     }
 
+    /** Active (non-tombstoned) topic ids, for deterministic Navigation-layer topic ordering. */
+    List<String> activeTopicIds() {
+        return cachedTopics.values().stream().filter(TopicState::active).map(topic -> topic.topicId().value()).toList();
+    }
+
     private void pollSafely() {
         try {
             RegistrySnapshot snapshot = registry.snapshotIncludingTombstones();

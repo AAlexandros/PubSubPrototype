@@ -44,6 +44,58 @@ final class EventControlServer implements AutoCloseable {
         });
     }
 
+    void addNavigation(NavigationRuntime navigation, String nodeId) {
+        server.createContext("/v1/navigation/view", exchange -> {
+            if (!"GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, Map.of("error", "method_not_allowed"));
+                return;
+            }
+            var engine = navigation.engine();
+            respond(exchange, 200, Map.of(
+                    "nodeId", nodeId,
+                    "topicOrdering", engine.ordering().topicIds(),
+                    "subscriptions", engine.subscriptions(),
+                    "fingerTopics", engine.fingerTopics(),
+                    "view", engine.view()
+            ));
+        });
+        server.createContext("/v1/subscriptions", exchange -> {
+            String prefix = "/v1/subscriptions";
+            String path = exchange.getRequestURI().getPath();
+            String topicId = path.length() > prefix.length() ? path.substring(prefix.length() + 1) : "";
+            try {
+                switch (exchange.getRequestMethod()) {
+                    case "GET" -> {
+                        if (!topicId.isEmpty()) {
+                            respond(exchange, 405, Map.of("error", "method_not_allowed"));
+                            return;
+                        }
+                        respond(exchange, 200, Map.of("nodeId", nodeId, "subscriptions", navigation.engine().subscriptions()));
+                    }
+                    case "POST" -> {
+                        if (topicId.isEmpty()) {
+                            respond(exchange, 400, Map.of("error", "topicId is required"));
+                            return;
+                        }
+                        navigation.subscribe(new TopicId(topicId).value());
+                        respond(exchange, 200, Map.of("topicId", topicId, "subscribed", true));
+                    }
+                    case "DELETE" -> {
+                        if (topicId.isEmpty()) {
+                            respond(exchange, 400, Map.of("error", "topicId is required"));
+                            return;
+                        }
+                        navigation.unsubscribe(new TopicId(topicId).value());
+                        respond(exchange, 200, Map.of("topicId", topicId, "subscribed", false));
+                    }
+                    default -> respond(exchange, 405, Map.of("error", "method_not_allowed"));
+                }
+            } catch (RuntimeException ex) {
+                respond(exchange, 400, Map.of("error", ex.getMessage()));
+            }
+        });
+    }
+
     void start() {
         server.start();
     }

@@ -6,7 +6,8 @@ import org.pubsub.prototype.transport.TransportConfig;
 import java.nio.file.Path;
 import java.util.List;
 
-record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection transport, RegistrySection registry, ControlSection control, SamplingSection sampling) {
+record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection transport, RegistrySection registry,
+                   ControlSection control, SamplingSection sampling, NavigationSection navigation) {
     TransportConfig toTransportConfig() {
         return new TransportConfig(
                 node.name,
@@ -36,6 +37,13 @@ record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection tr
         return control == null || control.port == 0 ? 8000 : control.port;
     }
 
+    Path subscriptionsPath() {
+        if (navigation != null && navigation.subscriptionsPath != null) {
+            return Path.of(navigation.subscriptionsPath);
+        }
+        return identityPath().resolve("subscriptions.txt");
+    }
+
     static final class SamplingSection {
         public String advertisedHost;
         public int viewSize = 2;
@@ -43,6 +51,14 @@ record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection tr
         public long cycleIntervalMs = 2000;
         public int ageThreshold = 10;
         public long randomSeed = 0;
+    }
+
+    static final class NavigationSection {
+        public int capacity = 2;
+        public int routingBase = 2;
+        public long cycleIntervalMs = 2000;
+        public long staleAfterMs = 20000;
+        public String subscriptionsPath;
     }
 
     static final class NodeSection {

@@ -23,3 +23,4 @@ include("apps:pubsub-node")
 
 include("libs:peer-sampling-api")
 include("libs:securecyclon")
+include("libs:navigation")

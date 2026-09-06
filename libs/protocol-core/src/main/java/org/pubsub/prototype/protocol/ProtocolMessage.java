@@ -2,6 +2,7 @@ package org.pubsub.prototype.protocol;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import org.pubsub.prototype.event.EventEnvelope;
+import org.pubsub.prototype.navigation.NavigationExchange;
 import org.pubsub.prototype.sampling.PeerDescriptor;
 import org.pubsub.prototype.securecyclon.Exchange;
 
@@ -18,19 +19,24 @@ public record ProtocolMessage(
         Instant sentAt,
         EventEnvelope event,
         PeerDescriptor descriptor,
-        Exchange exchange
+        Exchange exchange,
+        NavigationExchange navigation
 ) {
     public ProtocolMessage(MessageType type, int version, String nodeId, String nodeName,
                            UUID requestId, Instant sentAt, EventEnvelope event) {
-        this(type, version, nodeId, nodeName, requestId, sentAt, event, null, null);
+        this(type, version, nodeId, nodeName, requestId, sentAt, event, null, null, null);
     }
 
     public ProtocolMessage withDescriptor(PeerDescriptor peer) {
-        return new ProtocolMessage(type, version, nodeId, nodeName, requestId, sentAt, event, peer, exchange);
+        return new ProtocolMessage(type, version, nodeId, nodeName, requestId, sentAt, event, peer, exchange, navigation);
     }
 
     public static ProtocolMessage gossip(MessageType type, UUID id, Exchange exchange) {
-        return new ProtocolMessage(type, VERSION, null, null, id, null, null, null, exchange);
+        return new ProtocolMessage(type, VERSION, null, null, id, null, null, null, exchange, null);
+    }
+
+    public static ProtocolMessage navigationGossip(MessageType type, UUID id, NavigationExchange navigation) {
+        return new ProtocolMessage(type, VERSION, null, null, id, null, null, null, null, navigation);
     }
 
     public static final int VERSION = 1;

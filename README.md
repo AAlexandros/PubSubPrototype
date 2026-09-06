@@ -131,6 +131,52 @@ The temporary Phase 0.3 event forwarding path continues over established session
 it is not the D2 dissemination layer. See [the protocol mapping](libs/securecyclon/README.md)
 for reference behavior and runtime adaptations.
 
+## Navigation layer / Vicinity (Phase 0.5)
+
+Run the three-node acceptance with:
+
+```bash
+./scripts/acceptance/phase-0.5.sh
+```
+
+The `libs/navigation` module implements the D2 Navigation Layer on top of
+Phase 0.4 SecureCyclon: deterministic topic ordering (active topic ids sorted
+lexicographically into ordinals `0..T-1`), finger-topic targets at distances
+`b^i` clockwise/anticlockwise (default `b = 2`), a bounded per-target-topic
+Navigation view (default `c = 2` peers per target), and a Vicinity gossip
+cycle exchanged over new `NAVIGATION_REQUEST`/`NAVIGATION_RESPONSE` messages.
+
+Subscriptions are local node state (not on-chain): a persistent
+newline-delimited `SubscriptionStore` backs
+
+```text
+POST   /v1/subscriptions/{topicId}
+DELETE /v1/subscriptions/{topicId}
+GET    /v1/subscriptions
+GET    /v1/navigation/view
+```
+
+The Navigation layer only reads `PeerSamplingService.view()` for random
+candidates; it never mutates the SecureCyclon view. Raw SecureCyclon samples
+enter the Navigation candidate pool with unknown subscriptions and are
+superseded once their real subscriptions are learned via gossip. Navigation
+candidates without an active transport session reuse the Phase 0.4 dynamic
+connection mechanism.
+
+`navigation` configures `capacity`, `routingBase`, `cycleIntervalMs`,
+`staleAfterMs`, and an optional `subscriptionsPath`. When the Cardano registry's
+active topic set changes, the node recomputes topic ordering and finger
+topics without a restart (the Navigation view is cleared and repopulated
+through subsequent gossip cycles, since ordinal numbers can refer to a
+different topic once the active set changes).
+
+Acceptance creates at least five active topics, subscribes the three nodes to
+different topics, verifies finger-topic computation and Vicinity selection,
+adds a subscription and confirms recomputation without restart, verifies
+stale-link removal after a node stop and rediscovery after restart, and
+verifies topic creation/deletion updates topic ordering without restart.
+Results are captured under `implementation-reports/evidence/phase-0.5/`.
+
 ## Current Status
 
-Latest implementation report: [Phase 0.4](implementation-reports/phase-0.4-implementation-report.md).
+Latest implementation report: [Phase 0.5](implementation-reports/phase-0.5-implementation-report.md).

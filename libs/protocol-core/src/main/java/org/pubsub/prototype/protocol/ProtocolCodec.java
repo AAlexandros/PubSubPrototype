@@ -60,6 +60,10 @@ public final class ProtocolCodec {
                 if (message.requestId() == null || message.exchange() == null)
                     throw new ProtocolException("SecureCyclon requestId and exchange required");
             }
+            case NAVIGATION_REQUEST, NAVIGATION_RESPONSE -> {
+                if (message.requestId() == null || message.navigation() == null)
+                    throw new ProtocolException("Navigation requestId and exchange required");
+            }
             case EVENT -> {
                 if (message.event() == null) {
                     throw new ProtocolException("EVENT envelope is required");

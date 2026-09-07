@@ -21,6 +21,7 @@ final class EventControlServer implements AutoCloseable {
     private final HttpServer server;
     private final NodeEventService events;
     private DisseminationRuntime dissemination;
+    private NodePersistenceRuntime persistence;
 
     EventControlServer(String host, int port, NodeEventService events) throws IOException {
         this.events = events;
@@ -130,6 +131,32 @@ final class EventControlServer implements AutoCloseable {
             } catch (RuntimeException ex) {
                 respond(exchange, 400, Map.of("error", ex.getMessage()));
             }
+        });
+    }
+
+    void addPersistence(NodePersistenceRuntime persistence) {
+        this.persistence = persistence;
+        server.createContext("/v1/events/recover", exchange -> {
+            if (!"POST".equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, Map.of("error", "method_not_allowed"));
+                return;
+            }
+            String prefix = "/v1/events/recover";
+            String path = exchange.getRequestURI().getPath();
+            String topicId = path.length() > prefix.length() ? path.substring(prefix.length() + 1) : "";
+            try {
+                if (topicId.isEmpty()) throw new IllegalArgumentException("topicId is required");
+                respond(exchange, 200, persistence.recover(new TopicId(topicId).value()));
+            } catch (RuntimeException ex) {
+                respond(exchange, 400, Map.of("error", ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage()));
+            }
+        });
+        server.createContext("/v1/events/recovery-state", exchange -> {
+            if (!"GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, Map.of("error", "method_not_allowed"));
+                return;
+            }
+            respond(exchange, 200, persistence.deliveryState());
         });
     }
 

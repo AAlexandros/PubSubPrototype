@@ -38,6 +38,12 @@ public final class PubSubNodeMain {
         }
         TopicStateProvider topics = registrySynchronizer == null ? topicId -> java.util.Optional.empty() : registrySynchronizer;
         NodeEventService eventService = new NodeEventService(identity, config.identityPath(), topics);
+        NodePersistenceRuntime persistence = config.persistence() == null || !config.persistence().enabled ? null
+                : new NodePersistenceRuntime(config.persistence(), config.identityPath(), topics);
+        if (persistence != null) {
+            persistence.attachDelivery(eventService);
+            eventService.attachPersistence(persistence);
+        }
         PeerSamplingRuntime sampling = config.sampling() == null ? null : new PeerSamplingRuntime(
                 new PeerDescriptor(identity.nodeId().value(),
                         config.sampling().advertisedHost, config.node().listenPort), config.sampling(), eventService);
@@ -66,6 +72,7 @@ public final class PubSubNodeMain {
         if (sampling != null) controlServer.addSampling(sampling.sampling(), identity.nodeId().value(), config.sampling().viewSize);
         if (navigation != null) controlServer.addNavigation(navigation, identity.nodeId().value());
         if (dissemination != null) controlServer.addDissemination(dissemination, identity.nodeId().value());
+        if (persistence != null) controlServer.addPersistence(persistence);
         controlServer.start();
         RegistrySynchronizer finalRegistrySynchronizer = registrySynchronizer;
         EventControlServer finalControlServer = controlServer;
@@ -78,6 +85,7 @@ public final class PubSubNodeMain {
             if (sampling != null) sampling.close();
             if (navigation != null) navigation.close();
             if (dissemination != null) dissemination.close();
+            if (persistence != null) persistence.close();
             transport.close();
             stop.countDown();
         }, "shutdown"));

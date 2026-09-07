@@ -28,6 +28,7 @@ final class NodeEventService implements TransportListener {
     private final EventValidator validator;
     private PubSubTransport transport;
     private DisseminationRuntime dissemination;
+    private NodePersistenceRuntime persistence;
 
     NodeEventService(NodeIdentity identity, Path runtimeDir, TopicStateProvider topics) {
         this.publisher = new EventPublisher(identity.keyPair(), Clock.systemUTC(), runtimeDir);
@@ -40,6 +41,10 @@ final class NodeEventService implements TransportListener {
 
     void attachDissemination(DisseminationRuntime dissemination) {
         this.dissemination = dissemination;
+    }
+
+    void attachPersistence(NodePersistenceRuntime persistence) {
+        this.persistence = persistence;
     }
 
     EventEnvelope publish(TopicId topicId, byte[] payload, boolean forceBroadcast, boolean tamperSignature) {
@@ -55,6 +60,7 @@ final class NodeEventService implements TransportListener {
             if (result.accepted()) {
                 LOG.info("EVENT_ACCEPTED eventId={} topicId={} publisherKeyId={} sequenceNumber={} peerNodeId=local",
                         event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber());
+                delivered(event, publisherKeyId, true);
             }
             if (forceBroadcast || dissemination == null) transport.broadcastEvent(event);
             else dissemination.disseminate(event, null);
@@ -64,6 +70,17 @@ final class NodeEventService implements TransportListener {
             throw new IllegalArgumentException("Event rejected: " + result.reason());
         }
         return event;
+    }
+
+    void acceptRecovered(EventEnvelope event) {
+        EventValidationResult result = validator.validate(event);
+        String publisherKeyId = result.publisherKeyId();
+        if (!result.accepted()) {
+            if (result.sequenceStatus() == EventSequenceStatus.DUPLICATE) return;
+            throw new IllegalArgumentException("Recovered event rejected: " + result.reason());
+        }
+        LOG.info("EVENT_ACCEPTED eventId={} topicId={} publisherKeyId={} sequenceNumber={} peerNodeId=recovery",
+                event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber());
     }
 
     EventEnvelope inject(EventEnvelope event) {
@@ -87,6 +104,9 @@ final class NodeEventService implements TransportListener {
         if (result.accepted()) {
             LOG.info("EVENT_ACCEPTED eventId={} topicId={} publisherKeyId={} sequenceNumber={} peerNodeId={}",
                     event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber(), peerNodeId.value());
+            // Remote acceptance is a delivery-only path. The original publisher is
+            // solely responsible for submitting the event to persistence.
+            delivered(event, publisherKeyId, false);
             if (dissemination == null) transport.forwardEvent(event, peerNodeId);
             else dissemination.disseminate(event, peerNodeId);
             LOG.info("EVENT_FORWARDED eventId={} topicId={} publisherKeyId={} sequenceNumber={} peerNodeId={}",
@@ -100,6 +120,13 @@ final class NodeEventService implements TransportListener {
                         event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber(), peerNodeId.value());
             }
             logRejection(event, publisherKeyId, result.reason(), peerNodeId);
+        }
+    }
+
+    private void delivered(EventEnvelope event, String publisherKeyId, boolean persist) {
+        if (persistence != null) {
+            persistence.recordDelivered(event, publisherKeyId);
+            if (persist) persistence.persist(event);
         }
     }
 

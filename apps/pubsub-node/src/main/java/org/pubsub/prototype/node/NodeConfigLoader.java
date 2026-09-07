@@ -101,7 +101,18 @@ final class NodeConfigLoader {
             if (map.get("staleAfterMs") instanceof Number n) dissemination.staleAfterMs = n.longValue();
             if (map.get("randomSeed") instanceof Number n) dissemination.randomSeed = n.longValue();
         }
-        return new NodeConfig(node, peers, transport, registry, control, sampling, navigation, dissemination);
+        NodeConfig.PersistenceSection persistence = null;
+        if (root.get("persistence") instanceof Map<?, ?> map) {
+            persistence = new NodeConfig.PersistenceSection();
+            if (map.get("enabled") != null) persistence.enabled = Boolean.parseBoolean(map.get("enabled").toString());
+            if (map.get("membershipPath") instanceof String s) persistence.membershipPath = s;
+            if (map.get("deliveryStatePath") instanceof String s) persistence.deliveryStatePath = s;
+            if (map.get("connectionTimeoutMs") instanceof Number n) persistence.connectionTimeoutMs = n.longValue();
+            if (map.get("requestTimeoutMs") instanceof Number n) persistence.requestTimeoutMs = n.longValue();
+            if (map.get("retries") instanceof Number n) persistence.retries = n.intValue();
+            if (map.get("recoveryConcurrency") instanceof Number n) persistence.recoveryConcurrency = n.intValue();
+        }
+        return new NodeConfig(node, peers, transport, registry, control, sampling, navigation, dissemination, persistence);
     }
 
     private static Map<String, Object> section(Map<String, Object> root, NodeConfigField name) {
@@ -177,6 +188,15 @@ final class NodeConfigLoader {
                     || config.dissemination().cycleIntervalMs < 1
                     || config.dissemination().staleAfterMs < 1) {
                 throw new IllegalArgumentException("Invalid dissemination configuration");
+            }
+        }
+        if (config.persistence() != null && config.persistence().enabled) {
+            if (config.persistence().membershipPath == null || config.persistence().membershipPath.isBlank()) {
+                throw new IllegalArgumentException("persistence.membershipPath is required when persistence is enabled");
+            }
+            if (config.persistence().connectionTimeoutMs < 1 || config.persistence().requestTimeoutMs < 1
+                    || config.persistence().retries < 0 || config.persistence().recoveryConcurrency < 1) {
+                throw new IllegalArgumentException("Invalid persistence configuration");
             }
         }
     }

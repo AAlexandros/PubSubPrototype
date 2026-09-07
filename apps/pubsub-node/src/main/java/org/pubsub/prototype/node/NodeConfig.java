@@ -8,7 +8,7 @@ import java.util.List;
 
 record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection transport, RegistrySection registry,
                    ControlSection control, SamplingSection sampling, NavigationSection navigation,
-                   DisseminationSection dissemination) {
+                   DisseminationSection dissemination, PersistenceSection persistence) {
     TransportConfig toTransportConfig() {
         return new TransportConfig(
                 node.name,
@@ -67,6 +67,16 @@ record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection tr
         public long cycleIntervalMs = 2000;
         public long staleAfterMs = 20000;
         public long randomSeed = 0;
+    }
+
+    static final class PersistenceSection {
+        public boolean enabled;
+        public String membershipPath;
+        public String deliveryStatePath;
+        public long connectionTimeoutMs = 1000;
+        public long requestTimeoutMs = 3000;
+        public int retries = 1;
+        public int recoveryConcurrency = 8;
     }
 
     static final class NodeSection {

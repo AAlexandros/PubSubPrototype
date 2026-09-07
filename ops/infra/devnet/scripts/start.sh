@@ -17,7 +17,7 @@ if have_command cardano-testnet && have_command cardano-node && have_command car
   nohup cardano-testnet cardano \
     --testnet-magic "$NETWORK_MAGIC" \
     --num-pool-nodes "${CARDANO_TESTNET_NUM_POOL_NODES:-1}" \
-    --slot-length "${CARDANO_TESTNET_SLOT_LENGTH:-0.2}" \
+    --slot-length "${CARDANO_TESTNET_SLOT_LENGTH:-2}" \
     --epoch-length "${CARDANO_TESTNET_EPOCH_LENGTH:-500}" \
     --output-dir "$TESTNET_DIR" \
     > "$RUNTIME_DIR/cardano-testnet.log" 2>&1 &

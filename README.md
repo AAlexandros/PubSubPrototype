@@ -5,8 +5,11 @@ Java 21 prototype for a Cardano-backed Pub/Sub network. Phase 0.1 is implemented
 ## Repository Layout
 
 - `apps/pubsub-node/`: runnable Pub/Sub node application and Docker image.
+- `apps/replication-server/`: versioned HTTP replication service and Docker image.
 - `libs/protocol-core/`: protocol messages, JSON codec, node identity storage, and `NodeId` derivation.
 - `libs/transport-netty/`: Netty transport, peer sessions, framing, reconnection, and integration tests.
+- `libs/persistence-api/`: persistence records, registry contracts, event/topic-log keys, and recovery result types.
+- `libs/persistence-core/`: DHT placement, atomic filesystem storage, replication client, registry cache, and recovery engine.
 - `ops/config/phase-0.1/`: local three-node runtime configuration.
 - `ops/infra/devnet/`: Cardano devnet Docker Compose setup, pinned tool versions, and lifecycle scripts.
 - `ops/infra/phase-0.1/`: Docker Compose topology for Cardano plus the three Pub/Sub nodes.
@@ -179,17 +182,22 @@ Results are captured under `implementation-reports/evidence/phase-0.5/`.
 
 ## Current Status
 
-Phase 0.6 adds a per-topic Hybrid Dissemination overlay on top of Navigation.
-Each subscribed topic maintains cyclic predecessor/successor links plus
-configurable random same-topic links, exchanges vicinity gossip through
-`DISSEMINATION_REQUEST`/`DISSEMINATION_RESPONSE`, and forwards accepted events
-only to the topic overlay. Inspection is available through
-`GET /v1/dissemination/view` and `GET /v1/dissemination/view/{topicId}`.
+Phase 0.7 adds an independent persistence path beside Hybrid Dissemination.
+Three registered replication servers assign signed events and publisher topic
+logs in a 256-bit DHT, store atomic filesystem replicas, and serve lookup from
+any entry server. Pub/Sub nodes persist delivery cursors and recover missed,
+revalidated events through `POST /v1/events/recover/{topicId}` without routing
+live dissemination through the DHT.
+
+Replication services expose `POST /v1/events`, `GET /v1/events/{eventKey}`,
+`GET /v1/topics/{topicId}/publishers` (with optional `sinceTimestamp`), and
+`GET /v1/health`. Only the original publishing node submits persistence work;
+receiving subscribers remain on the delivery path only.
 
 Run the full acceptance flow with:
 
 ```bash
-./scripts/acceptance/phase-0.6.sh
+./scripts/acceptance/phase-0.7.sh
 ```
 
-Latest implementation report: [Phase 0.6](implementation-reports/phase-0.6-implementation-report.md).
+Latest implementation report: [Phase 0.7](implementation-reports/phase-0.7-implementation-report.md).

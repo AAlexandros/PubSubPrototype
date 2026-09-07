@@ -1,0 +1,75 @@
+name: phase-0-7
+services:
+  cardano-node:
+    extends:
+      file: ../devnet/compose.yaml
+      service: cardano-node
+
+  replication-server-1: &replication
+    build:
+      context: ../../..
+      dockerfile: apps/replication-server/Dockerfile
+    command: ["/config/server-1.yaml"]
+    volumes:
+      - ../devnet/runtime/phase-0.7/server-1.yaml:/config/server-1.yaml:ro
+      - ../devnet/runtime/registry:/registry:ro
+      - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - replication-server-1-data:/data
+    ports: ["127.0.0.1:8101:8100"]
+  replication-server-2:
+    <<: *replication
+    command: ["/config/server-2.yaml"]
+    volumes:
+      - ../devnet/runtime/phase-0.7/server-2.yaml:/config/server-2.yaml:ro
+      - ../devnet/runtime/registry:/registry:ro
+      - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - replication-server-2-data:/data
+    ports: ["127.0.0.1:8102:8100"]
+  replication-server-3:
+    <<: *replication
+    command: ["/config/server-3.yaml"]
+    volumes:
+      - ../devnet/runtime/phase-0.7/server-3.yaml:/config/server-3.yaml:ro
+      - ../devnet/runtime/registry:/registry:ro
+      - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - replication-server-3-data:/data
+    ports: ["127.0.0.1:8103:8100"]
+
+  pubsub-node-1: &pubsub
+    build:
+      context: ../../..
+      dockerfile: apps/pubsub-node/Dockerfile
+    command: ["/config/node-1.yaml"]
+    volumes:
+      - ../../config/phase-0.7/node-1.yaml:/config/node-1.yaml:ro
+      - ../devnet/runtime/registry:/registry:ro
+      - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - pubsub-node-1-identity-0-7:/data/identity
+    ports: ["7001:7000", "127.0.0.1:8001:8000"]
+  pubsub-node-2:
+    <<: *pubsub
+    command: ["/config/node-2.yaml"]
+    volumes:
+      - ../../config/phase-0.7/node-2.yaml:/config/node-2.yaml:ro
+      - ../devnet/runtime/registry:/registry:ro
+      - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - pubsub-node-2-identity-0-7:/data/identity
+    ports: ["7002:7000", "127.0.0.1:8002:8000"]
+  pubsub-node-3:
+    <<: *pubsub
+    command: ["/config/node-3.yaml"]
+    volumes:
+      - ../../config/phase-0.7/node-3.yaml:/config/node-3.yaml:ro
+      - ../devnet/runtime/registry:/registry:ro
+      - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - pubsub-node-3-identity-0-7:/data/identity
+    ports: ["7003:7000", "127.0.0.1:8003:8000"]
+
+volumes:
+  cardano-devnet-state:
+  replication-server-1-data:
+  replication-server-2-data:
+  replication-server-3-data:
+  pubsub-node-1-identity-0-7:
+  pubsub-node-2-identity-0-7:
+  pubsub-node-3-identity-0-7:

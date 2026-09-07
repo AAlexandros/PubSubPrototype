@@ -7,6 +7,8 @@ dependencies {
     implementation(project(":libs:securecyclon"))
     implementation(project(":libs:navigation"))
     implementation(project(":libs:dissemination"))
+    implementation(project(":libs:persistence-api"))
+    implementation(project(":libs:persistence-core"))
     implementation(project(":libs:protocol-core"))
     implementation(project(":libs:event-core"))
     implementation(project(":libs:registry-api"))

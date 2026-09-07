@@ -19,6 +19,7 @@ contracts/topic-registry/check.err
 contracts/topic-registry/ps-check.out
 contracts/topic-registry/ps-check.err
 contracts/topic-registry/plutus.json
+contracts/replication-registry/plutus.json
 
 # Current devnet runtime tree.
 ops/infra/devnet/runtime/

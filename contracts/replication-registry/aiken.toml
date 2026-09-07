@@ -1,0 +1,8 @@
+name = "pubsub/replication-registry"
+version = "0.1.0"
+plutus = "v3"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "3.1.0"
+source = "github"

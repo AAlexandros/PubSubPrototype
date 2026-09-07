@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.persistence.PersistenceHex;
 import org.pubsub.prototype.persistence.PublisherProgress;
+import org.pubsub.prototype.persistence.ReplicaRepairRequest;
 import org.pubsub.prototype.persistence.ReplicationServer;
 import org.pubsub.prototype.persistence.StoredEvent;
 import org.pubsub.prototype.persistence.core.PersistenceJson;
@@ -26,17 +27,22 @@ final class ReplicationHttpServer implements AutoCloseable {
     private final ReplicationService service;
     private final ReplicationMembership membership;
     private final ReplicationServer self;
+    private final ReplicaMaintenanceManager maintenance;
 
     ReplicationHttpServer(String host, int port, ReplicationServer self, ReplicationService service,
-                          ReplicationMembership membership) throws IOException {
+                          ReplicationMembership membership, ReplicaMaintenanceManager maintenance) throws IOException {
         this.self = self;
         this.service = service;
         this.membership = membership;
+        this.maintenance = maintenance;
         this.server = HttpServer.create(new InetSocketAddress(host, port), 0);
         server.createContext("/v1/events", this::events);
         server.createContext("/v1/topics", this::topics);
         server.createContext("/v1/replicas/events", this::replicaEvents);
         server.createContext("/v1/replicas/topics", this::replicaTopics);
+        server.createContext("/v1/replicas/repair", this::replicaRepair);
+        server.createContext("/v1/maintenance/status", this::maintenanceStatus);
+        server.createContext("/v1/maintenance/replicas", this::maintenanceReplicas);
         server.createContext("/v1/health", this::health);
         server.setExecutor(Executors.newFixedThreadPool(16, runnable -> {
             Thread thread = new Thread(runnable, "replication-http");
@@ -138,6 +144,36 @@ final class ReplicationHttpServer implements AutoCloseable {
         result.put("membership", membership.activeServers());
         result.put("eventKeys", service.store().eventKeys());
         respond(exchange, 200, result);
+    }
+
+    private void replicaRepair(HttpExchange exchange) throws IOException {
+        try {
+            if (!"POST".equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, Map.of("error", "method_not_allowed"));
+                return;
+            }
+            ReplicaRepairRequest request = read(exchange, ReplicaRepairRequest.class);
+            maintenance.requestRepair(request);
+            respond(exchange, 202, request);
+        } catch (IllegalArgumentException ex) {
+            respond(exchange, 400, Map.of("error", safeMessage(ex)));
+        }
+    }
+
+    private void maintenanceStatus(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, Map.of("error", "method_not_allowed"));
+            return;
+        }
+        respond(exchange, 200, maintenance.status());
+    }
+
+    private void maintenanceReplicas(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, Map.of("error", "method_not_allowed"));
+            return;
+        }
+        respond(exchange, 200, maintenance.inventory());
     }
 
     private static String suffix(HttpExchange exchange, String prefix) {

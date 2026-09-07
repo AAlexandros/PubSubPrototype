@@ -43,13 +43,17 @@ public final class ReplicationServerMain {
                 config.topicRegistryRuntimeDir(), config.topicRegistrySigner()));
         FileEventStore store = new FileEventStore(config.storagePath(), Clock.systemUTC(),
                 new SystemEpochProvider(Clock.systemUTC(), config.epochZeroTimeMs(), config.epochLengthMs()));
+        store.ensureServerIdentity(config.serverId());
         ReplicationHttpClient client = new ReplicationHttpClient(Duration.ofMillis(config.connectionTimeoutMs()),
                 Duration.ofMillis(config.requestTimeoutMs()), config.retries());
         ReplicationService service = new ReplicationService(config.self(), membership,
                 new PersistenceEventValidator(topicId -> topics.topic(topicId)), store, client);
+        ReplicaMaintenanceManager replicaMaintenance = new ReplicaMaintenanceManager(config.self(), membership,
+                service, store, client, () -> topics.snapshot().topics(), config.failureProbeAttempts(),
+                Duration.ofMillis(config.failureProbeTimeoutMs()));
         ReplicationHttpServer server = new ReplicationHttpServer(config.listenHost(), config.port(),
-                config.self(), service, membership);
-        ScheduledExecutorService maintenance = Executors.newScheduledThreadPool(2, runnable -> {
+                config.self(), service, membership, replicaMaintenance);
+        ScheduledExecutorService maintenance = Executors.newScheduledThreadPool(3, runnable -> {
             Thread thread = new Thread(runnable, "replication-maintenance");
             thread.setDaemon(true);
             return thread;
@@ -69,6 +73,10 @@ public final class ReplicationServerMain {
             try { store.cleanupExpired(); } catch (RuntimeException ex) { LOG.warn("Expiration cleanup failed: {}", ex.getMessage()); }
         }, config.cleanupIntervalMs(), config.cleanupIntervalMs(), TimeUnit.MILLISECONDS);
         server.start();
+        maintenance.scheduleWithFixedDelay(() -> {
+            try { replicaMaintenance.runOnce(); }
+            catch (RuntimeException ex) { LOG.warn("Replica maintenance failed: {}", ex.getMessage()); }
+        }, 0, config.maintenanceIntervalMs(), TimeUnit.MILLISECONDS);
         LOG.info("REPLICATION_SERVER_STARTED serverId={} host={} port={} storagePath={}",
                 config.serverId(), config.advertisedHost(), config.port(), config.storagePath());
         CountDownLatch stop = new CountDownLatch(1);

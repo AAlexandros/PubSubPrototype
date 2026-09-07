@@ -61,7 +61,9 @@ public final class PersistenceClient {
             try {
                 for (PublisherProgress progress : http.publisherProgress(server, topicId, false, sinceTimestamp)) {
                     merged.merge(progress.publisherKeyId(), progress,
-                            (left, right) -> left.latestSequenceNumber() >= right.latestSequenceNumber() ? left : right);
+                            (left, right) -> left.latestSequenceNumber() > right.latestSequenceNumber()
+                                    || (left.latestSequenceNumber() == right.latestSequenceNumber()
+                                    && left.latestTimestamp() >= right.latestTimestamp()) ? left : right);
                 }
             } catch (RuntimeException ignored) {
                 // Try another entry server.

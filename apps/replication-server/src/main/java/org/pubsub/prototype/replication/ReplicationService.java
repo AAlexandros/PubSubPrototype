@@ -17,6 +17,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 final class ReplicationService {
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationService.class);
@@ -25,6 +27,7 @@ final class ReplicationService {
     private final PersistenceEventValidator validator;
     private final FileEventStore store;
     private final ReplicationHttpClient http;
+    private final Set<String> unavailableServers = ConcurrentHashMap.newKeySet();
 
     ReplicationService(ReplicationServer self, ReplicationMembership membership, PersistenceEventValidator validator,
                        FileEventStore store, ReplicationHttpClient http) {
@@ -41,7 +44,7 @@ final class ReplicationService {
         LOG.info("EVENT_PERSIST_REQUESTED eventKey={} eventId={} topicId={} publisherKeyId={} sequenceNumber={} serverId={}",
                 eventKey, event.eventId(), event.topicId(), publisher, event.sequenceNumber(), self.serverId());
         TopicState topic = validator.validate(event);
-        List<ReplicationServer> servers = membership.activeServers();
+        List<ReplicationServer> servers = activeHealthyServers();
         List<ReplicationServer> replicas = DhtAssignment.responsibleServers(eventKey, servers, topic.replicationFactor());
         if (replicas.isEmpty()) throw new IllegalStateException("no active replication servers");
         StoredEvent record = store.newRecord(event, topic);
@@ -67,8 +70,9 @@ final class ReplicationService {
 
     Optional<StoredEvent> lookup(String eventKey) {
         LOG.info("EVENT_LOOKUP_REQUESTED eventKey={} serverId={}", eventKey, self.serverId());
-        for (ReplicationServer candidate : DhtAssignment.responsibleServers(eventKey, membership.activeServers(),
-                Math.max(1, membership.activeServers().size()))) {
+        List<ReplicationServer> servers = activeHealthyServers();
+        for (ReplicationServer candidate : DhtAssignment.responsibleServers(eventKey, servers,
+                Math.max(1, servers.size()))) {
             try {
                 Optional<StoredEvent> found = candidate.serverId().equals(self.serverId())
                         ? store.get(eventKey) : http.lookup(candidate, eventKey, true);
@@ -99,7 +103,7 @@ final class ReplicationService {
         if (sinceTimestamp < 0) throw new IllegalArgumentException("sinceTimestamp must be non-negative");
         String key = EventKeys.topicLogKey(topicId);
         TopicState topic = validatorTopic(topicId);
-        for (ReplicationServer candidate : DhtAssignment.responsibleServers(key, membership.activeServers(), topic.replicationFactor())) {
+        for (ReplicationServer candidate : DhtAssignment.responsibleServers(key, activeHealthyServers(), topic.replicationFactor())) {
             try {
                 List<PublisherProgress> values = candidate.serverId().equals(self.serverId())
                         ? store.publisherProgress(topicId) : http.publisherProgress(candidate, topicId, true);
@@ -125,6 +129,27 @@ final class ReplicationService {
 
     FileEventStore store() {
         return store;
+    }
+
+    TopicState topic(String topicId) {
+        return validatorTopic(topicId);
+    }
+
+    void confirmUnavailable(String serverId) {
+        unavailableServers.add(serverId);
+    }
+
+    void confirmRecovered(String serverId) {
+        unavailableServers.remove(serverId);
+    }
+
+    void retainUnavailable(Set<String> activeServerIds) {
+        unavailableServers.retainAll(activeServerIds);
+    }
+
+    private List<ReplicationServer> activeHealthyServers() {
+        return membership.activeServers().stream()
+                .filter(server -> !unavailableServers.contains(server.serverId())).toList();
     }
 
     private void replicateProgress(String topicId, int factor, PublisherProgress progress, List<ReplicationServer> servers) {

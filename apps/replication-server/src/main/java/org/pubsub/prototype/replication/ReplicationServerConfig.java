@@ -14,7 +14,8 @@ record ReplicationServerConfig(String serverId, String listenHost, String advert
                                Path storagePath, Path membershipPath, long membershipPollMs,
                                Path topicRegistryRuntimeDir, String topicRegistrySigner,
                                long requestTimeoutMs, long connectionTimeoutMs, int retries,
-                               long cleanupIntervalMs, long epochZeroTimeMs, long epochLengthMs) {
+                               long cleanupIntervalMs, long epochZeroTimeMs, long epochLengthMs,
+                               int failureProbeAttempts, long failureProbeTimeoutMs, long maintenanceIntervalMs) {
     ReplicationServerConfig {
         serverId = PersistenceHex.require256(serverId, "serverId");
         if (port < 1 || port > 65535) throw new IllegalArgumentException("invalid port");
@@ -22,6 +23,19 @@ record ReplicationServerConfig(String serverId, String listenHost, String advert
                 || retries < 0 || cleanupIntervalMs < 1 || epochLengthMs < 1) {
             throw new IllegalArgumentException("invalid replication server timing configuration");
         }
+        if (failureProbeAttempts < 1 || failureProbeTimeoutMs < 1 || maintenanceIntervalMs < 1) {
+            throw new IllegalArgumentException("invalid replication maintenance configuration");
+        }
+    }
+
+    ReplicationServerConfig(String serverId, String listenHost, String advertisedHost, int port,
+                            Path storagePath, Path membershipPath, long membershipPollMs,
+                            Path topicRegistryRuntimeDir, String topicRegistrySigner,
+                            long requestTimeoutMs, long connectionTimeoutMs, int retries,
+                            long cleanupIntervalMs, long epochZeroTimeMs, long epochLengthMs) {
+        this(serverId, listenHost, advertisedHost, port, storagePath, membershipPath, membershipPollMs,
+                topicRegistryRuntimeDir, topicRegistrySigner, requestTimeoutMs, connectionTimeoutMs, retries,
+                cleanupIntervalMs, epochZeroTimeMs, epochLengthMs, 3, 5_000, 1_000);
     }
 
     ReplicationServer self() {
@@ -43,7 +57,9 @@ record ReplicationServerConfig(String serverId, String listenHost, String advert
                     Path.of(required(registry, "topicRegistryRuntimeDir")), required(registry, "topicRegistrySigner"),
                     number(timing, "requestTimeoutMs", 3000), number(timing, "connectionTimeoutMs", 1000),
                     integer(timing, "retries", 1), number(timing, "cleanupIntervalMs", 5000),
-                    number(epoch, "zeroTimeMs", 0), number(epoch, "lengthMs", 432_000_000));
+                    number(epoch, "zeroTimeMs", 0), number(epoch, "lengthMs", 432_000_000),
+                    integer(timing, "failureProbeAttempts", 3), number(timing, "failureProbeTimeoutMs", 5_000),
+                    number(timing, "maintenanceIntervalMs", 1_000));
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to read replication-server config " + file, ex);
         }

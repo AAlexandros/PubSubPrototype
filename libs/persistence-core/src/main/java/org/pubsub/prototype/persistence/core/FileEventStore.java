@@ -22,10 +22,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 
 public final class FileEventStore {
     private static final Logger LOG = LoggerFactory.getLogger(FileEventStore.class);
     private static final TypeReference<Map<String, PublisherProgress>> PROGRESS_TYPE = new TypeReference<>() { };
+    private static final TypeReference<Set<String>> TOPIC_INDEX_TYPE = new TypeReference<>() { };
     private final Path root;
     private final Path events;
     private final Path topicLogs;
@@ -105,7 +108,9 @@ public final class FileEventStore {
     public synchronized boolean updateProgress(String topicId, PublisherProgress progress) {
         Map<String, PublisherProgress> values = new LinkedHashMap<>(readProgress(topicId));
         PublisherProgress previous = values.get(progress.publisherKeyId());
-        if (previous != null && previous.latestSequenceNumber() >= progress.latestSequenceNumber()) return false;
+        if (previous != null && (previous.latestSequenceNumber() > progress.latestSequenceNumber()
+                || (previous.latestSequenceNumber() == progress.latestSequenceNumber()
+                && previous.latestTimestamp() >= progress.latestTimestamp()))) return false;
         values.put(progress.publisherKeyId(), progress);
         writeProgress(topicId, values);
         return true;
@@ -144,6 +149,66 @@ public final class FileEventStore {
         }
     }
 
+    public synchronized List<StoredEvent> eventRecords() {
+        List<StoredEvent> records = new ArrayList<>();
+        for (String eventKey : eventKeys()) get(eventKey).ifPresent(records::add);
+        return records.stream().sorted(Comparator.comparing(StoredEvent::eventKey)).toList();
+    }
+
+    public synchronized boolean deleteEvent(String eventKey) {
+        try {
+            return Files.deleteIfExists(eventPath(eventKey));
+        } catch (IOException ex) {
+            throw new IllegalStateException("Unable to delete event " + eventKey, ex);
+        }
+    }
+
+    public synchronized List<String> topicIds() {
+        Path path = topicIndexPath();
+        if (!Files.exists(path)) return List.of();
+        try {
+            return PersistenceJson.MAPPER.readValue(path.toFile(), TOPIC_INDEX_TYPE).stream()
+                    .filter(this::hasTopicLog).sorted().toList();
+        } catch (IOException ex) {
+            throw new IllegalStateException("Unable to read topic-log index", ex);
+        }
+    }
+
+    public synchronized boolean hasTopicLog(String topicId) {
+        return Files.exists(progressPath(topicId));
+    }
+
+    public synchronized boolean deleteTopicLog(String topicId) {
+        try {
+            boolean removed = Files.deleteIfExists(progressPath(topicId));
+            if (removed) {
+                Set<String> topics = new TreeSet<>(topicIds());
+                topics.remove(PersistenceHex.require256(topicId, "topicId"));
+                AtomicFiles.write(topicIndexPath(), PersistenceJson.MAPPER.writeValueAsBytes(topics));
+            }
+            return removed;
+        } catch (IOException ex) {
+            throw new IllegalStateException("Unable to delete topic log " + topicId, ex);
+        }
+    }
+
+    public synchronized void ensureServerIdentity(String serverId) {
+        String normalized = PersistenceHex.require256(serverId, "serverId");
+        Path path = root.resolve("metadata").resolve("server-id.txt");
+        try {
+            if (Files.exists(path)) {
+                String persisted = Files.readString(path).trim();
+                if (!normalized.equals(persisted)) {
+                    throw new IllegalStateException("storage belongs to replication server " + persisted);
+                }
+                return;
+            }
+            AtomicFiles.write(path, (normalized + System.lineSeparator()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (IOException ex) {
+            throw new IllegalStateException("Unable to persist replication server identity", ex);
+        }
+    }
+
     public Path root() {
         return root;
     }
@@ -154,6 +219,10 @@ public final class FileEventStore {
 
     private Path progressPath(String topicId) {
         return topicLogs.resolve(EventKeys.topicLogKey(topicId) + ".json");
+    }
+
+    private Path topicIndexPath() {
+        return root.resolve("metadata").resolve("topic-index.json");
     }
 
     private Map<String, PublisherProgress> readProgress(String topicId) {
@@ -168,6 +237,9 @@ public final class FileEventStore {
 
     private void writeProgress(String topicId, Map<String, PublisherProgress> values) {
         try {
+            Set<String> topics = new TreeSet<>(topicIds());
+            topics.add(PersistenceHex.require256(topicId, "topicId"));
+            AtomicFiles.write(topicIndexPath(), PersistenceJson.MAPPER.writeValueAsBytes(topics));
             AtomicFiles.write(progressPath(topicId), PersistenceJson.MAPPER.writeValueAsBytes(values));
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to write topic log " + topicId, ex);

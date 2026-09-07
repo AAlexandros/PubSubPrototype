@@ -2,6 +2,8 @@ package org.pubsub.prototype.persistence.core;
 
 import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.persistence.PublisherProgress;
+import org.pubsub.prototype.persistence.ReplicaInventory;
+import org.pubsub.prototype.persistence.ReplicaRepairRequest;
 import org.pubsub.prototype.persistence.ReplicationServer;
 import org.pubsub.prototype.persistence.StoredEvent;
 
@@ -63,12 +65,40 @@ public final class ReplicationHttpClient implements AutoCloseable {
         sendJson(server, "/v1/replicas/topics/" + topicId + "/publishers", "POST", progress, PublisherProgress.class);
     }
 
+    public boolean probe(ReplicationServer server, Duration timeout) {
+        try {
+            HttpResponse<byte[]> response = send(HttpRequest.newBuilder(server.uri("/v1/health"))
+                    .timeout(timeout).GET().build(), 0);
+            return response.statusCode() >= 200 && response.statusCode() < 300;
+        } catch (RuntimeException ex) {
+            return false;
+        }
+    }
+
+    public ReplicaInventory inventory(ReplicationServer server) {
+        return get(server, "/v1/maintenance/replicas", ReplicaInventory.class);
+    }
+
+    public void requestRepair(ReplicationServer server, ReplicaRepairRequest request) {
+        sendJson(server, "/v1/replicas/repair", "POST", request, ReplicaRepairRequest.class);
+    }
+
     private <T> Optional<T> getOptional(ReplicationServer server, String path, Class<T> type) {
         try {
             HttpResponse<byte[]> response = send(request(server, path).GET().build());
             if (response.statusCode() == 404) return Optional.empty();
             requireSuccess(response);
             return Optional.of(PersistenceJson.MAPPER.readValue(response.body(), type));
+        } catch (IOException ex) {
+            throw new IllegalStateException("Invalid replication-server response", ex);
+        }
+    }
+
+    private <T> T get(ReplicationServer server, String path, Class<T> type) {
+        try {
+            HttpResponse<byte[]> response = send(request(server, path).GET().build());
+            requireSuccess(response);
+            return PersistenceJson.MAPPER.readValue(response.body(), type);
         } catch (IOException ex) {
             throw new IllegalStateException("Invalid replication-server response", ex);
         }
@@ -92,12 +122,16 @@ public final class ReplicationHttpClient implements AutoCloseable {
     }
 
     private HttpResponse<byte[]> send(HttpRequest request) {
+        return send(request, retries);
+    }
+
+    private HttpResponse<byte[]> send(HttpRequest request, int retryCount) {
         RuntimeException last = null;
-        for (int attempt = 0; attempt <= retries; attempt++) {
+        for (int attempt = 0; attempt <= retryCount; attempt++) {
             try {
                 HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
                 if (response.body().length > MAX_RESPONSE_BYTES) throw new IllegalStateException("response payload too large");
-                if (response.statusCode() >= 500 && attempt < retries) continue;
+                if (response.statusCode() >= 500 && attempt < retryCount) continue;
                 return response;
             } catch (IOException ex) {
                 last = new IllegalStateException("Replication server unavailable", ex);

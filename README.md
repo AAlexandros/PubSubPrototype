@@ -182,7 +182,14 @@ Results are captured under `implementation-reports/evidence/phase-0.5/`.
 
 ## Current Status
 
-Phase 0.7 adds an independent persistence path beside Hybrid Dissemination.
+Phase 0.8 adds automatic replica maintenance to the independent persistence
+path beside Hybrid Dissemination. Replication servers actively probe only peers
+that share responsibility for local records, confirm failure after configurable
+consecutive attempts, exchange bounded metadata inventories, and pull validated
+event/topic-log repairs after failures, joins, leaves, and replication-factor
+changes. Replica release waits for the current responsible set to confirm
+storage under the same membership version.
+
 Three registered replication servers assign signed events and publisher topic
 logs in a 256-bit DHT, store atomic filesystem replicas, and serve lookup from
 any entry server. Pub/Sub nodes persist delivery cursors and recover missed,
@@ -191,13 +198,14 @@ live dissemination through the DHT.
 
 Replication services expose `POST /v1/events`, `GET /v1/events/{eventKey}`,
 `GET /v1/topics/{topicId}/publishers` (with optional `sinceTimestamp`), and
-`GET /v1/health`. Only the original publishing node submits persistence work;
+`GET /v1/health`, `GET /v1/maintenance/status`, and
+`GET /v1/maintenance/replicas`. Only the original publishing node submits persistence work;
 receiving subscribers remain on the delivery path only.
 
 Run the full acceptance flow with:
 
 ```bash
-./scripts/acceptance/phase-0.7.sh
+./scripts/acceptance/phase-0.8.sh
 ```
 
-Latest implementation report: [Phase 0.7](implementation-reports/phase-0.7-implementation-report.md).
+Latest implementation report: [Phase 0.8](implementation-reports/phase-0.8-implementation-report.md).

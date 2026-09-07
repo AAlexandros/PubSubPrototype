@@ -29,3 +29,15 @@ cardano_cli latest transaction build --testnet-magic "$NETWORK_MAGIC" --change-a
 cardano_cli latest transaction sign --tx-body-file "$artifact.txbody" --signing-key-file "$skey" \
   --testnet-magic "$NETWORK_MAGIC" --out-file "$artifact.tx"
 cardano_cli latest transaction submit --tx-file "$artifact.tx" --testnet-magic "$NETWORK_MAGIC"
+for _ in $(seq 1 60); do
+  "$ROOT_DIR/scripts/replication/query-servers.sh" >/dev/null
+  observed="$(node_file "$ROOT_DIR/scripts/replication/registry-data.mjs" find \
+    "$(host_path "$runtime_dir/script-utxos.json")" "$server_id" 2>/dev/null || true)"
+  if [ -n "$observed" ]; then
+    IFS=$'\t' read -r _ _ _ _ _ _ observed_active <<< "$observed"
+    if [ "$observed_active" = false ]; then exit 0; fi
+  fi
+  sleep 2
+done
+echo "unregistration transaction did not become visible: $server_id" >&2
+exit 1

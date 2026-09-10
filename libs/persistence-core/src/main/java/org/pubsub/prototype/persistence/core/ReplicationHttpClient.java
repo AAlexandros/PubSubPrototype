@@ -1,6 +1,10 @@
 package org.pubsub.prototype.persistence.core;
 
 import org.pubsub.prototype.event.EventEnvelope;
+import org.pubsub.prototype.http.ApiParameters;
+import org.pubsub.prototype.http.ApiPaths;
+import org.pubsub.prototype.http.HttpMethods;
+import org.pubsub.prototype.http.JsonHttp;
 import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.ReplicaInventory;
 import org.pubsub.prototype.persistence.ReplicaRepairRequest;
@@ -29,16 +33,16 @@ public final class ReplicationHttpClient implements AutoCloseable {
     }
 
     public StoredEvent store(ReplicationServer server, EventEnvelope envelope) {
-        return sendJson(server, "/v1/events", "POST", envelope, StoredEvent.class);
+        return sendJson(server, ApiPaths.EVENTS, HttpMethods.POST, envelope, StoredEvent.class);
     }
 
     public void storeReplica(ReplicationServer server, StoredEvent event) {
-        sendJson(server, "/v1/replicas/events", "POST", event, StoredEvent.class);
+        sendJson(server, ApiPaths.REPLICA_EVENTS, HttpMethods.POST, event, StoredEvent.class);
     }
 
     public Optional<StoredEvent> lookup(ReplicationServer server, String eventKey, boolean direct) {
-        String prefix = direct ? "/v1/replicas/events/" : "/v1/events/";
-        return getOptional(server, prefix + eventKey, StoredEvent.class);
+        String prefix = direct ? ApiPaths.REPLICA_EVENTS : ApiPaths.EVENTS;
+        return getOptional(server, ApiPaths.child(prefix, eventKey), StoredEvent.class);
     }
 
     public List<PublisherProgress> publisherProgress(ReplicationServer server, String topicId, boolean direct) {
@@ -48,10 +52,11 @@ public final class ReplicationHttpClient implements AutoCloseable {
     public List<PublisherProgress> publisherProgress(ReplicationServer server, String topicId, boolean direct,
                                                      long sinceTimestamp) {
         if (sinceTimestamp < 0) throw new IllegalArgumentException("sinceTimestamp must be non-negative");
-        String prefix = direct ? "/v1/replicas/topics/" : "/v1/topics/";
+        String prefix = direct ? ApiPaths.REPLICA_TOPICS : ApiPaths.TOPICS;
         try {
-            String suffix = direct ? "" : "?sinceTimestamp=" + sinceTimestamp;
-            HttpResponse<byte[]> response = send(request(server, prefix + topicId + "/publishers" + suffix).GET().build());
+            String suffix = direct ? "" : "?" + ApiParameters.SINCE_TIMESTAMP + "=" + sinceTimestamp;
+            HttpResponse<byte[]> response = send(request(server, ApiPaths.publishers(prefix, topicId) + suffix)
+                    .GET().build());
             if (response.statusCode() == 404) return List.of();
             requireSuccess(response);
             return PersistenceJson.MAPPER.readValue(response.body(), PersistenceJson.MAPPER.getTypeFactory()
@@ -62,12 +67,13 @@ public final class ReplicationHttpClient implements AutoCloseable {
     }
 
     public void storeProgressReplica(ReplicationServer server, String topicId, PublisherProgress progress) {
-        sendJson(server, "/v1/replicas/topics/" + topicId + "/publishers", "POST", progress, PublisherProgress.class);
+        sendJson(server, ApiPaths.publishers(ApiPaths.REPLICA_TOPICS, topicId), HttpMethods.POST, progress,
+                PublisherProgress.class);
     }
 
     public boolean probe(ReplicationServer server, Duration timeout) {
         try {
-            HttpResponse<byte[]> response = send(HttpRequest.newBuilder(server.uri("/v1/health"))
+            HttpResponse<byte[]> response = send(HttpRequest.newBuilder(server.uri(ApiPaths.HEALTH))
                     .timeout(timeout).GET().build(), 0);
             return response.statusCode() >= 200 && response.statusCode() < 300;
         } catch (RuntimeException ex) {
@@ -76,11 +82,11 @@ public final class ReplicationHttpClient implements AutoCloseable {
     }
 
     public ReplicaInventory inventory(ReplicationServer server) {
-        return get(server, "/v1/maintenance/replicas", ReplicaInventory.class);
+        return get(server, ApiPaths.MAINTENANCE_REPLICAS, ReplicaInventory.class);
     }
 
     public void requestRepair(ReplicationServer server, ReplicaRepairRequest request) {
-        sendJson(server, "/v1/replicas/repair", "POST", request, ReplicaRepairRequest.class);
+        sendJson(server, ApiPaths.REPLICA_REPAIR, HttpMethods.POST, request, ReplicaRepairRequest.class);
     }
 
     private <T> Optional<T> getOptional(ReplicationServer server, String path, Class<T> type) {
@@ -107,7 +113,7 @@ public final class ReplicationHttpClient implements AutoCloseable {
     private <T> T sendJson(ReplicationServer server, String path, String method, Object body, Class<T> type) {
         try {
             byte[] json = PersistenceJson.MAPPER.writeValueAsBytes(body);
-            HttpRequest request = request(server, path).header("Content-Type", "application/json")
+            HttpRequest request = request(server, path).header(JsonHttp.CONTENT_TYPE, JsonHttp.JSON_MEDIA_TYPE)
                     .method(method, HttpRequest.BodyPublishers.ofByteArray(json)).build();
             HttpResponse<byte[]> response = send(request);
             requireSuccess(response);

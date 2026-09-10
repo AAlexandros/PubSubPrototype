@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "$ROOT_DIR/scripts/lib/platform.sh"
 EVIDENCE_DIR="$ROOT_DIR/implementation-reports/evidence/phase-0.9"
 mkdir -p "$EVIDENCE_DIR"
 exec > >(tee "$EVIDENCE_DIR/acceptance-output.log") 2>&1
@@ -29,11 +30,7 @@ if [[ -n "$resume_run" ]]; then
     scripts/experiments/telemetry.sh normalize "$run_dir"
   fi
 else
-  if grep -qi microsoft /proc/version 2>/dev/null; then
-    cmd.exe /c gradlew.bat -g .gradle-user-home clean test --no-daemon
-  else
-    ./gradlew --gradle-user-home .gradle-user-home clean test --no-daemon
-  fi
+  pubsub_run_gradle "$ROOT_DIR" clean test --no-daemon
   node --check scripts/testbed/generate.mjs
   node --check scripts/experiments/run.mjs
   node --check scripts/acceptance/phase-0.9.mjs

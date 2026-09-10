@@ -10,12 +10,14 @@ Java 21 prototype for a Cardano-backed Pub/Sub network. Phase 0.1 is implemented
 - `libs/transport-netty/`: Netty transport, peer sessions, framing, reconnection, and integration tests.
 - `libs/persistence-api/`: persistence records, registry contracts, event/topic-log keys, and recovery result types.
 - `libs/persistence-core/`: DHT placement, atomic filesystem storage, replication client, registry cache, and recovery engine.
+- `libs/http-support/`: shared HTTP route, method, query, error, and JSON exchange contracts.
 - `ops/config/phase-0.1/`: local three-node runtime configuration.
 - `ops/infra/devnet/`: Cardano devnet Docker Compose setup, pinned tool versions, and lifecycle scripts.
 - `ops/infra/phase-0.1/`: Docker Compose topology for Cardano plus the three Pub/Sub nodes.
 - `ops/scripts/`: phase runtime and acceptance entrypoints.
 - `specs/`: source specifications and phase task notes.
 - `implementation-reports/`: implementation reports and acceptance evidence.
+- `scripts/lib/`: shared cross-platform shell and Node.js utilities plus script-level contracts.
 - `documentation/`: supplementary documentation, including [`documentation/scripts.md`](documentation/scripts.md), a full reference of every script in the repository.
 
 ## Requirements

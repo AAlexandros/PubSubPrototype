@@ -9,9 +9,10 @@ application {
 
 dependencies {
     api(project(":libs:persistence-api"))
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
-    implementation("org.slf4j:slf4j-api:2.0.13")
+    implementation(project(":libs:http-support"))
+    implementation(libs.jackson.databind)
+    implementation(libs.jackson.jsr310)
+    implementation(libs.slf4j.api)
 
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.3")
+    testImplementation(libs.junit.jupiter)
 }

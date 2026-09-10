@@ -1,9 +1,8 @@
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import {nativePath as native} from '../lib/paths.mjs';
 
-const native = value => process.platform === 'win32' && /^\/[a-zA-Z]\//.test(value)
-  ? `${value[1].toUpperCase()}:/${value.slice(3)}` : value;
 const [mode, rawEvidence, ...args] = process.argv.slice(2);
 const evidence = native(rawEvidence);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));

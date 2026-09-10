@@ -1,15 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {TELEMETRY_DATASETS} from '../lib/contracts.mjs';
+import {nativePath as native} from '../lib/paths.mjs';
 
-const native = value => process.platform !== 'win32' ? value
-  : /^\/mnt\/[a-zA-Z]\//.test(value) ? `${value[5].toUpperCase()}:/${value.slice(7)}`
-  : /^\/[a-zA-Z]\//.test(value) ? `${value[1].toUpperCase()}:/${value.slice(3)}` : value;
 const [rawRun, rawEvidence, rawRoot] = process.argv.slice(2);
 const run = path.resolve(native(rawRun));
 const evidence = path.resolve(native(rawEvidence));
 const root = path.resolve(native(rawRoot));
 fs.mkdirSync(evidence, {recursive:true});
-const datasets = ['runs','event_lifecycle','message_transmissions','overlay_edges','protocol_cycles','subscriptions','persistence_operations','replica_state','faults','resource_samples','cardano_transactions'];
+const datasets = TELEMETRY_DATASETS;
 const counts = {};
 for (const name of datasets) {
   const jsonl = path.join(run,'raw',`${name}.jsonl`);

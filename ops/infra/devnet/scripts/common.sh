@@ -3,25 +3,17 @@ set -euo pipefail
 
 DEVNET_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_ROOT="$(cd "$DEVNET_DIR/../../.." && pwd)"
+. "$PROJECT_ROOT/scripts/lib/platform.sh"
 RUNTIME_DIR="$DEVNET_DIR/runtime"
 KEYS_DIR="$DEVNET_DIR/keys"
 STATE_DIR="$DEVNET_DIR/state"
 VERSIONS_FILE="$DEVNET_DIR/versions.env"
 COMPOSE_FILE="$DEVNET_DIR/compose.yaml"
 
-if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
-  export MSYS_NO_PATHCONV=1
-  export MSYS2_ARG_CONV_EXCL="*"
-fi
+pubsub_enable_msys_path_passthrough
 
 docker_host_path() {
-  if grep -qi microsoft /proc/version 2>/dev/null && command -v wslpath >/dev/null 2>&1; then
-    wslpath -w "$1"
-  elif command -v cygpath >/dev/null 2>&1; then
-    cygpath -w "$1"
-  else
-    printf '%s\n' "$1"
-  fi
+  pubsub_host_path "$1"
 }
 
 DOCKER_DEVNET_DIR="$(docker_host_path "$DEVNET_DIR")"

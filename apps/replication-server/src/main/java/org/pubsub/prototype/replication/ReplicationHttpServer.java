@@ -3,6 +3,11 @@ package org.pubsub.prototype.replication;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.pubsub.prototype.event.EventEnvelope;
+import org.pubsub.prototype.http.ApiPaths;
+import org.pubsub.prototype.http.ApiParameters;
+import org.pubsub.prototype.http.HttpErrorCodes;
+import org.pubsub.prototype.http.HttpMethods;
+import org.pubsub.prototype.http.JsonHttp;
 import org.pubsub.prototype.persistence.PersistenceHex;
 import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.ReplicaRepairRequest;
@@ -15,7 +20,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -36,14 +40,14 @@ final class ReplicationHttpServer implements AutoCloseable {
         this.membership = membership;
         this.maintenance = maintenance;
         this.server = HttpServer.create(new InetSocketAddress(host, port), 0);
-        server.createContext("/v1/events", this::events);
-        server.createContext("/v1/topics", this::topics);
-        server.createContext("/v1/replicas/events", this::replicaEvents);
-        server.createContext("/v1/replicas/topics", this::replicaTopics);
-        server.createContext("/v1/replicas/repair", this::replicaRepair);
-        server.createContext("/v1/maintenance/status", this::maintenanceStatus);
-        server.createContext("/v1/maintenance/replicas", this::maintenanceReplicas);
-        server.createContext("/v1/health", this::health);
+        server.createContext(ApiPaths.EVENTS, this::events);
+        server.createContext(ApiPaths.TOPICS, this::topics);
+        server.createContext(ApiPaths.REPLICA_EVENTS, this::replicaEvents);
+        server.createContext(ApiPaths.REPLICA_TOPICS, this::replicaTopics);
+        server.createContext(ApiPaths.REPLICA_REPAIR, this::replicaRepair);
+        server.createContext(ApiPaths.MAINTENANCE_STATUS, this::maintenanceStatus);
+        server.createContext(ApiPaths.MAINTENANCE_REPLICAS, this::maintenanceReplicas);
+        server.createContext(ApiPaths.HEALTH, this::health);
         server.setExecutor(Executors.newFixedThreadPool(16, runnable -> {
             Thread thread = new Thread(runnable, "replication-http");
             thread.setDaemon(true);
@@ -56,86 +60,87 @@ final class ReplicationHttpServer implements AutoCloseable {
     }
 
     private void events(HttpExchange exchange) throws IOException {
-        String suffix = suffix(exchange, "/v1/events");
+        String suffix = JsonHttp.suffix(exchange.getRequestURI(), ApiPaths.EVENTS);
         try {
-            if ("POST".equals(exchange.getRequestMethod()) && suffix.isEmpty()) {
+            if (HttpMethods.POST.equals(exchange.getRequestMethod()) && suffix.isEmpty()) {
                 StoredEvent event = service.persist(read(exchange, EventEnvelope.class));
                 respond(exchange, 201, event);
-            } else if ("GET".equals(exchange.getRequestMethod()) && !suffix.isEmpty()) {
+            } else if (HttpMethods.GET.equals(exchange.getRequestMethod()) && !suffix.isEmpty()) {
                 String key = PersistenceHex.require256(suffix, "eventKey");
                 var found = service.lookup(key);
                 if (found.isPresent()) respond(exchange, 200, found.orElseThrow());
-                else respond(exchange, 404, Map.of("error", "event_not_found", "eventKey", key));
+                else respond(exchange, 404, Map.of(HttpErrorCodes.ERROR, "event_not_found", "eventKey", key));
             } else {
-                respond(exchange, 405, Map.of("error", "method_not_allowed"));
+                respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
             }
         } catch (IllegalArgumentException ex) {
-            if ("POST".equals(exchange.getRequestMethod())) {
-                LOG.info("EVENT_PERSIST_FAILED serverId={} reason={}", self.serverId(), safeMessage(ex));
+            if (HttpMethods.POST.equals(exchange.getRequestMethod())) {
+                LOG.info("EVENT_PERSIST_FAILED serverId={} reason={}", self.serverId(), JsonHttp.safeMessage(ex));
             }
-            respond(exchange, 400, Map.of("error", safeMessage(ex)));
+            respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, JsonHttp.safeMessage(ex)));
         } catch (RuntimeException ex) {
-            LOG.info("EVENT_PERSIST_FAILED serverId={} reason={}", self.serverId(), safeMessage(ex));
-            respond(exchange, 503, Map.of("error", safeMessage(ex)));
+            LOG.info("EVENT_PERSIST_FAILED serverId={} reason={}", self.serverId(), JsonHttp.safeMessage(ex));
+            respond(exchange, 503, Map.of(HttpErrorCodes.ERROR, JsonHttp.safeMessage(ex)));
         }
     }
 
     private void replicaEvents(HttpExchange exchange) throws IOException {
-        String suffix = suffix(exchange, "/v1/replicas/events");
+        String suffix = JsonHttp.suffix(exchange.getRequestURI(), ApiPaths.REPLICA_EVENTS);
         try {
-            if ("POST".equals(exchange.getRequestMethod()) && suffix.isEmpty()) {
+            if (HttpMethods.POST.equals(exchange.getRequestMethod()) && suffix.isEmpty()) {
                 StoredEvent event = read(exchange, StoredEvent.class);
                 service.storeReplica(event);
                 respond(exchange, 201, event);
-            } else if ("GET".equals(exchange.getRequestMethod()) && !suffix.isEmpty()) {
+            } else if (HttpMethods.GET.equals(exchange.getRequestMethod()) && !suffix.isEmpty()) {
                 String key = PersistenceHex.require256(suffix, "eventKey");
                 var found = service.lookupLocal(key);
                 if (found.isPresent()) respond(exchange, 200, found.orElseThrow());
-                else respond(exchange, 404, Map.of("error", "event_not_found", "eventKey", key));
-            } else respond(exchange, 405, Map.of("error", "method_not_allowed"));
+                else respond(exchange, 404, Map.of(HttpErrorCodes.ERROR, "event_not_found", "eventKey", key));
+            } else respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
         } catch (IllegalArgumentException ex) {
-            respond(exchange, 400, Map.of("error", safeMessage(ex)));
+            respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, JsonHttp.safeMessage(ex)));
         }
     }
 
     private void topics(HttpExchange exchange) throws IOException {
-        String[] parts = suffix(exchange, "/v1/topics").split("/");
+        String[] parts = JsonHttp.suffix(exchange.getRequestURI(), ApiPaths.TOPICS).split("/");
         try {
-            if (!"GET".equals(exchange.getRequestMethod()) || parts.length != 2 || !"publishers".equals(parts[1])) {
-                respond(exchange, 405, Map.of("error", "method_not_allowed"));
+            if (!HttpMethods.GET.equals(exchange.getRequestMethod()) || parts.length != 2
+                    || !ApiPaths.PUBLISHERS_SEGMENT.equals(parts[1])) {
+                respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
                 return;
             }
-            long sinceTimestamp = queryLong(exchange, "sinceTimestamp", 0);
+            long sinceTimestamp = JsonHttp.queryLong(exchange.getRequestURI(), ApiParameters.SINCE_TIMESTAMP, 0);
             respond(exchange, 200, service.publisherProgress(
                     PersistenceHex.require256(parts[0], "topicId"), sinceTimestamp));
         } catch (IllegalArgumentException ex) {
-            respond(exchange, 400, Map.of("error", safeMessage(ex)));
+            respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, JsonHttp.safeMessage(ex)));
         }
     }
 
     private void replicaTopics(HttpExchange exchange) throws IOException {
-        String[] parts = suffix(exchange, "/v1/replicas/topics").split("/");
+        String[] parts = JsonHttp.suffix(exchange.getRequestURI(), ApiPaths.REPLICA_TOPICS).split("/");
         try {
-            if (parts.length != 2 || !"publishers".equals(parts[1])) {
-                respond(exchange, 404, Map.of("error", "not_found"));
+            if (parts.length != 2 || !ApiPaths.PUBLISHERS_SEGMENT.equals(parts[1])) {
+                respond(exchange, 404, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.NOT_FOUND));
                 return;
             }
             String topicId = PersistenceHex.require256(parts[0], "topicId");
-            if ("GET".equals(exchange.getRequestMethod())) {
+            if (HttpMethods.GET.equals(exchange.getRequestMethod())) {
                 respond(exchange, 200, service.localPublisherProgress(topicId));
-            } else if ("POST".equals(exchange.getRequestMethod())) {
+            } else if (HttpMethods.POST.equals(exchange.getRequestMethod())) {
                 PublisherProgress progress = read(exchange, PublisherProgress.class);
                 service.storeProgressReplica(topicId, progress);
                 respond(exchange, 200, progress);
-            } else respond(exchange, 405, Map.of("error", "method_not_allowed"));
+            } else respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
         } catch (IllegalArgumentException ex) {
-            respond(exchange, 400, Map.of("error", safeMessage(ex)));
+            respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, JsonHttp.safeMessage(ex)));
         }
     }
 
     private void health(HttpExchange exchange) throws IOException {
-        if (!"GET".equals(exchange.getRequestMethod())) {
-            respond(exchange, 405, Map.of("error", "method_not_allowed"));
+        if (!HttpMethods.GET.equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
             return;
         }
         Map<String, Object> result = new LinkedHashMap<>();
@@ -148,71 +153,40 @@ final class ReplicationHttpServer implements AutoCloseable {
 
     private void replicaRepair(HttpExchange exchange) throws IOException {
         try {
-            if (!"POST".equals(exchange.getRequestMethod())) {
-                respond(exchange, 405, Map.of("error", "method_not_allowed"));
+            if (!HttpMethods.POST.equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
                 return;
             }
             ReplicaRepairRequest request = read(exchange, ReplicaRepairRequest.class);
             maintenance.requestRepair(request);
             respond(exchange, 202, request);
         } catch (IllegalArgumentException ex) {
-            respond(exchange, 400, Map.of("error", safeMessage(ex)));
+            respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, JsonHttp.safeMessage(ex)));
         }
     }
 
     private void maintenanceStatus(HttpExchange exchange) throws IOException {
-        if (!"GET".equals(exchange.getRequestMethod())) {
-            respond(exchange, 405, Map.of("error", "method_not_allowed"));
+        if (!HttpMethods.GET.equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
             return;
         }
         respond(exchange, 200, maintenance.status());
     }
 
     private void maintenanceReplicas(HttpExchange exchange) throws IOException {
-        if (!"GET".equals(exchange.getRequestMethod())) {
-            respond(exchange, 405, Map.of("error", "method_not_allowed"));
+        if (!HttpMethods.GET.equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
             return;
         }
         respond(exchange, 200, maintenance.inventory());
     }
 
-    private static String suffix(HttpExchange exchange, String prefix) {
-        String path = exchange.getRequestURI().getPath();
-        if (path.equals(prefix)) return "";
-        if (!path.startsWith(prefix + "/")) return "";
-        return path.substring(prefix.length() + 1);
-    }
-
-    private static long queryLong(HttpExchange exchange, String name, long fallback) {
-        String query = exchange.getRequestURI().getRawQuery();
-        if (query == null || query.isBlank()) return fallback;
-        for (String part : query.split("&")) {
-            String[] pieces = part.split("=", 2);
-            if (pieces[0].equals(name)) {
-                long value = Long.parseLong(pieces.length == 2 ? pieces[1] : "");
-                if (value < 0) throw new IllegalArgumentException(name + " must be non-negative");
-                return value;
-            }
-        }
-        return fallback;
-    }
-
     private static <T> T read(HttpExchange exchange, Class<T> type) throws IOException {
-        byte[] bytes = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
-        if (bytes.length > MAX_REQUEST_BYTES) throw new IllegalArgumentException("request payload too large");
-        return PersistenceJson.MAPPER.readValue(bytes, type);
+        return JsonHttp.readBounded(exchange, PersistenceJson.MAPPER, type, MAX_REQUEST_BYTES);
     }
 
     private static void respond(HttpExchange exchange, int status, Object body) throws IOException {
-        byte[] bytes = PersistenceJson.MAPPER.writeValueAsBytes(body);
-        exchange.getResponseHeaders().set("Content-Type", "application/json");
-        exchange.sendResponseHeaders(status, bytes.length);
-        exchange.getResponseBody().write(bytes);
-        exchange.close();
-    }
-
-    private static String safeMessage(Throwable error) {
-        return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+        JsonHttp.respond(exchange, PersistenceJson.MAPPER, status, body);
     }
 
     @Override

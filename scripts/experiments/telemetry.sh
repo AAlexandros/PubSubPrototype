@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "$ROOT_DIR/scripts/lib/platform.sh"
 launcher="$ROOT_DIR/tools/telemetry/build/install/telemetry/bin/telemetry"
 
 if [[ $# -lt 1 ]]; then
@@ -11,11 +12,7 @@ fi
 
 if [[ ! -f "$launcher" ]]; then
   echo "Telemetry distribution is missing; installing it..." >&2
-  if grep -qi microsoft /proc/version 2>/dev/null || [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
-    (cd "$ROOT_DIR" && cmd.exe /c gradlew.bat -g .gradle-user-home :tools:telemetry:installDist) >&2
-  else
-    "$ROOT_DIR/gradlew" --gradle-user-home "$ROOT_DIR/.gradle-user-home" :tools:telemetry:installDist >&2
-  fi
+  pubsub_run_gradle "$ROOT_DIR" :tools:telemetry:installDist >&2
 fi
 
 # The generated POSIX launcher works in Linux, WSL, and Git Bash. Invoking it

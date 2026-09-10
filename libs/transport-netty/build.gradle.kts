@@ -5,9 +5,9 @@ plugins {
 dependencies {
     api(project(":libs:peer-sampling-api"))
     api(project(":libs:protocol-core"))
-    api("io.netty:netty-all:4.1.112.Final")
-    api("org.slf4j:slf4j-api:2.0.13")
+    api(libs.netty.all)
+    api(libs.slf4j.api)
 
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.3")
-    testImplementation("ch.qos.logback:logback-classic:1.5.6")
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.logback.classic)
 }

@@ -1,28 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {TESTBED_PATHS} from '../lib/contracts.mjs';
+import {nativePath as native} from '../lib/paths.mjs';
+import {loadSectionedYaml as config} from '../lib/simple-yaml.mjs';
 
-const native = value => process.platform !== 'win32' ? value
-  : /^\/mnt\/[a-zA-Z]\//.test(value) ? `${value[5].toUpperCase()}:/${value.slice(7)}`
-  : /^\/[a-zA-Z]\//.test(value) ? `${value[1].toUpperCase()}:/${value.slice(3)}` : value;
 const root = fs.realpathSync(native(process.argv[2] || process.cwd()));
 const nodeCount = Number(process.argv[3] || process.env.PUBSUB_NODE_COUNT || 3);
 const serverIds = (process.argv[4] || '').split(',').filter(Boolean);
-function config(file) {
-  const result = {};
-  let section = null;
-  for (const raw of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
-    if (!raw.trim() || raw.trimStart().startsWith('#')) continue;
-    const split = raw.indexOf(':');
-    const key = raw.slice(0, split).trim();
-    const value = raw.slice(split + 1).trim();
-    if (!/^\s/.test(raw) && !value) { section = key; result[section] = {}; continue; }
-    const parsed = /^-?\d+$/.test(value) ? Number(value) : value;
-    if (/^\s/.test(raw) && section) result[section][key] = parsed;
-    else { section = null; result[key] = parsed; }
-  }
-  return result;
-}
-const settings = config(path.join(root, 'ops', 'config', 'phase-0.9', 'testbed.yaml'));
+const settings = config(path.join(root, ...TESTBED_PATHS.SETTINGS_FILE.split('/')));
 if (!Number.isInteger(nodeCount) || nodeCount < 3 || nodeCount > 50) throw Error('nodeCount must be between 3 and 50');
 if (serverIds.length !== 3 || serverIds.some(id => !/^[0-9a-f]{64}$/.test(id))) throw Error('three replication server IDs are required');
 const runtime = path.join(root, '.tools', 'phase-0.9');

@@ -4,7 +4,7 @@ plugins {
 
 dependencies {
     api(project(":libs:registry-api"))
-    api("com.fasterxml.jackson.core:jackson-databind:2.17.2")
+    api(libs.jackson.databind)
 
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.3")
+    testImplementation(libs.junit.jupiter)
 }

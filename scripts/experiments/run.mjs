@@ -2,26 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {createHash, randomUUID} from 'node:crypto';
+import {API_PATHS, TELEMETRY_DATASETS, TESTBED_PATHS, nodeApiUrl, replicationApiUrl} from '../lib/contracts.mjs';
+import {nativePath as native} from '../lib/paths.mjs';
+import {loadFlatYaml as yaml} from '../lib/simple-yaml.mjs';
 
-const native = value => process.platform !== 'win32' ? value
-  : /^\/mnt\/[a-zA-Z]\//.test(value) ? `${value[5].toUpperCase()}:/${value.slice(7)}`
-  : /^\/[a-zA-Z]\//.test(value) ? `${value[1].toUpperCase()}:/${value.slice(3)}` : value;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-function scalar(value) {
-  const text = value.trim();
-  if (text === 'true' || text === 'false') return text === 'true';
-  if (/^-?\d+(\.\d+)?$/.test(text)) return Number(text);
-  return text.replace(/^['"]|['"]$/g, '');
-}
-function yaml(file) {
-  const result = {};
-  for (const raw of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
-    if (!raw.trim() || raw.trimStart().startsWith('#') || /^\s/.test(raw)) continue;
-    const split = raw.indexOf(':');
-    if (split > 0) result[raw.slice(0, split).trim()] = scalar(raw.slice(split + 1));
-  }
-  return result;
-}
 const [mode, rawScenario, rawRoot] = process.argv.slice(2);
 if (!rawScenario) throw Error('scenario path is required');
 const scenarioFile = path.resolve(native(rawScenario));
@@ -40,8 +25,7 @@ const logDir = path.join(runDir, 'logs');
 fs.mkdirSync(rawDir, {recursive: true});
 fs.mkdirSync(logDir, {recursive: true});
 fs.copyFileSync(scenarioFile, path.join(runDir, 'scenario.yaml'));
-const datasets = ['runs','event_lifecycle','message_transmissions','overlay_edges','protocol_cycles','subscriptions','persistence_operations','replica_state','faults','resource_samples','cardano_transactions'];
-for (const dataset of datasets) fs.writeFileSync(path.join(rawDir, `${dataset}.jsonl`), '');
+for (const dataset of TELEMETRY_DATASETS) fs.writeFileSync(path.join(rawDir, `${dataset}.jsonl`), '');
 const monotonicOrigin = process.hrtime.bigint();
 const base = () => ({runId, scenarioId: String(scenario.scenarioId), repetition: Number(scenario.repetition), randomSeed: Number(scenario.randomSeed), timestampUtc: new Date().toISOString(), monotonicTimeNs: Number(process.hrtime.bigint() - monotonicOrigin)});
 const emit = (dataset, value) => fs.appendFileSync(path.join(rawDir, `${dataset}.jsonl`), JSON.stringify({...base(), ...value}) + '\n');
@@ -53,7 +37,7 @@ function command(program, args, options = {}) {
   if (result.status !== 0) throw Error(`${program} ${args.join(' ')} exited ${result.status}: ${result.stderr || result.stdout}`);
   return result.stdout.trim();
 }
-const compose = (...args) => command('docker', ['compose','--env-file','ops/infra/devnet/versions.env','-f','.tools/phase-0.9/compose.yaml',...args]);
+const compose = (...args) => command('docker', ['compose','--env-file',TESTBED_PATHS.DEVNET_ENV_FILE,'-f',TESTBED_PATHS.COMPOSE_FILE,...args]);
 async function request(url, options) {
   const response = await fetch(url, options);
   const text = await response.text();
@@ -119,7 +103,7 @@ async function sample() {
     for (const [layer, endpoint] of [['SECURECYCLON','peer-sampling/view'],['NAVIGATION','navigation/view'],['DISSEMINATION','dissemination/view']]) {
       const before = performance.now();
       try {
-        const value = await request(`http://127.0.0.1:${8000 + index}/v1/${endpoint}`);
+        const value = await request(nodeApiUrl(index, `/v1/${endpoint}`));
         if (value.nodeId) nodeIds.set(component, value.nodeId);
         const found = new Map();
         function walk(item, topicId = null, role = null) {
@@ -139,8 +123,8 @@ async function sample() {
   for (let index = 1; index <= Number(scenario.replicationServerCount); index++) {
     try {
       const [inventory, status] = await Promise.all([
-        request(`http://127.0.0.1:${8100 + index}/v1/maintenance/replicas`),
-        request(`http://127.0.0.1:${8100 + index}/v1/maintenance/status`)
+        request(replicationApiUrl(index, API_PATHS.MAINTENANCE_REPLICAS)),
+        request(replicationApiUrl(index, API_PATHS.MAINTENANCE_STATUS))
       ]);
       for (const event of inventory.events || []) emit('replica_state', {serverId:inventory.serverId, recordType:'EVENT', eventKey:event.eventKey, topicId:event.topicId || null, present:true, responsible:null, membershipVersion:status.membershipVersion || null});
       for (const log of inventory.topicLogs || []) emit('replica_state', {serverId:inventory.serverId, recordType:'TOPIC_LOG', eventKey:null, topicId:log.topicId, present:true, responsible:null, membershipVersion:status.membershipVersion || null});
@@ -177,9 +161,9 @@ try {
   await sleep(2000);
   for (let node = 1; node <= Number(scenario.nodeCount); node++) {
     const selected = scenario.subscriptionDistribution === 'round-robin' ? [topics[(node - 1) % topics.length]] : topics;
-    const view = await waitRequest(`http://127.0.0.1:${8000 + node}/v1/peer-sampling/view`);
+    const view = await waitRequest(nodeApiUrl(node, API_PATHS.PEER_SAMPLING_VIEW));
     for (const topicId of selected) {
-      await request(`http://127.0.0.1:${8000 + node}/v1/subscriptions/${topicId}`, {method:'POST'});
+      await request(nodeApiUrl(node, `${API_PATHS.SUBSCRIPTIONS}/${topicId}`), {method:'POST'});
       emit('subscriptions', {nodeId:view.nodeId || `pubsub-node-${node}`, topicId, action:'SUBSCRIBE', subscribed:true});
     }
   }
@@ -202,13 +186,13 @@ try {
           if (action === 'stop' || action === 'start') compose(action,target);
           if (action === 'recover') {
             const index = Number(target.match(/(\d+)$/)?.[1]);
-            await waitRequest(`http://127.0.0.1:${8000 + index}/v1/peer-sampling/view`);
+            await waitRequest(nodeApiUrl(index, API_PATHS.PEER_SAMPLING_VIEW));
             for (const topicId of topics) {
               let recovered = false;
               let lastResult;
               for (let attempt = 0; attempt < 30 && !recovered; attempt++) {
                 try {
-                  lastResult = await request(`http://127.0.0.1:${8000 + index}/v1/events/recover/${topicId}`, {method:'POST'});
+                  lastResult = await request(nodeApiUrl(index, `${API_PATHS.EVENT_RECOVER}/${topicId}`), {method:'POST'});
                   recovered = Number(lastResult.deliveredCount) > 0;
                   if (!recovered) await sleep(500);
                 }
@@ -233,7 +217,7 @@ try {
     const topicId = topics[index % topics.length];
     const payload = Buffer.alloc(Number(scenario.payloadSize), 65 + index % 26).toString('base64');
     const before = performance.now();
-    const value = await request(`http://127.0.0.1:8001/v1/events/publish`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({topicId,payload})});
+    const value = await request(nodeApiUrl(1, API_PATHS.EVENT_PUBLISH), {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({topicId,payload})});
     const duration = performance.now() - before;
     emit('event_lifecycle', {nodeId:null, topicId, eventId:value.eventId, eventKey:null, publisherKeyId:null, sequenceNumber:Number(value.sequenceNumber), peerNodeId:'local', stage:'PUBLISHED', reason:null});
     emit('persistence_operations', {nodeId:null, serverId:null, operation:'STORE', topicId, eventId:value.eventId, eventKey:null, durationMs:duration, success:true, recordCount:1});

@@ -1,0 +1,24 @@
+[versions]
+avro = "1.12.0"
+hadoop = "3.4.1"
+jackson = "2.17.2"
+junit = "5.10.3"
+junit-platform = "1.10.3"
+logback = "1.5.6"
+netty = "4.1.112.Final"
+parquet = "1.15.2"
+slf4j = "2.0.13"
+snakeyaml = "2.2"
+
+[libraries]
+avro = { module = "org.apache.avro:avro", version.ref = "avro" }
+hadoop-common = { module = "org.apache.hadoop:hadoop-common", version.ref = "hadoop" }
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
+jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+netty-all = { module = "io.netty:netty-all", version.ref = "netty" }
+parquet-avro = { module = "org.apache.parquet:parquet-avro", version.ref = "parquet" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }

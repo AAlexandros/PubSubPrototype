@@ -4,12 +4,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.pubsub.prototype.event.EventEnvelope;
+import org.pubsub.prototype.http.ApiPaths;
+import org.pubsub.prototype.http.ApiParameters;
+import org.pubsub.prototype.http.HttpErrorCodes;
+import org.pubsub.prototype.http.HttpMethods;
+import org.pubsub.prototype.http.JsonHttp;
 import org.pubsub.prototype.registry.TopicId;
 import org.pubsub.prototype.sampling.PeerSamplingService;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -26,9 +30,9 @@ final class EventControlServer implements AutoCloseable {
     EventControlServer(String host, int port, NodeEventService events) throws IOException {
         this.events = events;
         this.server = HttpServer.create(new InetSocketAddress(host, port), 0);
-        this.server.createContext("/v1/events/publish", this::publish);
-        this.server.createContext("/v1/events/inject", this::inject);
-        this.server.createContext("/v1/events/publisher-key-id", this::publisherKeyId);
+        this.server.createContext(ApiPaths.EVENT_PUBLISH, this::publish);
+        this.server.createContext(ApiPaths.EVENT_INJECT, this::inject);
+        this.server.createContext(ApiPaths.PUBLISHER_KEY_ID, this::publisherKeyId);
         this.server.setExecutor(Executors.newSingleThreadExecutor(runnable -> {
             Thread thread = new Thread(runnable, "event-control");
             thread.setDaemon(true);
@@ -37,9 +41,9 @@ final class EventControlServer implements AutoCloseable {
     }
 
     void addSampling(PeerSamplingService sampling, String nodeId, int capacity) {
-        server.createContext("/v1/peer-sampling/view", exchange -> {
-            if (!"GET".equals(exchange.getRequestMethod())) {
-                respond(exchange, 405, Map.of("error", "method_not_allowed"));
+        server.createContext(ApiPaths.PEER_SAMPLING_VIEW, exchange -> {
+            if (!HttpMethods.GET.equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
                 return;
             }
             respond(exchange, 200, Map.of("nodeId", nodeId, "capacity", capacity, "view", sampling.view()));
@@ -47,9 +51,9 @@ final class EventControlServer implements AutoCloseable {
     }
 
     void addNavigation(NavigationRuntime navigation, String nodeId) {
-        server.createContext("/v1/navigation/view", exchange -> {
-            if (!"GET".equals(exchange.getRequestMethod())) {
-                respond(exchange, 405, Map.of("error", "method_not_allowed"));
+        server.createContext(ApiPaths.NAVIGATION_VIEW, exchange -> {
+            if (!HttpMethods.GET.equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
                 return;
             }
             var engine = navigation.engine();
@@ -61,55 +65,51 @@ final class EventControlServer implements AutoCloseable {
                     "view", engine.view()
             ));
         });
-        server.createContext("/v1/subscriptions", exchange -> {
-            String prefix = "/v1/subscriptions";
-            String path = exchange.getRequestURI().getPath();
-            String topicId = path.length() > prefix.length() ? path.substring(prefix.length() + 1) : "";
+        server.createContext(ApiPaths.SUBSCRIPTIONS, exchange -> {
+            String topicId = JsonHttp.suffix(exchange.getRequestURI(), ApiPaths.SUBSCRIPTIONS);
             try {
                 switch (exchange.getRequestMethod()) {
-                    case "GET" -> {
+                    case HttpMethods.GET -> {
                         if (!topicId.isEmpty()) {
-                            respond(exchange, 405, Map.of("error", "method_not_allowed"));
+                            respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
                             return;
                         }
                         respond(exchange, 200, Map.of("nodeId", nodeId, "subscriptions", navigation.engine().subscriptions()));
                     }
-                    case "POST" -> {
+                    case HttpMethods.POST -> {
                         if (topicId.isEmpty()) {
-                            respond(exchange, 400, Map.of("error", "topicId is required"));
+                            respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, "topicId is required"));
                             return;
                         }
                         navigation.subscribe(new TopicId(topicId).value());
                         if (dissemination != null) dissemination.subscribe(topicId);
                         respond(exchange, 200, Map.of("topicId", topicId, "subscribed", true));
                     }
-                    case "DELETE" -> {
+                    case HttpMethods.DELETE -> {
                         if (topicId.isEmpty()) {
-                            respond(exchange, 400, Map.of("error", "topicId is required"));
+                            respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, "topicId is required"));
                             return;
                         }
                         navigation.unsubscribe(new TopicId(topicId).value());
                         if (dissemination != null) dissemination.unsubscribe(topicId);
                         respond(exchange, 200, Map.of("topicId", topicId, "subscribed", false));
                     }
-                    default -> respond(exchange, 405, Map.of("error", "method_not_allowed"));
+                    default -> respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
                 }
             } catch (RuntimeException ex) {
-                respond(exchange, 400, Map.of("error", ex.getMessage()));
+                respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, ex.getMessage()));
             }
         });
     }
 
     void addDissemination(DisseminationRuntime dissemination, String nodeId) {
         this.dissemination = dissemination;
-        server.createContext("/v1/dissemination/view", exchange -> {
-            if (!"GET".equals(exchange.getRequestMethod())) {
-                respond(exchange, 405, Map.of("error", "method_not_allowed"));
+        server.createContext(ApiPaths.DISSEMINATION_VIEW, exchange -> {
+            if (!HttpMethods.GET.equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
                 return;
             }
-            String prefix = "/v1/dissemination/view";
-            String path = exchange.getRequestURI().getPath();
-            String topicId = path.length() > prefix.length() ? path.substring(prefix.length() + 1) : "";
+            String topicId = JsonHttp.suffix(exchange.getRequestURI(), ApiPaths.DISSEMINATION_VIEW);
             if (topicId.isEmpty()) {
                 respond(exchange, 200, Map.of("nodeId", nodeId, "views", dissemination.engine().views()));
                 return;
@@ -118,7 +118,7 @@ final class EventControlServer implements AutoCloseable {
                 String validTopicId = new TopicId(topicId).value();
                 var view = dissemination.engine().view(validTopicId);
                 if (view.isEmpty()) {
-                    respond(exchange, 404, Map.of("error", "dissemination_view_not_found", "topicId", validTopicId));
+                    respond(exchange, 404, Map.of(HttpErrorCodes.ERROR, "dissemination_view_not_found", "topicId", validTopicId));
                 } else {
                     Map<String, Object> response = new LinkedHashMap<>();
                     response.put("nodeId", nodeId);
@@ -129,31 +129,29 @@ final class EventControlServer implements AutoCloseable {
                     respond(exchange, 200, response);
                 }
             } catch (RuntimeException ex) {
-                respond(exchange, 400, Map.of("error", ex.getMessage()));
+                respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, ex.getMessage()));
             }
         });
     }
 
     void addPersistence(NodePersistenceRuntime persistence) {
         this.persistence = persistence;
-        server.createContext("/v1/events/recover", exchange -> {
-            if (!"POST".equals(exchange.getRequestMethod())) {
-                respond(exchange, 405, Map.of("error", "method_not_allowed"));
+        server.createContext(ApiPaths.EVENT_RECOVER, exchange -> {
+            if (!HttpMethods.POST.equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
                 return;
             }
-            String prefix = "/v1/events/recover";
-            String path = exchange.getRequestURI().getPath();
-            String topicId = path.length() > prefix.length() ? path.substring(prefix.length() + 1) : "";
+            String topicId = JsonHttp.suffix(exchange.getRequestURI(), ApiPaths.EVENT_RECOVER);
             try {
                 if (topicId.isEmpty()) throw new IllegalArgumentException("topicId is required");
                 respond(exchange, 200, persistence.recover(new TopicId(topicId).value()));
             } catch (RuntimeException ex) {
-                respond(exchange, 400, Map.of("error", ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage()));
+                respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, JsonHttp.safeMessage(ex)));
             }
         });
-        server.createContext("/v1/events/recovery-state", exchange -> {
-            if (!"GET".equals(exchange.getRequestMethod())) {
-                respond(exchange, 405, Map.of("error", "method_not_allowed"));
+        server.createContext(ApiPaths.EVENT_RECOVERY_STATE, exchange -> {
+            if (!HttpMethods.GET.equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
                 return;
             }
             respond(exchange, 200, persistence.deliveryState());
@@ -165,65 +163,49 @@ final class EventControlServer implements AutoCloseable {
     }
 
     private void publish(HttpExchange exchange) throws IOException {
-        if (!"POST".equals(exchange.getRequestMethod())) {
-            respond(exchange, 405, Map.of("error", "method_not_allowed"));
+        if (!HttpMethods.POST.equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
             return;
         }
         try {
-            PublishRequest request = MAPPER.readValue(exchange.getRequestBody(), PublishRequest.class);
-            Map<String, String> query = query(exchange.getRequestURI().getRawQuery());
+            PublishRequest request = JsonHttp.read(exchange, MAPPER, PublishRequest.class);
+            Map<String, String> query = JsonHttp.query(exchange.getRequestURI());
             EventEnvelope event = events.publish(
                     new TopicId(request.topicId),
                     Base64.getDecoder().decode(request.payload),
-                    Boolean.parseBoolean(query.getOrDefault("forceBroadcast", "false")),
-                    Boolean.parseBoolean(query.getOrDefault("tamperSignature", "false"))
+                    Boolean.parseBoolean(query.getOrDefault(ApiParameters.FORCE_BROADCAST, "false")),
+                    Boolean.parseBoolean(query.getOrDefault(ApiParameters.TAMPER_SIGNATURE, "false"))
             );
             respond(exchange, 200, new PublishResponse(event.eventId(), event.sequenceNumber(), event));
         } catch (RuntimeException ex) {
-            respond(exchange, 400, Map.of("error", ex.getMessage()));
+            respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, ex.getMessage()));
         }
     }
 
     private void publisherKeyId(HttpExchange exchange) throws IOException {
-        if (!"GET".equals(exchange.getRequestMethod())) {
-            respond(exchange, 405, Map.of("error", "method_not_allowed"));
+        if (!HttpMethods.GET.equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
             return;
         }
         respond(exchange, 200, Map.of("publisherKeyId", events.publisherKeyId()));
     }
 
     private void inject(HttpExchange exchange) throws IOException {
-        if (!"POST".equals(exchange.getRequestMethod())) {
-            respond(exchange, 405, Map.of("error", "method_not_allowed"));
+        if (!HttpMethods.POST.equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
             return;
         }
         try {
-            EventEnvelope event = MAPPER.readValue(exchange.getRequestBody(), EventEnvelope.class);
+            EventEnvelope event = JsonHttp.read(exchange, MAPPER, EventEnvelope.class);
             EventEnvelope injected = events.inject(event);
             respond(exchange, 200, new PublishResponse(injected.eventId(), injected.sequenceNumber(), injected));
         } catch (RuntimeException ex) {
-            respond(exchange, 400, Map.of("error", ex.getMessage()));
+            respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, ex.getMessage()));
         }
-    }
-
-    private static Map<String, String> query(String rawQuery) {
-        if (rawQuery == null || rawQuery.isBlank()) {
-            return Map.of();
-        }
-        Map<String, String> result = new LinkedHashMap<>();
-        for (String part : rawQuery.split("&")) {
-            String[] pieces = part.split("=", 2);
-            result.put(pieces[0], pieces.length == 2 ? pieces[1] : "true");
-        }
-        return result;
     }
 
     private static void respond(HttpExchange exchange, int status, Object body) throws IOException {
-        byte[] bytes = MAPPER.writeValueAsString(body).getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().add("Content-Type", "application/json");
-        exchange.sendResponseHeaders(status, bytes.length);
-        exchange.getResponseBody().write(bytes);
-        exchange.close();
+        JsonHttp.respond(exchange, MAPPER, status, body);
     }
 
     @Override

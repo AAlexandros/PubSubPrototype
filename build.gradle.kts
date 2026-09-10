@@ -7,6 +7,8 @@ allprojects {
     version = "0.1.0-SNAPSHOT"
 }
 
+val junitPlatformLauncherDependency = libs.junit.platform.launcher
+
 subprojects {
     apply(plugin = "java")
 
@@ -26,6 +28,6 @@ subprojects {
     }
 
     dependencies {
-        "testRuntimeOnly"("org.junit.platform:junit-platform-launcher:1.10.3")
+        "testRuntimeOnly"(junitPlatformLauncherDependency)
     }
 }

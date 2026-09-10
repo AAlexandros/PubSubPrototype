@@ -120,3 +120,18 @@ Not shell scripts, but the on-chain logic that the registry scripts above build,
 | Phase 0.6 | [`specs/phase-0.6.md`](../specs/phase-0.6.md) | [`implementation-reports/phase-0.6-implementation-report.md`](../implementation-reports/phase-0.6-implementation-report.md) | New `libs/dissemination` module, same-topic Navigation API, dissemination wire messages/runtime/control views, targeted transport event sends, Phase 0.6 config/Compose topology, and full acceptance/evidence scripts. |
 | Phase 0.7 | [`specs/phase-0.7.md`](../specs/phase-0.7.md) | [`implementation-reports/phase-0.7-implementation-report.md`](../implementation-reports/phase-0.7-implementation-report.md) | Replication registry contract/scripts, persistence API/core, replication server, durable node recovery, Phase 0.7 configuration/Compose topology, and complete acceptance/evidence automation. |
 | Phase 0.8 | [`specs/phase-0.8.md`](../specs/phase-0.8.md) | [`implementation-reports/phase-0.8-implementation-report.md`](../implementation-reports/phase-0.8-implementation-report.md) | Decentralized replica maintenance, operational APIs, failure/recovery state, inventory/repair protocol, Phase 0.8 four-server topology, and acceptance/evidence automation. |
+| Phase 0.9 | [`specs/phase-0.9.md`](../specs/phase-0.9.md) | [`implementation-reports/phase-0.9-implementation-report.md`](../implementation-reports/phase-0.9-implementation-report.md) | Generated 3–30-node testbed, six scenario families, eleven JSONL/Parquet datasets, aggregation, Mermaid architecture, and integrated acceptance. |
+
+## Phase 0.9 integrated testbed and experiments
+
+| Script | Purpose |
+| --- | --- |
+| `scripts/testbed/bootstrap.sh` | Builds distributions, starts/funds Cardano, deploys both registries, registers three servers, and generates the selected topology. |
+| `scripts/testbed/up.sh`, `down.sh`, `stop.sh`, and `restart.sh` | Start, stop, and restart the complete testbed while retaining volumes; `up.sh --nodes N` supports 3–50 nodes. |
+| `scripts/testbed/reset.sh` | Wipes Phase 0.9 Compose volumes and generated devnet/testbed state while retaining experiment results. |
+| `scripts/testbed/status.sh`, `logs.sh`, and `collect-logs.sh` | Inspect API/process health, follow logs, or capture a diagnostic bundle. |
+| `scripts/testbed/run-workload.sh`, `collect-results.sh`, and `acceptance.sh` | Discoverable wrappers for experiment, aggregation, and acceptance entrypoints. |
+| `scripts/testbed/generate.mjs` | Generates per-node YAML and Compose from the selected node count and registered server identities. |
+| `scripts/experiments/run.sh` and `run.mjs` | Validate a scenario, execute the real workload/fault schedule, and capture correlated raw telemetry. |
+| `scripts/experiments/aggregate.sh` | Validate schemas, normalize runs to Apache Parquet, combine repetitions, preserve raw inputs, and emit summaries/dictionary. |
+| `scripts/acceptance/phase-0.9.sh` and `phase-0.9.mjs` | Clean five-node integrated acceptance and evidence audit across registries, overlays, dissemination, persistence, recovery, repair, telemetry, Parquet, and Mermaid sources. |

@@ -1,0 +1,33 @@
+nodeCount: 3
+replicationServerCount: 3
+replicationFactor: 2
+transportPort: 7000
+controlPort: 8000
+replicationPort: 8100
+hostTransportPortBase: 7000
+hostControlPortBase: 8000
+hostReplicationPortBase: 8100
+telemetryLevel: DETAILED
+resourceSamplingIntervalMs: 1000
+overlaySamplingIntervalMs: 1000
+resultsPath: results
+runtimePath: .tools/phase-0.9
+secureCyclon:
+  viewSize: 8
+  swapLength: 4
+  cycleIntervalMs: 1000
+  ageThreshold: 20
+navigation:
+  capacity: 4
+  routingBase: 2
+  cycleIntervalMs: 1000
+  staleAfterMs: 15000
+dissemination:
+  randomLinkCount: 2
+  cycleIntervalMs: 1000
+  staleAfterMs: 15000
+persistence:
+  connectionTimeoutMs: 1000
+  requestTimeoutMs: 3000
+  retries: 1
+  recoveryConcurrency: 8

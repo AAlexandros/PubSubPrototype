@@ -49,3 +49,8 @@ infra/devnet/genesis/
 .DS_Store
 Thumbs.db
 *.tmp
+
+# Phase 0.9 experiment output (keep the data dictionary and placeholders).
+results/*/
+!results/.gitkeep
+!results/data-dictionary.md

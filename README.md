@@ -182,6 +182,38 @@ Results are captured under `implementation-reports/evidence/phase-0.5/`.
 
 ## Current Status
 
+Phase 0.9 provides the integrated, local-only experiment testbed. A generated
+Compose topology runs one local Cardano devnet, three replication servers, and
+3–30 real Pub/Sub JVM nodes. The controller captures eleven correlated raw
+JSONL datasets, validates and converts them to canonical Apache Parquet, keeps
+raw inputs intact, combines repetitions, and emits derived JSON/CSV summaries.
+
+Start the default three-node testbed or a larger E1 topology with:
+
+```bash
+./scripts/testbed/up.sh
+./scripts/testbed/up.sh --nodes 10
+./scripts/testbed/status.sh
+./scripts/testbed/down.sh
+```
+
+Run and aggregate scenarios with:
+
+```bash
+./scripts/experiments/run.sh ops/config/phase-0.9/scenarios/e1-scaling-10.yaml
+./scripts/experiments/aggregate.sh results
+```
+
+The full five-node integrated acceptance flow is:
+
+```bash
+./scripts/acceptance/phase-0.9.sh
+```
+
+Architecture diagrams are indexed in
+[`docs/architecture/README.md`](docs/architecture/README.md), and the generated
+schema reference is [`results/data-dictionary.md`](results/data-dictionary.md).
+
 Phase 0.8 adds automatic replica maintenance to the independent persistence
 path beside Hybrid Dissemination. Replication servers actively probe only peers
 that share responsibility for local records, confirm failure after configurable

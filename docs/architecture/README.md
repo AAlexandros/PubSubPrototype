@@ -66,5 +66,6 @@ replication servers. Host ports are `7000 + node index` for transport,
 replication APIs. Container-to-container traffic uses ports 7000 and 8100.
 
 All Mermaid source remains checked in for review and paper reuse. The standalone
-SVG is intentionally larger and less technical; open it directly for
-presentations or onboarding.
+SVG is intentionally larger and less technical, but it now labels each component
+with its implementation module or protocol so it doubles as an onboarding map
+from responsibilities to code. Open it directly for presentations or onboarding.

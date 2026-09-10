@@ -1,195 +1,238 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title description">
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1180" viewBox="0 0 1680 1180" role="img" aria-labelledby="title description">
   <title id="title">PubSub Prototype — plain-language system overview</title>
-  <desc id="description">Applications exchange live events through a peer-to-peer Pub/Sub network. Cardano registries provide topic rules and replication membership. Separate replication servers retain event copies for offline recovery. Experiment tooling observes all planes and writes reusable datasets.</desc>
+  <desc id="description">Applications exchange live events through a peer-to-peer Pub/Sub overlay. Two Cardano registries govern topic rules and replication membership but never carry event payloads. Separate replication servers keep durable copies for offline recovery. An experiment controller drives workloads and faults, samples every plane, and writes reproducible datasets. The picture is organised into four horizontal planes — control, data, persistence, observation — with actors on the left. Solid arrows are live traffic or active calls; dashed purple arrows are polled configuration snapshots; dashed green arrows are experiment sampling.</desc>
   <defs>
     <linearGradient id="headerGradient" x1="0" x2="1">
       <stop offset="0" stop-color="#14213d"/>
-      <stop offset="1" stop-color="#263b66"/>
+      <stop offset="1" stop-color="#2b4a86"/>
     </linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#172033" flood-opacity=".14"/>
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#172033" flood-opacity=".14"/>
     </filter>
-    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+    <marker id="mBlue" markerWidth="11" markerHeight="11" refX="8.5" refY="3" orient="auto-start-reverse" markerUnits="strokeWidth">
       <path d="M0,0 L0,6 L9,3 z" fill="#2878b8"/>
     </marker>
-    <marker id="arrowPurple" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+    <marker id="mPurple" markerWidth="11" markerHeight="11" refX="8.5" refY="3" orient="auto-start-reverse" markerUnits="strokeWidth">
       <path d="M0,0 L0,6 L9,3 z" fill="#7356a8"/>
     </marker>
-    <marker id="arrowOrange" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+    <marker id="mOrange" markerWidth="11" markerHeight="11" refX="8.5" refY="3" orient="auto-start-reverse" markerUnits="strokeWidth">
       <path d="M0,0 L0,6 L9,3 z" fill="#c26b20"/>
     </marker>
-    <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+    <marker id="mGreen" markerWidth="11" markerHeight="11" refX="8.5" refY="3" orient="auto-start-reverse" markerUnits="strokeWidth">
       <path d="M0,0 L0,6 L9,3 z" fill="#278269"/>
     </marker>
     <style>
       .title { font: 700 34px Inter, Segoe UI, Arial, sans-serif; fill: #fff; }
       .subtitle { font: 400 17px Inter, Segoe UI, Arial, sans-serif; fill: #dce8ff; }
-      .plane-title { font: 700 22px Inter, Segoe UI, Arial, sans-serif; fill: #172033; }
-      .plane-subtitle { font: 400 14px Inter, Segoe UI, Arial, sans-serif; fill: #536174; }
+      .plane-title { font: 700 21px Inter, Segoe UI, Arial, sans-serif; fill: #172033; }
+      .plane-subtitle { font: 400 14px Inter, Segoe UI, Arial, sans-serif; fill: #5a6678; }
       .box-title { font: 700 17px Inter, Segoe UI, Arial, sans-serif; fill: #172033; text-anchor: middle; }
-      .box-text { font: 400 13px Inter, Segoe UI, Arial, sans-serif; fill: #536174; text-anchor: middle; }
+      .box-text { font: 400 13px Inter, Segoe UI, Arial, sans-serif; fill: #55627a; text-anchor: middle; }
+      .box-tag { font: 600 11.5px "SFMono-Regular", Consolas, Menlo, monospace; fill: #7b879b; text-anchor: middle; }
       .actor-title { font: 700 17px Inter, Segoe UI, Arial, sans-serif; fill: #172033; text-anchor: middle; }
-      .actor-text { font: 400 13px Inter, Segoe UI, Arial, sans-serif; fill: #536174; text-anchor: middle; }
+      .actor-text { font: 400 13px Inter, Segoe UI, Arial, sans-serif; fill: #55627a; text-anchor: middle; }
+      .pill { font: 700 12px Inter, Segoe UI, Arial, sans-serif; text-anchor: middle; letter-spacing: .6px; }
       .label { font: 600 13px Inter, Segoe UI, Arial, sans-serif; fill: #34445a; text-anchor: middle; }
-      .small { font: 400 12px Inter, Segoe UI, Arial, sans-serif; fill: #64748b; }
-      .pill { font: 700 12px Inter, Segoe UI, Arial, sans-serif; text-anchor: middle; letter-spacing: .5px; }
-      .blue-line { stroke: #2878b8; stroke-width: 3; fill: none; marker-end: url(#arrowBlue); }
-      .blue-two-way { stroke: #2878b8; stroke-width: 3; fill: none; marker-start: url(#arrowBlue); marker-end: url(#arrowBlue); }
-      .purple-line { stroke: #7356a8; stroke-width: 3; fill: none; marker-end: url(#arrowPurple); }
-      .purple-dash { stroke: #7356a8; stroke-width: 2.5; stroke-dasharray: 9 7; fill: none; marker-end: url(#arrowPurple); }
-      .orange-line { stroke: #c26b20; stroke-width: 3; fill: none; marker-end: url(#arrowOrange); }
-      .orange-two-way { stroke: #c26b20; stroke-width: 2.5; fill: none; marker-start: url(#arrowOrange); marker-end: url(#arrowOrange); }
-      .green-line { stroke: #278269; stroke-width: 3; fill: none; marker-end: url(#arrowGreen); }
-      .green-dash { stroke: #278269; stroke-width: 2.5; stroke-dasharray: 5 7; fill: none; marker-end: url(#arrowGreen); }
+      .clabel { font: 600 12px Inter, Segoe UI, Arial, sans-serif; fill: #6f5aa0; text-anchor: middle; }
+      .glabel { font: 600 12px Inter, Segoe UI, Arial, sans-serif; fill: #2f7c66; }
+      .legend { font: 400 13px Inter, Segoe UI, Arial, sans-serif; fill: #55627a; }
+      .note { font: 400 13px Inter, Segoe UI, Arial, sans-serif; fill: #7b879b; }
+      .blue { stroke: #2878b8; stroke-width: 3; fill: none; marker-end: url(#mBlue); }
+      .blue2 { stroke: #2878b8; stroke-width: 3; fill: none; marker-start: url(#mBlue); marker-end: url(#mBlue); }
+      .purple { stroke: #7356a8; stroke-width: 3; fill: none; marker-end: url(#mPurple); }
+      .purpleDash { stroke: #7356a8; stroke-width: 2.4; stroke-dasharray: 8 6; fill: none; marker-end: url(#mPurple); }
+      .orange { stroke: #c26b20; stroke-width: 3; fill: none; marker-end: url(#mOrange); }
+      .orange2 { stroke: #c26b20; stroke-width: 3; fill: none; marker-start: url(#mOrange); marker-end: url(#mOrange); }
+      .green { stroke: #278269; stroke-width: 3; fill: none; marker-end: url(#mGreen); }
+      .greenDash { stroke: #278269; stroke-width: 2.4; stroke-dasharray: 4 6; fill: none; marker-end: url(#mGreen); }
     </style>
   </defs>
 
-  <rect width="1600" height="1100" fill="#f7f9fc"/>
-  <rect width="1600" height="98" fill="url(#headerGradient)"/>
-  <text class="title" x="48" y="45">PubSub Prototype</text>
-  <text class="subtitle" x="48" y="75">Live topic delivery, durable offline recovery, Cardano-governed configuration, and reproducible experiments</text>
+  <rect width="1680" height="1180" fill="#f7f9fc"/>
+  <rect width="1680" height="104" fill="url(#headerGradient)"/>
+  <text class="title" x="48" y="48">PubSub Prototype — system overview</text>
+  <text class="subtitle" x="48" y="82">Live topic delivery, durable offline recovery, Cardano-governed configuration, and reproducible experiments</text>
 
-  <!-- People and applications -->
-  <rect x="38" y="151" width="248" height="112" rx="18" fill="#fff" stroke="#bdaee0" stroke-width="2" filter="url(#shadow)"/>
-  <circle cx="82" cy="188" r="18" fill="#7356a8" opacity=".16"/>
-  <circle cx="82" cy="183" r="7" fill="#7356a8"/>
-  <path d="M67 210 Q82 193 97 210" fill="#7356a8"/>
-  <text class="actor-title" x="181" y="187">Administrators</text>
-  <text class="actor-text" x="181" y="211">define topics and</text>
-  <text class="actor-text" x="181" y="230">register storage servers</text>
+  <!-- ============ ACTORS (left column) ============ -->
+  <rect x="40" y="160" width="250" height="104" rx="16" fill="#fff" stroke="#bdaee0" stroke-width="2" filter="url(#shadow)"/>
+  <circle cx="80" cy="196" r="16" fill="#7356a8" opacity=".16"/>
+  <circle cx="80" cy="191" r="6.5" fill="#7356a8"/>
+  <path d="M66 214 Q80 198 94 214" fill="#7356a8"/>
+  <text class="actor-title" x="176" y="196">Administrators</text>
+  <text class="actor-text" x="176" y="220">define topics and</text>
+  <text class="actor-text" x="176" y="240">register storage servers</text>
 
-  <rect x="38" y="420" width="248" height="126" rx="18" fill="#fff" stroke="#9bc8e8" stroke-width="2" filter="url(#shadow)"/>
-  <rect x="65" y="452" width="38" height="30" rx="4" fill="#2878b8" opacity=".18" stroke="#2878b8" stroke-width="2"/>
-  <path d="M73 492 H95" stroke="#2878b8" stroke-width="3" stroke-linecap="round"/>
-  <text class="actor-title" x="181" y="461">Applications</text>
-  <text class="actor-text" x="181" y="486">publish and subscribe</text>
-  <text class="actor-text" x="181" y="507">through any Pub/Sub node</text>
+  <rect x="40" y="430" width="250" height="104" rx="16" fill="#fff" stroke="#9bc8e8" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="60" y="462" width="36" height="28" rx="4" fill="#2878b8" opacity=".18" stroke="#2878b8" stroke-width="2"/>
+  <path d="M68 500 H90" stroke="#2878b8" stroke-width="3" stroke-linecap="round"/>
+  <text class="actor-title" x="180" y="466">Applications</text>
+  <text class="actor-text" x="180" y="490">publish, subscribe, and</text>
+  <text class="actor-text" x="180" y="510">recover through any node</text>
 
-  <rect x="38" y="892" width="248" height="112" rx="18" fill="#fff" stroke="#92cfbd" stroke-width="2" filter="url(#shadow)"/>
-  <circle cx="82" cy="929" r="18" fill="#278269" opacity=".16"/>
-  <path d="M70 941 L79 930 L87 935 L98 917" stroke="#278269" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <text class="actor-title" x="181" y="928">Experimenter</text>
-  <text class="actor-text" x="181" y="952">runs scenarios and analyses</text>
-  <text class="actor-text" x="181" y="971">reproducible observations</text>
+  <rect x="40" y="884" width="250" height="104" rx="16" fill="#fff" stroke="#92cfbd" stroke-width="2" filter="url(#shadow)"/>
+  <circle cx="80" cy="920" r="16" fill="#278269" opacity=".16"/>
+  <path d="M69 931 L77 921 L84 926 L94 910" stroke="#278269" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text class="actor-title" x="180" y="920">Experimenter</text>
+  <text class="actor-text" x="180" y="944">runs scenarios and</text>
+  <text class="actor-text" x="180" y="964">analyses the results</text>
 
-  <!-- Control plane -->
-  <rect x="338" y="126" width="1208" height="222" rx="22" fill="#f3effb" stroke="#bdaee0" stroke-width="2"/>
-  <rect x="365" y="145" width="137" height="29" rx="14" fill="#7356a8"/>
-  <text class="pill" x="433" y="165" fill="#fff">CONTROL PLANE</text>
-  <text class="plane-title" x="522" y="167">Cardano-governed configuration</text>
-  <text class="plane-subtitle" x="522" y="190">Small, auditable changes — not the live event path</text>
+  <!-- ============ CONTROL PLANE ============ -->
+  <rect x="320" y="124" width="1230" height="196" rx="20" fill="#f3effb" stroke="#cbb8e8" stroke-width="2"/>
+  <rect x="345" y="143" width="152" height="30" rx="15" fill="#7356a8"/>
+  <text class="pill" x="421" y="163" fill="#fff">CONTROL PLANE</text>
+  <text class="plane-title" x="512" y="163">Cardano-governed configuration</text>
+  <text class="plane-subtitle" x="512" y="185">Small, auditable, signed changes — it never carries event payloads</text>
 
-  <rect x="423" y="220" width="248" height="91" rx="14" fill="#fff" stroke="#9d88cc" stroke-width="2" filter="url(#shadow)"/>
-  <text class="box-title" x="547" y="253">Local Cardano devnet</text>
-  <text class="box-text" x="547" y="277">validates signed registry updates</text>
+  <rect x="420" y="232" width="250" height="84" rx="13" fill="#fff" stroke="#9d88cc" stroke-width="2" filter="url(#shadow)"/>
+  <text class="box-title" x="545" y="264">Local Cardano devnet</text>
+  <text class="box-text" x="545" y="286">validates signed registry txns</text>
+  <text class="box-tag" x="545" y="305">registry-cardano</text>
 
-  <rect x="784" y="220" width="248" height="91" rx="14" fill="#fff" stroke="#9d88cc" stroke-width="2" filter="url(#shadow)"/>
-  <text class="box-title" x="908" y="252">Topic Registry</text>
-  <text class="box-text" x="908" y="276">topic policy, retention, replica count</text>
+  <rect x="825" y="232" width="250" height="84" rx="13" fill="#fff" stroke="#9d88cc" stroke-width="2" filter="url(#shadow)"/>
+  <text class="box-title" x="950" y="264">Topic Registry</text>
+  <text class="box-text" x="950" y="286">topic policy, retention, R</text>
+  <text class="box-tag" x="950" y="305">who may publish · replica count</text>
 
-  <rect x="1145" y="220" width="306" height="91" rx="14" fill="#fff" stroke="#9d88cc" stroke-width="2" filter="url(#shadow)"/>
-  <text class="box-title" x="1298" y="252">Replication Registry</text>
-  <text class="box-text" x="1298" y="276">active server IDs and endpoints</text>
+  <rect x="1230" y="232" width="250" height="84" rx="13" fill="#fff" stroke="#9d88cc" stroke-width="2" filter="url(#shadow)"/>
+  <text class="box-title" x="1355" y="264">Replication Registry</text>
+  <text class="box-text" x="1355" y="286">active server IDs + endpoints</text>
+  <text class="box-tag" x="1355" y="305">storage-server membership</text>
 
-  <path class="purple-line" d="M286 207 H423"/>
-  <text class="label" x="354" y="193">signed updates</text>
-  <path class="purple-line" d="M671 252 H784"/>
-  <path class="purple-line" d="M671 280 H1127 Q1145 280 1145 262"/>
+  <!-- ============ DATA PLANE ============ -->
+  <rect x="320" y="372" width="1230" height="210" rx="20" fill="#eef6fc" stroke="#a9cfec" stroke-width="2"/>
+  <rect x="345" y="391" width="122" height="30" rx="15" fill="#2878b8"/>
+  <text class="pill" x="406" y="411" fill="#fff">DATA PLANE</text>
+  <text class="plane-title" x="482" y="411">Peer-to-peer live event delivery</text>
+  <text class="plane-subtitle" x="482" y="433">Every node can publish, subscribe, validate, and forward events</text>
 
-  <!-- Data plane -->
-  <rect x="338" y="389" width="1208" height="236" rx="22" fill="#edf6fc" stroke="#9bc8e8" stroke-width="2"/>
-  <rect x="365" y="408" width="112" height="29" rx="14" fill="#2878b8"/>
-  <text class="pill" x="421" y="428" fill="#fff">DATA PLANE</text>
-  <text class="plane-title" x="498" y="430">Peer-to-peer live event delivery</text>
-  <text class="plane-subtitle" x="498" y="453">Every node can publish, subscribe, validate, and forward</text>
+  <rect x="420" y="470" width="250" height="98" rx="16" fill="#fff" stroke="#62a6d6" stroke-width="2" filter="url(#shadow)"/>
+  <circle cx="452" cy="500" r="16" fill="#2878b8"/>
+  <text x="452" y="505" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" fill="#fff">1</text>
+  <text class="box-title" x="560" y="500">Pub/Sub node</text>
+  <text class="box-text" x="545" y="522">publish · subscribe · forward</text>
+  <text class="box-tag" x="545" y="541">peer stack: SecureCyclon · Vicinity</text>
+  <text class="box-tag" x="545" y="557">Dissemination · Netty transport</text>
 
-  <rect x="429" y="490" width="245" height="93" rx="18" fill="#fff" stroke="#62a6d6" stroke-width="2" filter="url(#shadow)"/>
-  <circle cx="468" cy="536" r="21" fill="#2878b8"/>
-  <text x="468" y="542" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="16" font-weight="700" fill="#fff">1</text>
-  <text class="box-title" x="570" y="526">Pub/Sub node</text>
-  <text class="box-text" x="570" y="551">publisher / subscriber / peer</text>
+  <rect x="825" y="470" width="250" height="98" rx="16" fill="#fff" stroke="#62a6d6" stroke-width="2" filter="url(#shadow)"/>
+  <circle cx="857" cy="500" r="16" fill="#2878b8"/>
+  <text x="857" y="505" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" fill="#fff">2</text>
+  <text class="box-title" x="965" y="500">Pub/Sub node</text>
+  <text class="box-text" x="950" y="522">publish · subscribe · forward</text>
+  <text class="box-tag" x="950" y="541">peer stack: SecureCyclon · Vicinity</text>
+  <text class="box-tag" x="950" y="557">Dissemination · Netty transport</text>
 
-  <rect x="819" y="490" width="245" height="93" rx="18" fill="#fff" stroke="#62a6d6" stroke-width="2" filter="url(#shadow)"/>
-  <circle cx="858" cy="536" r="21" fill="#2878b8"/>
-  <text x="858" y="542" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="16" font-weight="700" fill="#fff">2</text>
-  <text class="box-title" x="960" y="526">Pub/Sub node</text>
-  <text class="box-text" x="960" y="551">publisher / subscriber / peer</text>
+  <rect x="1230" y="470" width="250" height="98" rx="16" fill="#fff" stroke="#62a6d6" stroke-width="2" filter="url(#shadow)"/>
+  <circle cx="1262" cy="500" r="16" fill="#2878b8"/>
+  <text x="1262" y="505" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" fill="#fff">N</text>
+  <text class="box-title" x="1362" y="500">More Pub/Sub nodes</text>
+  <text class="box-text" x="1355" y="522">3–50 nodes, one local host</text>
+  <text class="box-tag" x="1355" y="541">self-organising gossip overlay</text>
+  <text class="box-tag" x="1355" y="557">no central coordinator</text>
 
-  <rect x="1209" y="490" width="245" height="93" rx="18" fill="#fff" stroke="#62a6d6" stroke-width="2" filter="url(#shadow)"/>
-  <circle cx="1248" cy="536" r="21" fill="#2878b8"/>
-  <text x="1248" y="542" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="14" font-weight="700" fill="#fff">N</text>
-  <text class="box-title" x="1350" y="526">More Pub/Sub nodes</text>
-  <text class="box-text" x="1350" y="551">3–50 nodes on one local host</text>
+  <!-- ============ PERSISTENCE PLANE ============ -->
+  <rect x="320" y="634" width="1230" height="180" rx="20" fill="#fff5e9" stroke="#ecc79a" stroke-width="2"/>
+  <rect x="345" y="653" width="168" height="30" rx="15" fill="#c26b20"/>
+  <text class="pill" x="429" y="673" fill="#fff">PERSISTENCE PLANE</text>
+  <text class="plane-title" x="528" y="673">Durable copies for offline recovery</text>
+  <text class="plane-subtitle" x="528" y="695">Placement is deterministic; maintenance repairs missing copies</text>
 
-  <path class="blue-line" d="M286 483 H429"/>
-  <text class="label" x="357" y="469">API requests</text>
-  <path class="blue-two-way" d="M682 536 H811"/>
-  <path class="blue-two-way" d="M1072 536 H1201"/>
-  <text class="label" x="746" y="522">topic overlay</text>
-  <text class="label" x="1136" y="522">topic overlay</text>
+  <rect x="420" y="724" width="250" height="82" rx="13" fill="#fff" stroke="#d58b43" stroke-width="2" filter="url(#shadow)"/>
+  <text class="box-title" x="545" y="754">Replication server 1</text>
+  <text class="box-text" x="545" y="775">event + topic-log store</text>
+  <text class="box-tag" x="545" y="795">one-hop DHT · repair</text>
 
-  <!-- Persistence plane -->
-  <rect x="338" y="673" width="1208" height="193" rx="22" fill="#fff5e9" stroke="#e6b77c" stroke-width="2"/>
-  <rect x="365" y="692" width="151" height="29" rx="14" fill="#c26b20"/>
-  <text class="pill" x="440" y="712" fill="#fff">PERSISTENCE PLANE</text>
-  <text class="plane-title" x="538" y="714">Durable copies for offline recovery</text>
-  <text class="plane-subtitle" x="538" y="737">Placement is deterministic; maintenance repairs missing copies</text>
+  <rect x="825" y="724" width="250" height="82" rx="13" fill="#fff" stroke="#d58b43" stroke-width="2" filter="url(#shadow)"/>
+  <text class="box-title" x="950" y="754">Replication server 2</text>
+  <text class="box-text" x="950" y="775">event + topic-log store</text>
+  <text class="box-tag" x="950" y="795">one-hop DHT · repair</text>
 
-  <rect x="427" y="769" width="245" height="66" rx="14" fill="#fff" stroke="#d58b43" stroke-width="2" filter="url(#shadow)"/>
-  <text class="box-title" x="549" y="796">Replication server 1</text>
-  <text class="box-text" x="549" y="817">events + publisher progress</text>
-  <rect x="819" y="769" width="245" height="66" rx="14" fill="#fff" stroke="#d58b43" stroke-width="2" filter="url(#shadow)"/>
-  <text class="box-title" x="941" y="796">Replication server 2</text>
-  <text class="box-text" x="941" y="817">events + publisher progress</text>
-  <rect x="1211" y="769" width="245" height="66" rx="14" fill="#fff" stroke="#d58b43" stroke-width="2" filter="url(#shadow)"/>
-  <text class="box-title" x="1333" y="796">Replication server 3</text>
-  <text class="box-text" x="1333" y="817">events + publisher progress</text>
+  <rect x="1230" y="724" width="250" height="82" rx="13" fill="#fff" stroke="#d58b43" stroke-width="2" filter="url(#shadow)"/>
+  <text class="box-title" x="1355" y="754">Replication server 3</text>
+  <text class="box-text" x="1355" y="775">event + topic-log store</text>
+  <text class="box-tag" x="1355" y="795">one-hop DHT · repair</text>
 
-  <path class="orange-line" d="M942 625 V760"/>
-  <text class="label" x="1037" y="654">store once / recover later</text>
-  <path class="orange-two-way" d="M680 802 H811"/>
-  <path class="orange-two-way" d="M1072 802 H1203"/>
-  <text class="label" x="746" y="789">repair</text>
-  <text class="label" x="1137" y="789">repair</text>
+  <!-- ============ OBSERVATION PLANE ============ -->
+  <rect x="320" y="858" width="1230" height="170" rx="20" fill="#edf8f4" stroke="#a6d8c8" stroke-width="2"/>
+  <rect x="345" y="877" width="172" height="30" rx="15" fill="#278269"/>
+  <text class="pill" x="431" y="897" fill="#fff">OBSERVATION PLANE</text>
+  <text class="plane-title" x="532" y="897">Reproducible experiment tooling (testbed, not the production path)</text>
 
-  <!-- Configuration propagation -->
-  <path class="purple-dash" d="M908 311 V373 Q908 389 892 389"/>
-  <text class="small" x="918" y="362">topic snapshots</text>
-  <path class="purple-dash" d="M1298 311 V371 Q1298 389 1282 389"/>
-  <text class="small" x="1310" y="362">server list</text>
-  <path class="purple-dash" d="M1451 265 H1508 V653 Q1508 673 1488 673"/>
-  <text class="small" x="1428" y="650">membership</text>
-  <path class="purple-dash" d="M1032 265 H1084 V653 Q1084 673 1064 673"/>
-  <text class="small" x="1094" y="650">replica count + retention</text>
+  <rect x="420" y="916" width="250" height="90" rx="14" fill="#fff" stroke="#62ac98" stroke-width="2" filter="url(#shadow)"/>
+  <text class="box-title" x="545" y="947">Scenario controller</text>
+  <text class="box-text" x="545" y="969">drives workloads and faults,</text>
+  <text class="box-text" x="545" y="988">samples every plane</text>
 
-  <!-- Observation plane -->
-  <rect x="338" y="906" width="1208" height="132" rx="22" fill="#edf8f4" stroke="#92cfbd" stroke-width="2"/>
-  <rect x="365" y="925" width="154" height="29" rx="14" fill="#278269"/>
-  <text class="pill" x="442" y="945" fill="#fff">OBSERVATION PLANE</text>
-  <rect x="550" y="929" width="232" height="75" rx="14" fill="#fff" stroke="#62ac98" stroke-width="2"/>
-  <text class="box-title" x="666" y="958">Scenario controller</text>
-  <text class="box-text" x="666" y="981">workloads, sampling, faults</text>
-  <rect x="885" y="929" width="232" height="75" rx="14" fill="#fff" stroke="#62ac98" stroke-width="2"/>
-  <text class="box-title" x="1001" y="958">Raw observations</text>
-  <text class="box-text" x="1001" y="981">11 correlated JSONL datasets</text>
-  <rect x="1220" y="929" width="278" height="75" rx="14" fill="#fff" stroke="#62ac98" stroke-width="2"/>
-  <text class="box-title" x="1359" y="958">Reusable results</text>
-  <text class="box-text" x="1359" y="981">Parquet + JSON/CSV summaries</text>
+  <rect x="825" y="916" width="250" height="90" rx="14" fill="#fff" stroke="#62ac98" stroke-width="2" filter="url(#shadow)"/>
+  <text class="box-title" x="950" y="947">Raw observations</text>
+  <text class="box-text" x="950" y="969">11 correlated JSONL datasets</text>
+  <text class="box-tag" x="950" y="989">one record per observation</text>
 
-  <path class="green-line" d="M286 948 H550"/>
-  <path class="green-line" d="M782 966 H885"/>
-  <path class="green-line" d="M1117 966 H1220"/>
-  <path class="green-dash" d="M1508 584 V886 Q1508 906 1488 906"/>
-  <path class="green-dash" d="M1478 835 V886 Q1478 906 1458 906"/>
-  <text class="small" x="1485" y="886" text-anchor="end">logs, APIs, resources</text>
+  <rect x="1230" y="916" width="250" height="90" rx="14" fill="#fff" stroke="#62ac98" stroke-width="2" filter="url(#shadow)"/>
+  <text class="box-title" x="1355" y="947">Reusable results</text>
+  <text class="box-text" x="1355" y="969">Parquet + JSON/CSV summaries</text>
+  <text class="box-tag" x="1355" y="989">analysis-ready datasets</text>
 
-  <!-- Footer legend -->
-  <text class="small" x="40" y="1074">Solid blue: live event/API traffic</text>
-  <line x1="258" y1="1070" x2="306" y2="1070" stroke="#2878b8" stroke-width="3"/>
-  <text class="small" x="338" y="1074">Dashed purple: configuration snapshots</text>
-  <line x1="590" y1="1070" x2="638" y2="1070" stroke="#7356a8" stroke-width="2.5" stroke-dasharray="9 7"/>
-  <text class="small" x="670" y="1074">Orange: persistence and repair</text>
-  <line x1="876" y1="1070" x2="924" y2="1070" stroke="#c26b20" stroke-width="3"/>
-  <text class="small" x="956" y="1074">Dotted green: experiment observation</text>
+  <!-- ============ ACTOR -> PLANE CALLS ============ -->
+  <path class="purple" d="M290 212 H385 V274 H418"/>
+  <text class="clabel" x="352" y="200">signed registry txns</text>
+  <path class="blue" d="M290 482 H385 V519 H418"/>
+  <text class="label" x="349" y="470">API requests</text>
+  <path class="green" d="M290 936 H385 V961 H418"/>
+  <text class="glabel" x="300" y="924">run scenarios</text>
+
+  <!-- ============ DATA: peer overlay (two-way) ============ -->
+  <path class="blue2" d="M672 519 H823"/>
+  <path class="blue2" d="M1077 519 H1228"/>
+  <text class="label" x="747" y="507">topic overlay</text>
+  <text class="label" x="1152" y="507">topic overlay</text>
+
+  <!-- ============ PERSISTENCE: repair (two-way) ============ -->
+  <path class="orange2" d="M672 765 H823"/>
+  <path class="orange2" d="M1077 765 H1228"/>
+  <text class="label" x="747" y="753">repair</text>
+  <text class="label" x="1152" y="753">repair</text>
+
+  <!-- ============ DATA <-> PERSISTENCE: store once / recover ============ -->
+  <path class="orange2" d="M950 568 V722"/>
+  <text class="label" x="1050" y="628">store once ·</text>
+  <text class="label" x="1050" y="646">recover later</text>
+
+  <!-- ============ CONTROL -> DATA config (dashed) ============ -->
+  <path class="purpleDash" d="M950 316 V370"/>
+  <text class="clabel" x="938" y="350" text-anchor="end">topic policy</text>
+  <path class="purpleDash" d="M1355 316 V370"/>
+  <text class="clabel" x="1343" y="350" text-anchor="end">active server list</text>
+
+  <!-- ============ CONTROL -> PERSISTENCE config (dashed, right corridor) ============ -->
+  <path class="purpleDash" d="M985 316 V340 H1505 V632"/>
+  <text class="clabel" x="1235" y="333">retention &amp; R</text>
+  <path class="purpleDash" d="M1390 316 V352 H1525 V632"/>
+  <text class="clabel" x="1452" y="368">membership</text>
+
+  <!-- ============ OBSERVATION sampling (dashed green) ============ -->
+  <path class="greenDash" d="M600 806 V914"/>
+  <path class="greenDash" d="M747 582 V960 H672"/>
+  <text class="glabel" x="690" y="612">samples logs · APIs · resources</text>
+
+  <!-- ============ OBSERVATION pipeline (solid green) ============ -->
+  <path class="green" d="M672 961 H823"/>
+  <text class="label" x="747" y="949">correlate</text>
+  <path class="green" d="M1077 961 H1228"/>
+  <text class="label" x="1152" y="949">validate · normalise</text>
+
+  <!-- ============ LEGEND ============ -->
+  <line x1="40" y1="1076" x2="88" y2="1076" stroke="#2878b8" stroke-width="3" marker-end="url(#mBlue)"/>
+  <text class="legend" x="98" y="1081">Live event / API traffic</text>
+  <line x1="330" y1="1076" x2="378" y2="1076" stroke="#2878b8" stroke-width="3" marker-start="url(#mBlue)" marker-end="url(#mBlue)"/>
+  <text class="legend" x="388" y="1081">Peer &amp; repair exchange</text>
+  <line x1="620" y1="1076" x2="668" y2="1076" stroke="#7356a8" stroke-width="2.4" stroke-dasharray="8 6" marker-end="url(#mPurple)"/>
+  <text class="legend" x="678" y="1081">Configuration snapshots (polled)</text>
+  <line x1="980" y1="1076" x2="1028" y2="1076" stroke="#278269" stroke-width="2.4" stroke-dasharray="4 6" marker-end="url(#mGreen)"/>
+  <text class="legend" x="1038" y="1081">Experiment sampling</text>
+  <line x1="1260" y1="1076" x2="1308" y2="1076" stroke="#c26b20" stroke-width="3" marker-start="url(#mOrange)" marker-end="url(#mOrange)"/>
+  <text class="legend" x="1318" y="1081">Store / recover / repair</text>
+
+  <text class="note" x="40" y="1116">Read top to bottom: Administrators configure the control plane, Applications use the data plane, and the Experimenter observes everything.</text>
+  <text class="note" x="40" y="1140">The Cardano control plane governs topics and membership only — event payloads never traverse the chain; they travel node-to-node and are copied to replication servers.</text>
 </svg>

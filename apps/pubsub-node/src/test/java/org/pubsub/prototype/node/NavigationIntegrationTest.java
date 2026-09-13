@@ -5,7 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.navigation.SubscriptionStore;
 import org.pubsub.prototype.protocol.IdentityStore;
 import org.pubsub.prototype.protocol.NodeIdentity;
-import org.pubsub.prototype.sampling.PeerDescriptor;
+import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.transport.PubSubTransport;
 import org.pubsub.prototype.transport.TransportConfig;
 
@@ -30,8 +30,8 @@ class NavigationIntegrationTest {
         int p2 = port();
         NodeIdentity identityA = IdentityStore.loadOrCreate(dir.resolve("a"));
         NodeIdentity identityB = IdentityStore.loadOrCreate(dir.resolve("b"));
-        PeerDescriptor peerA = new PeerDescriptor(identityA.nodeId().value(), "127.0.0.1", p1);
-        PeerDescriptor peerB = new PeerDescriptor(identityB.nodeId().value(), "127.0.0.1", p2);
+        NodeEndpoint peerA = new NodeEndpoint(identityA.nodeId().value(), "127.0.0.1", p1);
+        NodeEndpoint peerB = new NodeEndpoint(identityB.nodeId().value(), "127.0.0.1", p2);
 
         try (Node a = new Node("a", p1, identityA, List.of(TOPICS.get(0)), List.of(peerB));
              Node b = new Node("b", p2, identityB, List.of(TOPICS.get(0)), List.of(peerA))) {
@@ -59,7 +59,7 @@ class NavigationIntegrationTest {
         }
     }
 
-    private static boolean knows(Node node, PeerDescriptor peer) {
+    private static boolean knows(Node node, NodeEndpoint peer) {
         return node.runtime.engine().view().values().stream()
                 .flatMap(List::stream)
                 .anyMatch(candidate -> candidate.nodeId().equals(peer.nodeId()));
@@ -69,7 +69,7 @@ class NavigationIntegrationTest {
         final NavigationRuntime runtime;
         final PubSubTransport transport;
 
-        Node(String name, int port, NodeIdentity identity, List<String> subscriptions, List<PeerDescriptor> samples) {
+        Node(String name, int port, NodeIdentity identity, List<String> subscriptions, List<NodeEndpoint> samples) {
             NodeConfig.NavigationSection config = new NodeConfig.NavigationSection();
             config.cycleIntervalMs = 150;
             config.staleAfterMs = 60_000;

@@ -4,7 +4,6 @@ plugins {
 
 dependencies {
     implementation(project(":libs:http-support"))
-    implementation(project(":libs:persistence-api"))
     implementation(project(":libs:persistence-core"))
     implementation(project(":libs:registry-cardano"))
     implementation(libs.snakeyaml)

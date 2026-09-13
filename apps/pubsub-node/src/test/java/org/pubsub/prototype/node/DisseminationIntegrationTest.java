@@ -5,7 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.navigation.SubscriptionStore;
 import org.pubsub.prototype.protocol.IdentityStore;
 import org.pubsub.prototype.protocol.NodeIdentity;
-import org.pubsub.prototype.sampling.PeerDescriptor;
+import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.transport.PubSubTransport;
 import org.pubsub.prototype.transport.TransportConfig;
 
@@ -31,8 +31,8 @@ class DisseminationIntegrationTest {
         int portB = freePort();
         NodeIdentity identityA = IdentityStore.loadOrCreate(dir.resolve("a"));
         NodeIdentity identityB = IdentityStore.loadOrCreate(dir.resolve("b"));
-        PeerDescriptor peerA = new PeerDescriptor(identityA.nodeId().value(), "127.0.0.1", portA);
-        PeerDescriptor peerB = new PeerDescriptor(identityB.nodeId().value(), "127.0.0.1", portB);
+        NodeEndpoint peerA = new NodeEndpoint(identityA.nodeId().value(), "127.0.0.1", portA);
+        NodeEndpoint peerB = new NodeEndpoint(identityB.nodeId().value(), "127.0.0.1", portB);
 
         try (Node a = new Node("a", portA, identityA, peerB);
              Node b = new Node("b", portB, identityB, peerA)) {
@@ -55,7 +55,7 @@ class DisseminationIntegrationTest {
         final DisseminationRuntime dissemination;
         final PubSubTransport transport;
 
-        Node(String name, int port, NodeIdentity identity, PeerDescriptor sample) {
+        Node(String name, int port, NodeIdentity identity, NodeEndpoint sample) {
             NodeConfig.NavigationSection navigationConfig = new NodeConfig.NavigationSection();
             navigationConfig.cycleIntervalMs = 100;
             navigationConfig.staleAfterMs = 60_000;

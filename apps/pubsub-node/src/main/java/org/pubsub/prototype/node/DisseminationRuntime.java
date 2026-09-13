@@ -6,7 +6,7 @@ import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.protocol.MessageType;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.ProtocolMessage;
-import org.pubsub.prototype.sampling.PeerDescriptor;
+import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.transport.PubSubTransport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -102,7 +102,7 @@ final class DisseminationRuntime implements AutoCloseable {
     void disseminate(EventEnvelope event, NodeId source) {
         String sourceId = source == null ? null : source.value();
         for (DisseminationPeerDescriptor peer : engine.forwardingTargets(event.topicId(), sourceId)) {
-            transport.sendEvent(new PeerDescriptor(peer.nodeId(), peer.host(), peer.port()), event);
+            transport.sendEvent(new NodeEndpoint(peer.nodeId(), peer.host(), peer.port()), event);
             LOG.info("EVENT_DISSEMINATED topicId={} nodeId={} peerNodeId={} eventId={}",
                     event.topicId(), nodeId, peer.nodeId(), event.eventId());
         }
@@ -118,7 +118,7 @@ final class DisseminationRuntime implements AutoCloseable {
                     .filter(active::contains).filter(topicId -> !current.contains(topicId)).forEach(topicId ->
                     engine.subscribe(topicId, navigation.engine().peersForTopic(topicId), now));
             engine.cycle(now, navigation.engine()::peersForTopic).forEach(out ->
-                    transport.sendSampling(new PeerDescriptor(
+                    transport.sendSampling(new NodeEndpoint(
                                     out.peer().nodeId(), out.peer().host(), out.peer().port()),
                             ProtocolMessage.disseminationGossip(
                                     MessageType.DISSEMINATION_REQUEST, out.requestId(), out.exchange())));

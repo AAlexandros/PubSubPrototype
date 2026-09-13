@@ -3,6 +3,7 @@ package org.pubsub.prototype.protocol;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
+import java.util.HexFormat;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
@@ -20,7 +21,7 @@ public record NodeId(String value) {
     public static NodeId fromPublicKey(PublicKey publicKey) {
         try {
             MessageDigest digest = MessageDigest.getInstance(HASH_ALGORITHM);
-            return new NodeId(Hex.encode(digest.digest(publicKey.getEncoded())));
+            return new NodeId(HexFormat.of().formatHex(digest.digest(publicKey.getEncoded())));
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException(String.format("%s is not available", HASH_ALGORITHM), ex);
         }

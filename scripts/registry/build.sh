@@ -59,4 +59,4 @@ echo "Topic Registry contract build"
 echo "Aiken source: contracts/topic-registry"
 (cd "$ROOT_DIR/contracts/topic-registry" && run_aiken check --skip-tests && run_aiken build)
 run_node "$ROOT_DIR/scripts/registry/export-aiken-scripts.mjs" "$ROOT_DIR"
-(cd "$ROOT_DIR" && run_gradle -q :libs:registry-api:test :libs:registry-cardano:test)
+(cd "$ROOT_DIR" && run_gradle -q :libs:registry-cardano:test)

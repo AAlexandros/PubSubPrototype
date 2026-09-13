@@ -3,7 +3,7 @@
 This module ports the topic-distance bucketing idea from the sibling
 `PubSub-private` repository's `VicinityNav`/`MathPower` classes to Phase 0.5's
 decentralized subscription model. It has no Cardano, event, HTTP, or Netty
-dependencies, and does not depend on `securecyclon` or `peer-sampling-api`.
+dependencies, and does not depend on the `peer-sampling` module.
 
 | Reference source under `PubSub-private/src/` | Runtime behavior |
 | --- | --- |

@@ -49,7 +49,7 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
             if (!active) ctx.close();
         }, 3000, TimeUnit.MILLISECONDS);
         if (outbound) {
-            ctx.writeAndFlush(ProtocolMessage.hello(identity.nodeId(), config.nodeName()).withDescriptor(transport.advertised()));
+            ctx.writeAndFlush(ProtocolMessage.hello(identity.nodeId(), config.nodeName()).withEndpoint(transport.advertised()));
         }
     }
 
@@ -62,7 +62,7 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
                 case PING -> handlePing(ctx, message);
                 case PONG -> handlePong(message);
                 case EVENT -> handleEvent(message);
-                case SECURECYCLON_REQUEST, SECURECYCLON_RESPONSE, SECURECYCLON_REPORT -> {
+                case SECURECYCLON_REQUEST, SECURECYCLON_RESPONSE, SECURECYCLON_PROOF -> {
                     if (!active) throw new ProtocolException("SecureCyclon before handshake");
                     transport.recordSampling(remoteNodeId, message);
                 }
@@ -85,12 +85,12 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
         if (outbound) throw new ProtocolException("Unexpected HELLO on outbound connection");
         if (active) throw new ProtocolException("Repeated handshake");
         NodeId nodeId = new NodeId(message.nodeId());
-        transport.resolved(endpoint, nodeId, message.descriptor());
+        transport.resolved(endpoint, nodeId, message.endpoint());
         if (nodeId.equals(identity.nodeId())) {
             throw new ProtocolException("Self-connections are not allowed");
         }
         remoteNodeId = nodeId;
-        ctx.writeAndFlush(ProtocolMessage.helloAck(identity.nodeId()).withDescriptor(transport.advertised()));
+        ctx.writeAndFlush(ProtocolMessage.helloAck(identity.nodeId()).withEndpoint(transport.advertised()));
         activate();
     }
 
@@ -98,7 +98,7 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
         if (!outbound) throw new ProtocolException("Unexpected HELLO_ACK on inbound connection");
         if (active) throw new ProtocolException("Repeated handshake");
         NodeId nodeId = new NodeId(message.nodeId());
-        transport.resolved(endpoint, nodeId, message.descriptor());
+        transport.resolved(endpoint, nodeId, message.endpoint());
         if (nodeId.equals(identity.nodeId())) {
             throw new ProtocolException("Self-connections are not allowed");
         }

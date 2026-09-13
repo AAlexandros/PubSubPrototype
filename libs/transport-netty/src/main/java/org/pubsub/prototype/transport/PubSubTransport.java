@@ -1,6 +1,6 @@
 package org.pubsub.prototype.transport;
 
-import org.pubsub.prototype.sampling.PeerDescriptor;
+import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.protocol.ProtocolMessage;
 import org.pubsub.prototype.protocol.ProtocolException;
 import java.util.Set;
@@ -43,27 +43,27 @@ public final class PubSubTransport implements AutoCloseable {
     private final Map<NodeId, PeerSessionHandler> activePeers = new ConcurrentHashMap<>();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Channel serverChannel;
-    private PeerDescriptor advertised;
+    private NodeEndpoint advertised;
     private final Map<NodeId, ConcurrentLinkedQueue<ProtocolMessage>> queued = new ConcurrentHashMap<>();
     private final Map<String, NodeId> expected = new ConcurrentHashMap<>();
     private final Set<String> connecting = ConcurrentHashMap.newKeySet();
 
-    public void advertise(PeerDescriptor peer) {
+    public void advertise(NodeEndpoint peer) {
         if (!peer.nodeId().equals(identity.nodeId().value())) throw new IllegalArgumentException("Identity mismatch");
         advertised = peer;
     }
-    PeerDescriptor advertised() { return advertised; }
+    NodeEndpoint advertised() { return advertised; }
 
-    public void sendSampling(PeerDescriptor peer, ProtocolMessage message) {
+    public void sendSampling(NodeEndpoint peer, ProtocolMessage message) {
         send(peer, message);
     }
 
     /** Sends an event only to the selected overlay peer, connecting dynamically when necessary. */
-    public void sendEvent(PeerDescriptor peer, EventEnvelope event) {
+    public void sendEvent(NodeEndpoint peer, EventEnvelope event) {
         send(peer, ProtocolMessage.event(event));
     }
 
-    private void send(PeerDescriptor peer, ProtocolMessage message) {
+    private void send(NodeEndpoint peer, ProtocolMessage message) {
         NodeId id = new NodeId(peer.nodeId());
         PeerSessionHandler handler = activePeers.get(id);
         if (handler != null) { handler.sendMessage(message); return; }
@@ -79,12 +79,12 @@ public final class PubSubTransport implements AutoCloseable {
     void recordSampling(NodeId peer, ProtocolMessage message) {
         listener.samplingReceived(peer, message);
     }
-    void resolved(PeerEndpoint endpoint, NodeId id, PeerDescriptor descriptor) {
+    void resolved(PeerEndpoint endpoint, NodeId id, NodeEndpoint advertisedEndpoint) {
         if (endpoint != null && expected.containsKey(endpoint.key()) && !expected.get(endpoint.key()).equals(id))
             throw new ProtocolException("Learned endpoint identity mismatch");
-        if (descriptor != null && !descriptor.nodeId().equals(id.value()))
+        if (advertisedEndpoint != null && !advertisedEndpoint.nodeId().equals(id.value()))
             throw new ProtocolException("Advertised identity mismatch");
-        if (endpoint != null && descriptor != null && config.peers().contains(endpoint)) listener.seedResolved(descriptor);
+        if (endpoint != null && advertisedEndpoint != null && config.peers().contains(endpoint)) listener.seedResolved(advertisedEndpoint);
     }
     private void flushQueued(NodeId id, PeerSessionHandler handler) {
         var messages = queued.remove(id);

@@ -25,9 +25,7 @@ class NavigationCodecTest {
 
     @Test
     void rejectsMissingNavigationExchange() {
-        var codec = new ProtocolCodec();
-
-        assertThrows(ProtocolException.class,
-                () -> codec.encode(ProtocolMessage.navigationGossip(MessageType.NAVIGATION_REQUEST, UUID.randomUUID(), null)));
+        assertThrows(IllegalArgumentException.class,
+                () -> ProtocolMessage.navigationGossip(MessageType.NAVIGATION_REQUEST, UUID.randomUUID(), null));
     }
 }

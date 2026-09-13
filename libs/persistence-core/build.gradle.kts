@@ -8,9 +8,10 @@ application {
 }
 
 dependencies {
-    api(project(":libs:persistence-api"))
+    api(project(":libs:event-core"))
+    api(project(":libs:registry-cardano"))
+    api(libs.jackson.databind)
     implementation(project(":libs:http-support"))
-    implementation(libs.jackson.databind)
     implementation(libs.jackson.jsr310)
     implementation(libs.slf4j.api)
 

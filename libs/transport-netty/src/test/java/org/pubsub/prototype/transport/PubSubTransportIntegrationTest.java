@@ -8,7 +8,7 @@ import org.pubsub.prototype.protocol.NodeIdentity;
 import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.event.EventPublisher;
 import org.pubsub.prototype.registry.TopicId;
-import org.pubsub.prototype.sampling.PeerDescriptor;
+import org.pubsub.prototype.sampling.NodeEndpoint;
 
 import java.io.OutputStream;
 import java.net.ServerSocket;
@@ -112,7 +112,7 @@ class PubSubTransportIntegrationTest {
             n3.start();
             assertEventually(() -> n1.activePeerCount() == 1 && n3.activePeerCount() == 1);
 
-            n1.sendEvent(new PeerDescriptor(i2.nodeId().value(), "127.0.0.1", p2), event);
+            n1.sendEvent(new NodeEndpoint(i2.nodeId().value(), "127.0.0.1", p2), event);
 
             assertEventually(() -> l2.events.contains(event.eventId()));
             TimeUnit.MILLISECONDS.sleep(250);

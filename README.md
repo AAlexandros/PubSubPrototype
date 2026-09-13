@@ -1,245 +1,181 @@
 # Cardano Pub/Sub Prototype
 
-Java 21 prototype for a Cardano-backed Pub/Sub network. Phase 0.1 is implemented and validated: three local Pub/Sub nodes form a full mesh, exchange `HELLO`, `PING`, and `PONG` messages over length-prefixed JSON frames, persist Ed25519 node identities, and run alongside a local Cardano devnet with funded test identities.
+A Java 21 prototype of a decentralized, topic-based publish/subscribe system.
+Cardano provides the control plane for topic and replication-server registries;
+live event payloads travel between Pub/Sub nodes and are stored by independent
+replication servers for later recovery.
 
-## Repository Layout
+The current implementation is **Phase 0.9**: a local, reproducible testbed with
+3-50 real Pub/Sub JVMs, three replication servers, a Cardano devnet, fault
+injection, and JSONL/Parquet telemetry.
 
-- `apps/pubsub-node/`: runnable Pub/Sub node application and Docker image.
-- `apps/replication-server/`: versioned HTTP replication service and Docker image.
-- `libs/protocol-core/`: protocol messages, JSON codec, node identity storage, and `NodeId` derivation.
-- `libs/transport-netty/`: Netty transport, peer sessions, framing, reconnection, and integration tests.
-- `libs/persistence-api/`: persistence records, registry contracts, event/topic-log keys, and recovery result types.
-- `libs/persistence-core/`: DHT placement, atomic filesystem storage, replication client, registry cache, and recovery engine.
-- `libs/http-support/`: shared HTTP route, method, query, error, and JSON exchange contracts.
-- `ops/config/phase-0.1/`: local three-node runtime configuration.
-- `ops/infra/devnet/`: Cardano devnet Docker Compose setup, pinned tool versions, and lifecycle scripts.
-- `ops/infra/phase-0.1/`: Docker Compose topology for Cardano plus the three Pub/Sub nodes.
-- `ops/scripts/`: phase runtime and acceptance entrypoints.
-- `specs/`: source specifications and phase task notes.
-- `implementation-reports/`: implementation reports and acceptance evidence.
-- `scripts/lib/`: shared cross-platform shell and Node.js utilities plus script-level contracts.
-- `documentation/`: supplementary documentation, including [`documentation/scripts.md`](documentation/scripts.md), a full reference of every script in the repository.
+## System at a glance
 
-## Requirements
+The system has four cooperating planes:
 
-- Java 21, or a JDK toolchain Gradle can resolve.
-- Docker with Docker Compose.
-- Bash for the `ops/scripts` and `ops/infra/devnet/scripts` entrypoints.
+- **Control:** two Aiken/Cardano registries describe topics, authorization,
+  replication factors, and active replication servers.
+- **Live delivery:** Pub/Sub nodes use SecureCyclon peer sampling, Navigation,
+  and topic-specific Dissemination overlays over Netty connections.
+- **Persistence:** publishing nodes send signed events to replication servers;
+  deterministic placement, repair, and release maintain the requested replicas.
+- **Observation:** scenario tooling runs workloads and faults, samples the
+  system, and produces analysis-ready datasets and summaries.
 
-The Cardano tools are pinned in `ops/infra/devnet/versions.env`. If `cardano-testnet`, `cardano-node`, and `cardano-cli` are available on `PATH`, the scripts can use them directly. Otherwise Docker builds and uses the pinned `pubsub-cardano-testnet:11.0.1` runtime image.
+Event payloads are not written to Cardano. Start with the
+[plain-language system diagram](docs/architecture/diagrams/system-overview.svg)
+or the [architecture guide](docs/architecture/README.md) for the complete flow.
 
-## Build And Test
+## Prerequisites
+
+- JDK 21.
+- Docker with Docker Compose and the Linux container engine.
+- Bash (`Git Bash` or WSL on Windows) for repository scripts.
+- Node.js 18 or newer for testbed generation and experiment orchestration.
+
+Cardano and Aiken versions are pinned by the repository. The testbed scripts
+use locally installed Cardano tools when available and otherwise use Docker.
+
+## Build and test
+
+From Bash:
 
 ```bash
-./gradlew clean build
-./gradlew test
+./gradlew --gradle-user-home .gradle-user-home test
 ```
 
-On Windows PowerShell:
+From Windows PowerShell:
 
 ```powershell
-.\gradlew.bat clean build
-.\gradlew.bat test
+.\gradlew.bat -g .gradle-user-home test
 ```
 
-## Run Phase 0.1 Locally
+Dependencies are declared once in
+[`gradle/libs.versions.toml`](gradle/libs.versions.toml). No system Gradle
+installation is required.
 
-Start the Cardano devnet, wait for health, fund the four phase identities, and start the three Pub/Sub nodes:
+## Run the integrated testbed
+
+Run lifecycle and experiment commands from Bash at the repository root.
 
 ```bash
-./ops/scripts/phase-0.1-up.sh
-```
+# First start; bootstraps Cardano, deploys registries, and creates the topology.
+./scripts/testbed/up.sh --nodes 3
 
-Stop the Pub/Sub nodes and devnet:
-
-```bash
-./ops/scripts/phase-0.1-down.sh
-```
-
-Follow the three Pub/Sub node logs:
-
-```bash
-./ops/scripts/phase-0.1-logs.sh
-```
-
-The Java nodes persist Ed25519 identities in per-node Docker volumes. `NodeId` is derived as lowercase hex `SHA-256(publicKey)`.
-
-## Acceptance
-
-Run the Phase 0.1 acceptance flow:
-
-```bash
-./ops/scripts/acceptance/phase-0.1.sh
-```
-
-The default acceptance soak is 30 seconds. Override it when you want a longer run:
-
-```bash
-PHASE_0_1_SOAK_SECONDS=600 ./ops/scripts/acceptance/phase-0.1.sh
-```
-
-The acceptance run verifies:
-
-- Gradle clean build and tests.
-- Cardano devnet reset, start, health, chain-tip advancement, and clean restart.
-- Funding for `registry-deployer`, `node-1`, `node-2`, and `node-3`.
-- Three Pub/Sub nodes reaching full mesh.
-- Continuous `PING` / `PONG` exchange with RTT logging.
-- Detection of a stopped node and automatic reconnection after restart.
-
-Successful acceptance evidence is written to `implementation-reports/evidence/phase-0.1/`.
-
-## Cardano Devnet
-
-The devnet integration uses `cardano-testnet` rather than a custom chain implementation. Runtime values for Java/Cardano integration are exported to:
-
-```text
-ops/infra/devnet/runtime/network.env
-```
-
-That file includes:
-
-- `CARDANO_NODE_SOCKET_PATH`
-- `CARDANO_NETWORK_MAGIC`
-- `REGISTRY_DEPLOYER_ADDRESS`
-- `NODE_1_CARDANO_ADDRESS`
-- `NODE_2_CARDANO_ADDRESS`
-- `NODE_3_CARDANO_ADDRESS`
-
-`fund-identities.sh` locates a generated testnet funding UTxO, submits real funding transactions, waits for confirmation, and fails if the target identities are not funded.
-
-## SecureCyclon peer sampling (Phase 0.4)
-
-Run the three-node acceptance with:
-
-```bash
-./scripts/acceptance/phase-0.4.sh
-```
-
-The phase-specific configuration in `ops/config/phase-0.4/` is asymmetric:
-node-1 has no seeds; node-2 and node-3 each seed from node-1. Both leaf nodes
-learn further peers through SecureCyclon. The phase's Compose file is
-`ops/infra/phase-0.4/compose.yaml` and uses the existing identity volumes.
-
-`peerSampling` configures `advertisedHost`, `viewSize`, `swapLength`,
-`cycleIntervalMs`, `ageThreshold`, and `randomSeed`. The advertised host must be
-reachable by the other nodes. Old configurations without this section retain
-their previous behavior. Higher layers consume `PeerSamplingService`; the
-read-only `GET /v1/peer-sampling/view` control endpoint exposes snapshots.
-
-Acceptance archives previous generated devnet state under `.tools/phase-0.4-devnet-backups/`,
-creates and funds a fresh Cardano test network, and captures results under
-`implementation-reports/evidence/phase-0.4/`. Pub/Sub identity volumes remain persistent.
-The containers remain running for inspection after acceptance.
-
-The temporary Phase 0.3 event forwarding path continues over established sessions;
-it is not the D2 dissemination layer. See [the protocol mapping](libs/securecyclon/README.md)
-for reference behavior and runtime adaptations.
-
-## Navigation layer / Vicinity (Phase 0.5)
-
-Run the three-node acceptance with:
-
-```bash
-./scripts/acceptance/phase-0.5.sh
-```
-
-The `libs/navigation` module implements the D2 Navigation Layer on top of
-Phase 0.4 SecureCyclon: deterministic topic ordering (active topic ids sorted
-lexicographically into ordinals `0..T-1`), finger-topic targets at distances
-`b^i` clockwise/anticlockwise (default `b = 2`), a bounded per-target-topic
-Navigation view (default `c = 2` peers per target), and a Vicinity gossip
-cycle exchanged over new `NAVIGATION_REQUEST`/`NAVIGATION_RESPONSE` messages.
-
-Subscriptions are local node state (not on-chain): a persistent
-newline-delimited `SubscriptionStore` backs
-
-```text
-POST   /v1/subscriptions/{topicId}
-DELETE /v1/subscriptions/{topicId}
-GET    /v1/subscriptions
-GET    /v1/navigation/view
-```
-
-The Navigation layer only reads `PeerSamplingService.view()` for random
-candidates; it never mutates the SecureCyclon view. Raw SecureCyclon samples
-enter the Navigation candidate pool with unknown subscriptions and are
-superseded once their real subscriptions are learned via gossip. Navigation
-candidates without an active transport session reuse the Phase 0.4 dynamic
-connection mechanism.
-
-`navigation` configures `capacity`, `routingBase`, `cycleIntervalMs`,
-`staleAfterMs`, and an optional `subscriptionsPath`. When the Cardano registry's
-active topic set changes, the node recomputes topic ordering and finger
-topics without a restart (the Navigation view is cleared and repopulated
-through subsequent gossip cycles, since ordinal numbers can refer to a
-different topic once the active set changes).
-
-Acceptance creates at least five active topics, subscribes the three nodes to
-different topics, verifies finger-topic computation and Vicinity selection,
-adds a subscription and confirms recomputation without restart, verifies
-stale-link removal after a node stop and rediscovery after restart, and
-verifies topic creation/deletion updates topic ordering without restart.
-Results are captured under `implementation-reports/evidence/phase-0.5/`.
-
-## Current Status
-
-Phase 0.9 provides the integrated, local-only experiment testbed. A generated
-Compose topology runs one local Cardano devnet, three replication servers, and
-3–30 real Pub/Sub JVM nodes. The controller captures eleven correlated raw
-JSONL datasets, validates and converts them to canonical Apache Parquet, keeps
-raw inputs intact, combines repetitions, and emits derived JSON/CSV summaries.
-
-Start the default three-node testbed or a larger E1 topology with:
-
-```bash
-./scripts/testbed/up.sh
-./scripts/testbed/up.sh --nodes 10
+# Inspect processes and API health, or follow logs.
 ./scripts/testbed/status.sh
+./scripts/testbed/logs.sh
+
+# Stop containers while retaining identities, server data, and results.
 ./scripts/testbed/down.sh
 ```
 
-Run and aggregate scenarios with:
+`up.sh` accepts 3-50 Pub/Sub nodes and reuses an existing compatible bootstrap.
+The first run can take several minutes because it builds distributions and
+images, initializes the devnet, funds operators, and submits registry
+transactions.
+
+Default host ports are:
+
+| Service | Host ports | Purpose |
+| --- | --- | --- |
+| Pub/Sub transport | `7001...` | Node-to-node Netty protocol |
+| Pub/Sub control API | `8001...` | Publish, subscribe, recovery, and overlay views |
+| Replication API | `8101`-`8103` | Storage, lookup, maintenance, and health |
+
+To discard generated runtime state and Docker volumes while retaining
+experiment results:
+
+```bash
+./scripts/testbed/reset.sh
+```
+
+This is intentionally destructive for local testbed/devnet state.
+
+## Run experiments
+
+Checked-in scenarios are under
+[`ops/config/phase-0.9/scenarios`](ops/config/phase-0.9/scenarios). A run starts
+the required topology, executes its workload and fault schedule, collects raw
+telemetry, and generates Parquet plus derived summaries.
 
 ```bash
 ./scripts/experiments/run.sh ops/config/phase-0.9/scenarios/e1-scaling-10.yaml
 ./scripts/experiments/aggregate.sh results
 ```
 
-The full five-node integrated acceptance flow is:
+Outputs use this layout:
+
+```text
+results/<scenarioId>/<runId>/
+  scenario.yaml
+  metadata.json
+  logs/
+  raw/       # authoritative JSONL observations
+  parquet/   # canonical analysis datasets
+  derived/   # JSON and CSV summaries
+
+results/combined/  # cross-run aggregation
+```
+
+The eleven dataset schemas are documented in the
+[telemetry data dictionary](results/data-dictionary.md).
+
+## Acceptance
+
+The current end-to-end acceptance flow builds and tests the repository, resets
+local testbed state, runs a five-node fault/recovery scenario, aggregates its
+telemetry, and writes evidence under
+`implementation-reports/evidence/phase-0.9/`.
 
 ```bash
 ./scripts/acceptance/phase-0.9.sh
 ```
 
-Architecture diagrams are indexed in
-[`docs/architecture/README.md`](docs/architecture/README.md), and the generated
-schema reference is [`results/data-dictionary.md`](results/data-dictionary.md).
+Because acceptance resets the devnet and testbed volumes, do not run it against
+local state you need to keep. Historical acceptance entrypoints remain under
+`scripts/acceptance/` for phase-specific regression checks.
 
-Phase 0.8 adds automatic replica maintenance to the independent persistence
-path beside Hybrid Dissemination. Replication servers actively probe only peers
-that share responsibility for local records, confirm failure after configurable
-consecutive attempts, exchange bounded metadata inventories, and pull validated
-event/topic-log repairs after failures, joins, leaves, and replication-factor
-changes. Replica release waits for the current responsible set to confirm
-storage under the same membership version.
+## Repository map
 
-Three registered replication servers assign signed events and publisher topic
-logs in a 256-bit DHT, store atomic filesystem replicas, and serve lookup from
-any entry server. Pub/Sub nodes persist delivery cursors and recover missed,
-revalidated events through `POST /v1/events/recover/{topicId}` without routing
-live dissemination through the DHT.
+| Path | Responsibility |
+| --- | --- |
+| [`apps/pubsub-node`](apps/pubsub-node) | Runnable node: configuration, control API, overlays, event validation/delivery, persistence and recovery integration |
+| [`apps/replication-server`](apps/replication-server) | Runnable storage server: HTTP API, replica placement, failure detection, repair, and safe release |
+| [`libs/peer-sampling`](libs/peer-sampling) | Peer-sampling contract and SecureCyclon implementation |
+| [`libs/navigation`](libs/navigation), [`libs/dissemination`](libs/dissemination) | Topic-aware routing information and live-event overlay |
+| [`libs/event-core`](libs/event-core), [`libs/protocol-core`](libs/protocol-core), [`libs/transport-netty`](libs/transport-netty) | Signed event model, wire messages/codec, identity, framing, sessions, and reconnection |
+| [`libs/registry-cardano`](libs/registry-cardano) | Registry interfaces and Cardano CLI/ledger integration |
+| [`libs/persistence-core`](libs/persistence-core) | Persistence records, DHT placement, local stores, replication client, membership, and recovery |
+| [`libs/http-support`](libs/http-support) | Shared HTTP paths, methods, parameters, error codes, and JSON exchange helpers |
+| [`contracts`](contracts) | Topic and replication registry Aiken contracts |
+| [`tools/telemetry`](tools/telemetry) | JSONL validation, Parquet normalization, aggregation, summaries, and dictionary generation |
+| [`ops/config`](ops/config) | Checked-in node, server, testbed, and scenario configuration |
+| [`ops/infra/devnet`](ops/infra/devnet) | Local Cardano network definition and lifecycle tooling |
+| [`scripts`](scripts) | Current registry, replication, event, testbed, experiment, and acceptance entrypoints |
+| [`specs`](specs), [`implementation-reports`](implementation-reports) | Phase requirements, implementation decisions, and acceptance reports |
 
-Replication services expose `POST /v1/events`, `GET /v1/events/{eventKey}`,
-`GET /v1/topics/{topicId}/publishers` (with optional `sinceTimestamp`), and
-`GET /v1/health`, `GET /v1/maintenance/status`, and
-`GET /v1/maintenance/replicas`. Only the original publishing node submits persistence work;
-receiving subscribers remain on the delivery path only.
+## Configuration and generated state
 
-Run the full acceptance flow with:
+- [`ops/config/phase-0.9/testbed.yaml`](ops/config/phase-0.9/testbed.yaml) is the
+  source configuration for generated topologies.
+- `.tools/phase-0.9/` contains generated Compose and per-process configuration;
+  do not edit it as source.
+- `ops/infra/devnet/runtime/`, `state/`, and `keys/` contain generated local
+  Cardano state and credentials. They are ignored by Git.
+- `results/<scenarioId>/` and acceptance evidence are generated and ignored;
+  `results/data-dictionary.md` is the checked-in schema reference.
+- Pub/Sub identities and replication data live in Docker volumes so ordinary
+  `down`/`up` cycles retain them.
 
-```bash
-./scripts/acceptance/phase-0.8.sh
-```
+## Where to read next
 
-Latest implementation report: [Phase 0.8](implementation-reports/phase-0.8-implementation-report.md).
+- [Architecture index and diagrams](docs/architecture/README.md) - conceptual
+  model, internals, deployment, data flow, timing, and sequences.
+- [Complete script reference](documentation/scripts.md) - every lifecycle,
+  registry, event, experiment, and historical acceptance command.
+- [Phase 0.9 specification](specs/phase-0.9.md) and
+  [implementation report](implementation-reports/phase-0.9-implementation-report.md) -
+  requirements, scope, and validation evidence.
+- [Modernization plan](specs/modernization-refactor-plan.md) - current
+  structural decisions and intentionally deferred migrations.

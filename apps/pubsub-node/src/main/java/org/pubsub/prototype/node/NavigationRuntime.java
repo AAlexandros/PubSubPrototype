@@ -6,7 +6,7 @@ import org.pubsub.prototype.navigation.TopicOrdering;
 import org.pubsub.prototype.protocol.MessageType;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.ProtocolMessage;
-import org.pubsub.prototype.sampling.PeerDescriptor;
+import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.transport.PubSubTransport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,7 +30,7 @@ final class NavigationRuntime implements AutoCloseable {
     private final NavigationEngine engine;
     private final SubscriptionStore subscriptions;
     private final Supplier<List<String>> activeTopicsSupplier;
-    private final Supplier<List<PeerDescriptor>> samplingViewSupplier;
+    private final Supplier<List<NodeEndpoint>> samplingViewSupplier;
     private final long interval;
     private final String nodeId;
     private PubSubTransport transport;
@@ -39,7 +39,7 @@ final class NavigationRuntime implements AutoCloseable {
     NavigationRuntime(String nodeId, String host, int port, SubscriptionStore subscriptions,
                        NodeConfig.NavigationSection config,
                        Supplier<List<String>> activeTopicsSupplier,
-                       Supplier<List<PeerDescriptor>> samplingViewSupplier) {
+                       Supplier<List<NodeEndpoint>> samplingViewSupplier) {
         this.nodeId = nodeId;
         this.subscriptions = subscriptions;
         this.activeTopicsSupplier = activeTopicsSupplier;
@@ -96,11 +96,11 @@ final class NavigationRuntime implements AutoCloseable {
                 engine.updateOrdering(TopicOrdering.of(active));
             }
             long now = System.currentTimeMillis();
-            for (PeerDescriptor sample : samplingViewSupplier.get()) {
+            for (NodeEndpoint sample : samplingViewSupplier.get()) {
                 engine.ingestSample(sample.nodeId(), sample.host(), sample.port(), now);
             }
             engine.cycle(now).ifPresent(out -> transport.sendSampling(
-                    new PeerDescriptor(out.peer().nodeId(), out.peer().host(), out.peer().port()),
+                    new NodeEndpoint(out.peer().nodeId(), out.peer().host(), out.peer().port()),
                     ProtocolMessage.navigationGossip(MessageType.NAVIGATION_REQUEST, out.requestId(), out.exchange())));
         } catch (RuntimeException ex) {
             LOG.error("NAVIGATION_CYCLE reason=runtime_error", ex);

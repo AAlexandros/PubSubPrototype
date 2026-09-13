@@ -28,8 +28,7 @@ class DisseminationCodecTest {
 
     @Test
     void rejectsMissingExchange() {
-        ProtocolMessage invalid = ProtocolMessage.disseminationGossip(
-                MessageType.DISSEMINATION_REQUEST, UUID.randomUUID(), null);
-        assertThrows(ProtocolException.class, () -> new ProtocolCodec().encode(invalid));
+        assertThrows(IllegalArgumentException.class, () -> ProtocolMessage.disseminationGossip(
+                MessageType.DISSEMINATION_REQUEST, UUID.randomUUID(), null));
     }
 }

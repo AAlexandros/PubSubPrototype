@@ -3,7 +3,7 @@ package org.pubsub.prototype.node;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.protocol.*;
-import org.pubsub.prototype.sampling.PeerDescriptor;
+import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.securecyclon.*;
 import org.pubsub.prototype.transport.*;
 import java.net.*;
@@ -50,30 +50,30 @@ class PeerSamplingIntegrationTest {
         int p1 = port(), p2 = port();
         try (Node a = new Node("a", p1, List.of()); Node b = new Node("b", p2, List.of())) {
             a.transport.start(); b.transport.start(); // No scheduler: compare exact view before/after.
-            var before = a.runtime.sampling().links();
-            var bad = new Exchange(List.of(), List.of());
+            var before = a.runtime.sampling().descriptors();
+            var bad = new GossipExchange(List.of(), List.of());
             a.transport.sendSampling(b.peer, ProtocolMessage.gossip(MessageType.SECURECYCLON_REQUEST, UUID.randomUUID(), bad));
             b.transport.sendSampling(a.peer, ProtocolMessage.gossip(MessageType.SECURECYCLON_REQUEST, UUID.randomUUID(), bad));
             await(() -> a.transport.activePeerCount() == 1 && b.transport.activePeerCount() == 1);
             TimeUnit.MILLISECONDS.sleep(250);
-            assertEquals(before, a.runtime.sampling().links());
+            assertEquals(before, a.runtime.sampling().descriptors());
             try (Socket socket = new Socket("127.0.0.1", p1)) {
                 byte[] payload = "{broken-json".getBytes();
                 socket.getOutputStream().write(ByteBuffer.allocate(payload.length + 4).putInt(payload.length).put(payload).array());
             }
             TimeUnit.MILLISECONDS.sleep(100);
-            assertEquals(before, a.runtime.sampling().links());
+            assertEquals(before, a.runtime.sampling().descriptors());
             assertEquals(1, a.transport.activePeerCount());
         }
     }
 
     private final class Node implements AutoCloseable {
-        final PeerDescriptor peer;
+        final NodeEndpoint peer;
         final PeerSamplingRuntime runtime;
         final PubSubTransport transport;
         Node(String name, int port, List<PeerEndpoint> seeds) {
             var identity = IdentityStore.loadOrCreate(dir.resolve(name));
-            peer = new PeerDescriptor(identity.nodeId().value(), "127.0.0.1", port);
+            peer = new NodeEndpoint(identity.nodeId().value(), "127.0.0.1", port);
             var config = new NodeConfig.SamplingSection(); config.cycleIntervalMs = 150; config.randomSeed = name.hashCode();
             runtime = new PeerSamplingRuntime(peer, config, new TransportListener() {});
             transport = new PubSubTransport(new TransportConfig(name, "127.0.0.1", port, seeds, 100, 500, 50, 100), identity, runtime);

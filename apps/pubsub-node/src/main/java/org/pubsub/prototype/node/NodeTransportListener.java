@@ -3,7 +3,7 @@ package org.pubsub.prototype.node;
 import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.ProtocolMessage;
-import org.pubsub.prototype.sampling.PeerDescriptor;
+import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.transport.TransportListener;
 
 /** Dispatches transport events to the peer-sampling, navigation, and event sub-listeners by message type. */
@@ -22,14 +22,14 @@ final class NodeTransportListener implements TransportListener {
     }
 
     @Override
-    public void seedResolved(PeerDescriptor peer) {
+    public void seedResolved(NodeEndpoint peer) {
         if (sampling != null) sampling.seedResolved(peer);
     }
 
     @Override
     public void samplingReceived(NodeId peer, ProtocolMessage message) {
         switch (message.type()) {
-            case SECURECYCLON_REQUEST, SECURECYCLON_RESPONSE, SECURECYCLON_REPORT -> {
+            case SECURECYCLON_REQUEST, SECURECYCLON_RESPONSE, SECURECYCLON_PROOF -> {
                 if (sampling != null) sampling.samplingReceived(peer, message);
             }
             case NAVIGATION_REQUEST, NAVIGATION_RESPONSE -> {

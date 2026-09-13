@@ -16,16 +16,13 @@ rootProject.name = "pubsub-prototype"
 
 include("libs:protocol-core")
 include("libs:event-core")
-include("libs:registry-api")
 include("libs:registry-cardano")
 include("libs:transport-netty")
 include("apps:pubsub-node")
 
-include("libs:peer-sampling-api")
-include("libs:securecyclon")
+include("libs:peer-sampling")
 include("libs:navigation")
 include("libs:dissemination")
-include("libs:persistence-api")
 include("libs:persistence-core")
 include("libs:http-support")
 include("apps:replication-server")

@@ -16,14 +16,29 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 
+/**
+ * Persists a node's Ed25519 identity as {@code identity.json} in its configured directory.
+ * The first startup creates the file; later startups reload the same key pair.
+ */
 public final class IdentityStore {
     private static final ObjectMapper MAPPER = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
     private static final String IDENTITY_FILE = "identity.json";
     private static final String KEY_GENERATION_ALGORITHM = "Ed25519";
 
+    private record StoredIdentity(String publicKey, String privateKey) {
+        private StoredIdentity {
+            if (publicKey == null || privateKey == null) {
+                throw new IllegalArgumentException("Stored identity is incomplete");
+            }
+        }
+    }
+
     private IdentityStore() {
     }
 
+    /**
+     * Loads {@code identity.json} from {@code identityPath}, or creates it when it does not exist.
+     */
     public static NodeIdentity loadOrCreate(Path identityPath) {
         try {
             Files.createDirectories(identityPath);
@@ -55,13 +70,5 @@ public final class IdentityStore {
         );
         MAPPER.writeValue(file.toFile(), stored);
         return new NodeIdentity(keyPair, NodeId.fromPublicKey(keyPair.getPublic()));
-    }
-
-    private record StoredIdentity(String publicKey, String privateKey) {
-        private StoredIdentity {
-            if (publicKey == null || privateKey == null) {
-                throw new IllegalArgumentException("Stored identity is incomplete");
-            }
-        }
     }
 }

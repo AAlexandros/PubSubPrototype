@@ -7,7 +7,7 @@ import org.pubsub.prototype.registry.cardano.CardanoTopicRegistry;
 import org.pubsub.prototype.event.TopicStateProvider;
 import org.pubsub.prototype.navigation.SubscriptionStore;
 import org.pubsub.prototype.transport.PubSubTransport;
-import org.pubsub.prototype.sampling.PeerDescriptor;
+import org.pubsub.prototype.sampling.NodeEndpoint;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -45,7 +45,7 @@ public final class PubSubNodeMain {
             eventService.attachPersistence(persistence);
         }
         PeerSamplingRuntime sampling = config.sampling() == null ? null : new PeerSamplingRuntime(
-                new PeerDescriptor(identity.nodeId().value(),
+                new NodeEndpoint(identity.nodeId().value(),
                         config.sampling().advertisedHost, config.node().listenPort), config.sampling(), eventService);
         RegistrySynchronizer finalRegistrySynchronizerForTopics = registrySynchronizer;
         PeerSamplingRuntime finalSamplingForView = sampling;

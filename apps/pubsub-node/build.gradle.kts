@@ -3,16 +3,13 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":libs:peer-sampling-api"))
+    implementation(project(":libs:peer-sampling"))
     implementation(project(":libs:http-support"))
-    implementation(project(":libs:securecyclon"))
     implementation(project(":libs:navigation"))
     implementation(project(":libs:dissemination"))
-    implementation(project(":libs:persistence-api"))
     implementation(project(":libs:persistence-core"))
     implementation(project(":libs:protocol-core"))
     implementation(project(":libs:event-core"))
-    implementation(project(":libs:registry-api"))
     implementation(project(":libs:registry-cardano"))
     implementation(project(":libs:transport-netty"))
     implementation(libs.snakeyaml)

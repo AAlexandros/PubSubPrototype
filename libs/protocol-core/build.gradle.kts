@@ -3,8 +3,7 @@ plugins {
 }
 
 dependencies {
-    api(project(":libs:peer-sampling-api"))
-    api(project(":libs:securecyclon"))
+    api(project(":libs:peer-sampling"))
     api(project(":libs:navigation"))
     api(project(":libs:dissemination"))
     api(project(":libs:event-core"))

@@ -4,7 +4,6 @@ plugins {
 }
 
 dependencies {
-    api(project(":libs:registry-api"))
     implementation(libs.jackson.databind)
     implementation(libs.jackson.jsr310)
 

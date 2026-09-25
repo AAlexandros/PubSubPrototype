@@ -35,6 +35,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.function.Supplier;
 
+import static org.pubsub.prototype.util.PersistenceConstants.JOIN_REASON;
+import static org.pubsub.prototype.util.PersistenceConstants.RECONCILIATION_REASON;
+
 /** Decentralized, idempotent repair/release control loop for event and topic-log replicas. */
 final class ReplicaMaintenanceManager {
     private static final Logger LOG = LoggerFactory.getLogger(ReplicaMaintenanceManager.class);
@@ -164,7 +167,7 @@ final class ReplicaMaintenanceManager {
                 List<ReplicationServer> desired = DhtAssignment.responsibleServers(event.eventKey(), healthy,
                         topic.orElseThrow().replicationFactor());
                 enqueue(ReplicaRecordType.EVENT, event.eventKey(), event.topicId(), version, List.of(source),
-                        ids(desired), "join");
+                        ids(desired), JOIN_REASON);
                 queued++;
             }
         }
@@ -176,7 +179,7 @@ final class ReplicaMaintenanceManager {
                 List<ReplicationServer> desired = DhtAssignment.responsibleServers(key, healthy,
                         topic.orElseThrow().replicationFactor());
                 enqueue(ReplicaRecordType.TOPIC_LOG, key, log.topicId(), version, List.of(source),
-                        ids(desired), "join");
+                        ids(desired), JOIN_REASON);
                 queued++;
             }
         }
@@ -255,7 +258,7 @@ final class ReplicaMaintenanceManager {
                 sources.add(target);
             } else {
                 notifyRepair(target, ReplicaRecordType.EVENT, record.eventKey(), record.eventEnvelope().topicId(),
-                        version, sources, desired, "reconciliation");
+                        version, sources, desired, RECONCILIATION_REASON);
             }
         }
         if (holders < desired.size()) markUnderReplicated(ReplicaRecordType.EVENT, record.eventKey(), desired, holders);
@@ -281,7 +284,7 @@ final class ReplicaMaintenanceManager {
                 sources.add(target);
             } else {
                 notifyRepair(target, ReplicaRecordType.TOPIC_LOG, key, topicId, version, sources, desired,
-                        "reconciliation");
+                        RECONCILIATION_REASON);
             }
         }
         if (holders < desired.size()) markUnderReplicated(ReplicaRecordType.TOPIC_LOG, key, desired, holders);

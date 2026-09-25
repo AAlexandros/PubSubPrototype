@@ -16,5 +16,5 @@ replication_registry_cli() {
   mkdir -p "$(dirname "$REPLICATION_REGISTRY_STATE")"
   local state_arg
   state_arg="$(host_path "$REPLICATION_REGISTRY_STATE")"
-  pubsub_run_gradle "$ROOT_DIR" -q :libs:persistence-core:run --args="$state_arg $*"
+  pubsub_run_gradle "$ROOT_DIR" -q :libs:runReplicationRegistryCli --args="$state_arg $*"
 }

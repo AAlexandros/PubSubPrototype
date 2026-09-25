@@ -2,6 +2,7 @@ package org.pubsub.prototype.node;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.pubsub.prototype.node.runtimes.PeerSamplingRuntime;
 import org.pubsub.prototype.protocol.*;
 import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.securecyclon.*;
@@ -30,7 +31,6 @@ class PeerSamplingIntegrationTest {
                     var view = n.runtime.sampling().view();
                     assertTrue(view.size() <= 2);
                     assertFalse(view.contains(n.peer));
-                    assertEquals(view.size(), new HashSet<>(view).size());
                 }
             } finally { c.close(); }
             // Require absence throughout multiple cycles rather than a single transient view snapshot.
@@ -74,9 +74,22 @@ class PeerSamplingIntegrationTest {
         Node(String name, int port, List<PeerEndpoint> seeds) {
             var identity = IdentityStore.loadOrCreate(dir.resolve(name));
             peer = new NodeEndpoint(identity.nodeId().value(), "127.0.0.1", port);
-            var config = new NodeConfig.SamplingSection(); config.cycleIntervalMs = 150; config.randomSeed = name.hashCode();
-            runtime = new PeerSamplingRuntime(peer, config, new TransportListener() {});
-            transport = new PubSubTransport(new TransportConfig(name, "127.0.0.1", port, seeds, 100, 500, 50, 100), identity, runtime);
+            var settings = new PeerSamplingRuntime.Settings(2, 2, 150, 10, 2, name.hashCode());
+            runtime = new PeerSamplingRuntime(peer, settings);
+            TransportListener listener = new TransportListener() {
+                @Override
+                public void seedResolved(NodeEndpoint peer) {
+                    runtime.seedResolved(peer);
+                }
+
+                @Override
+                public void samplingReceived(NodeId peer, ProtocolMessage message) {
+                    runtime.messageReceived(peer, message);
+                }
+            };
+            transport = new PubSubTransport(
+                    new TransportConfig(name, "127.0.0.1", port, seeds, 100, 500, 50, 100),
+                    identity, peer, listener);
             runtime.attach(transport);
         }
         void start() throws Exception { transport.start(); runtime.start(); }

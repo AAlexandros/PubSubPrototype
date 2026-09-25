@@ -28,7 +28,7 @@ final class DatasetCatalog {
     static final Map<String, Dataset> ALL;
     static {
         Map<String, Dataset> all = new LinkedHashMap<>();
-        add(all, "runs", "One record per experiment run", List.of(
+        add(all, TelemetryConstants.Dataset.RUNS, "One record per experiment run", List.of(
                 f("runId", Type.STRING, "identifier", "Unique run identifier", false, "experiment-controller"),
                 f("scenarioId", Type.STRING, "identifier", "Scenario identifier", false, "scenario"),
                 f("repetition", Type.LONG, "count", "Repetition index", false, "scenario"),
@@ -42,7 +42,7 @@ final class DatasetCatalog {
                 f("telemetryConfiguration", Type.STRING, "JSON", "Telemetry settings", false, "scenario"),
                 f("status", Type.STRING, "enum", "RUNNING, PASSED, or FAILED", false, "experiment-controller")
         ));
-        add(all, "event_lifecycle", "Event stage observations", observations(
+        add(all, TelemetryConstants.Dataset.EVENT_LIFECYCLE, "Event stage observations", observations(
                 f("nodeId", Type.STRING, "identifier", "Observing node", true, "pubsub-node"),
                 f("topicId", Type.STRING, "identifier", "Topic", false, "pubsub-node"),
                 f("eventId", Type.STRING, "identifier", "Event content identifier", false, "pubsub-node"),
@@ -53,7 +53,7 @@ final class DatasetCatalog {
                 f("stage", Type.STRING, "enum", "Lifecycle stage", false, "pubsub-node"),
                 f("reason", Type.STRING, "text", "Rejection or duplicate detail", true, "pubsub-node")
         ));
-        add(all, "message_transmissions", "Actual protocol message sends", observations(
+        add(all, TelemetryConstants.Dataset.MESSAGE_TRANSMISSIONS, "Actual protocol message sends", observations(
                 f("fromNodeId", Type.STRING, "identifier", "Sender", false, "transport/persistence client"),
                 f("toNodeId", Type.STRING, "identifier", "Receiver", false, "transport/persistence client"),
                 f("protocolLayer", Type.STRING, "enum", "TRANSPORT, SECURECYCLON, NAVIGATION, DISSEMINATION, or PERSISTENCE", false, "runtime"),
@@ -63,7 +63,7 @@ final class DatasetCatalog {
                 f("bytes", Type.LONG, "bytes", "Serialized transmission size", false, "runtime"),
                 f("success", Type.BOOLEAN, "boolean", "Transmission completed successfully", false, "runtime")
         ));
-        add(all, "overlay_edges", "Logical overlay snapshots", observations(
+        add(all, TelemetryConstants.Dataset.OVERLAY_EDGES, "Logical overlay snapshots", observations(
                 f("layer", Type.STRING, "enum", "SECURECYCLON, NAVIGATION, or DISSEMINATION", false, "experiment-controller"),
                 f("nodeId", Type.STRING, "identifier", "Local endpoint", false, "runtime API"),
                 f("peerNodeId", Type.STRING, "identifier", "Remote endpoint", false, "runtime API"),
@@ -71,7 +71,7 @@ final class DatasetCatalog {
                 f("role", Type.STRING, "enum", "Edge role", true, "runtime API"),
                 f("freshness", Type.LONG, "milliseconds", "Reported edge age", true, "runtime API")
         ));
-        add(all, "protocol_cycles", "Protocol and maintenance cycle observations", observations(
+        add(all, TelemetryConstants.Dataset.PROTOCOL_CYCLES, "Protocol and maintenance cycle observations", observations(
                 f("componentId", Type.STRING, "identifier", "Node or server running the cycle", false, "runtime"),
                 f("protocol", Type.STRING, "enum", "SECURECYCLON, NAVIGATION, DISSEMINATION, or REPLICA_MAINTENANCE", false, "runtime"),
                 f("cycleNumber", Type.LONG, "count", "Monotonic cycle index", false, "experiment-controller"),
@@ -79,13 +79,13 @@ final class DatasetCatalog {
                 f("viewSize", Type.LONG, "count", "Observed view size", true, "runtime API"),
                 f("success", Type.BOOLEAN, "boolean", "Cycle/API sample succeeded", false, "experiment-controller")
         ));
-        add(all, "subscriptions", "Subscription changes and effective state", observations(
+        add(all, TelemetryConstants.Dataset.SUBSCRIPTIONS, "Subscription changes and effective state", observations(
                 f("nodeId", Type.STRING, "identifier", "Subscriber node", false, "pubsub-node API"),
                 f("topicId", Type.STRING, "identifier", "Topic", false, "pubsub-node API"),
                 f("action", Type.STRING, "enum", "SUBSCRIBE, UNSUBSCRIBE, or SNAPSHOT", false, "experiment-controller"),
                 f("subscribed", Type.BOOLEAN, "boolean", "Effective state", false, "pubsub-node API")
         ));
-        add(all, "persistence_operations", "Persistence and recovery operations", observations(
+        add(all, TelemetryConstants.Dataset.PERSISTENCE_OPERATIONS, "Persistence and recovery operations", observations(
                 f("nodeId", Type.STRING, "identifier", "Initiating node", true, "pubsub-node"),
                 f("serverId", Type.STRING, "identifier", "Serving replication server", true, "replication-server"),
                 f("operation", Type.STRING, "enum", "STORE, LOOKUP, RECOVERY_LOOKUP, REPAIR, RELEASE, or TOPIC_LOG_UPDATE", false, "runtime"),
@@ -96,7 +96,7 @@ final class DatasetCatalog {
                 f("success", Type.BOOLEAN, "boolean", "Operation succeeded", false, "runtime"),
                 f("recordCount", Type.LONG, "count", "Records affected or recovered", true, "runtime")
         ));
-        add(all, "replica_state", "Replica ownership and responsibility snapshots", observations(
+        add(all, TelemetryConstants.Dataset.REPLICA_STATE, "Replica ownership and responsibility snapshots", observations(
                 f("serverId", Type.STRING, "identifier", "Server holding/reporting the record", false, "replication-server API"),
                 f("recordType", Type.STRING, "enum", "EVENT or TOPIC_LOG", false, "replication-server API"),
                 f("eventKey", Type.STRING, "identifier", "Event persistence key", true, "replication-server API"),
@@ -105,13 +105,13 @@ final class DatasetCatalog {
                 f("responsible", Type.BOOLEAN, "boolean", "Server belongs to current responsible set", true, "experiment-controller"),
                 f("membershipVersion", Type.STRING, "hash", "Replication membership fingerprint", true, "replication-server API")
         ));
-        add(all, "faults", "Explicit fault injections and recoveries", observations(
+        add(all, TelemetryConstants.Dataset.FAULTS, "Explicit fault injections and recoveries", observations(
                 f("targetId", Type.STRING, "identifier", "Affected node/server", false, "experiment-controller"),
                 f("faultType", Type.STRING, "enum", "STOP, START, RESTART, MEMBERSHIP_CHANGE, or REPLICATION_FACTOR_CHANGE", false, "scenario"),
                 f("action", Type.STRING, "enum", "INJECTED or CLEARED", false, "experiment-controller"),
                 f("details", Type.STRING, "JSON/text", "Fault parameters", true, "scenario")
         ));
-        add(all, "resource_samples", "Process/container resource observations", observations(
+        add(all, TelemetryConstants.Dataset.RESOURCE_SAMPLES, "Process/container resource observations", observations(
                 f("componentId", Type.STRING, "identifier", "Sampled node/server", false, "experiment-controller"),
                 f("cpuPercent", Type.DOUBLE, "percent", "CPU utilization", true, "container runtime"),
                 f("rssBytes", Type.LONG, "bytes", "Resident memory", true, "container runtime"),
@@ -124,7 +124,7 @@ final class DatasetCatalog {
                 f("storedEventBytes", Type.LONG, "bytes", "Stored event payload estimate", true, "replication-server API"),
                 f("openConnections", Type.LONG, "count", "Active peer connections", true, "runtime API")
         ));
-        add(all, "cardano_transactions", "Local registry control-plane transactions", observations(
+        add(all, TelemetryConstants.Dataset.CARDANO_TRANSACTIONS, "Local registry control-plane transactions", observations(
                 f("operation", Type.STRING, "enum", "Registry operation", false, "experiment-controller"),
                 f("registry", Type.STRING, "enum", "TOPIC or REPLICATION", false, "experiment-controller"),
                 f("transactionId", Type.STRING, "identifier", "Transaction hash when reported", true, "cardano-cli"),

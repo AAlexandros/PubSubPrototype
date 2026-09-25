@@ -26,7 +26,7 @@ existing phase entrypoints remain stable.
   conversion, aggregation, summaries, and data-dictionary rendering.
 - Remaining high-risk oversized types include `ReplicaMaintenanceManager`,
   `CardanoTransactionBuilder`, `DisseminationEngine`, `PubSubTransport`,
-  `PeerSessionHandler`, and `NodeConfigLoader`. They need additional
+  `PeerSessionHandler`, and `NodeConfig`. They need additional
   characterization tests before extraction.
 - `ProtocolMessage` is a nullable multi-purpose record and `protocol-core`
   depends on domain implementations. Changing that shape would alter the wire

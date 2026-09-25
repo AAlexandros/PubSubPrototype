@@ -77,7 +77,8 @@ Requirements:
 
 - configurable view size;
 - no self entry;
-- no duplicate `nodeId`;
+- multiple distinct descriptors may have the same creator `nodeId`, as in the
+  SecureCyclon reference implementation;
 - stale/departed peers are eventually removed;
 - new peers can replace existing entries;
 - the view changes through SecureCyclon gossip, not through global membership knowledge.
@@ -176,7 +177,8 @@ Using the PeerNet simulation as the behavioral reference, verify:
 - exchange validation;
 - view update/replacement;
 - freshness/aging behavior;
-- duplicate rejection;
+- exact duplicate descriptor rejection while allowing distinct descriptors from
+  the same creator;
 - self-entry rejection;
 - bounded view size;
 - secure fresh-link generation limits.

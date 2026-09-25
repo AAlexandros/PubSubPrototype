@@ -3,6 +3,10 @@ package org.pubsub.prototype.node;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.navigation.SubscriptionStore;
+import org.pubsub.prototype.node.adapter.transport.NodeTransportListener;
+import org.pubsub.prototype.node.runtimes.DisseminationRuntime;
+import org.pubsub.prototype.node.runtimes.NavigationRuntime;
+import org.pubsub.prototype.node.service.NodeEventCoordinator;
 import org.pubsub.prototype.protocol.IdentityStore;
 import org.pubsub.prototype.protocol.NodeIdentity;
 import org.pubsub.prototype.sampling.NodeEndpoint;
@@ -56,23 +60,20 @@ class DisseminationIntegrationTest {
         final PubSubTransport transport;
 
         Node(String name, int port, NodeIdentity identity, NodeEndpoint sample) {
-            NodeConfig.NavigationSection navigationConfig = new NodeConfig.NavigationSection();
-            navigationConfig.cycleIntervalMs = 100;
-            navigationConfig.staleAfterMs = 60_000;
-            SubscriptionStore store = SubscriptionStore.loadOrCreate(dir.resolve(name + "-subscriptions.txt"));
+            SubscriptionStore store = SubscriptionStore.loadOrCreate(dir.resolve(name + "-subscriptions.json"));
             store.add(TOPIC);
             navigation = new NavigationRuntime(identity.nodeId().value(), "127.0.0.1", port, store,
-                    navigationConfig, () -> List.of(TOPIC), () -> List.of(sample));
+                    new NavigationRuntime.Settings(2, 2, 100, 60_000),
+                    () -> List.of(TOPIC), () -> List.of(sample));
 
-            NodeConfig.DisseminationSection disseminationConfig = new NodeConfig.DisseminationSection();
-            disseminationConfig.cycleIntervalMs = 100;
-            disseminationConfig.staleAfterMs = 60_000;
             dissemination = new DisseminationRuntime(identity.nodeId().value(), "127.0.0.1", port,
-                    disseminationConfig, navigation, () -> List.of(TOPIC));
-            NodeEventService events = new NodeEventService(identity, dir.resolve(name + "-events"),
+                    new DisseminationRuntime.Settings(1, 100, 60_000, name.hashCode()),
+                    navigation, () -> List.of(TOPIC));
+            NodeEventCoordinator events = new NodeEventCoordinator(identity, dir.resolve(name + "-events"),
                     topicId -> Optional.empty());
             transport = new PubSubTransport(new TransportConfig(name, "127.0.0.1", port,
                     List.of(), 100, 500, 50, 100), identity,
+                    new NodeEndpoint(identity.nodeId().value(), "127.0.0.1", port),
                     new NodeTransportListener(null, navigation, dissemination, events));
             navigation.attach(transport);
             dissemination.attach(transport);

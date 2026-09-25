@@ -3,6 +3,9 @@ package org.pubsub.prototype.node;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.navigation.SubscriptionStore;
+import org.pubsub.prototype.node.adapter.transport.NodeTransportListener;
+import org.pubsub.prototype.node.runtimes.NavigationRuntime;
+import org.pubsub.prototype.node.service.NodeEventCoordinator;
 import org.pubsub.prototype.protocol.IdentityStore;
 import org.pubsub.prototype.protocol.NodeIdentity;
 import org.pubsub.prototype.sampling.NodeEndpoint;
@@ -38,7 +41,7 @@ class NavigationIntegrationTest {
             a.start();
             b.start();
 
-            await(() -> !a.runtime.engine().view().isEmpty() && !b.runtime.engine().view().isEmpty());
+            await(() -> !a.runtime.navigation().view().isEmpty() && !b.runtime.navigation().view().isEmpty());
             await(() -> a.transport.activePeerCount() == 1 && b.transport.activePeerCount() == 1);
 
             assertTrue(knows(a, peerB));
@@ -54,13 +57,13 @@ class NavigationIntegrationTest {
             node.start();
             node.runtime.subscribe(TOPICS.get(0));
 
-            assertTrue(node.runtime.engine().subscriptions().contains(TOPICS.get(0)));
-            assertTrue(SubscriptionStore.loadOrCreate(dir.resolve("solo-subscriptions.txt")).snapshot().contains(TOPICS.get(0)));
+            assertTrue(node.runtime.navigation().subscriptions().contains(TOPICS.get(0)));
+            assertTrue(SubscriptionStore.loadOrCreate(dir.resolve("solo-subscriptions.json")).snapshot().contains(TOPICS.get(0)));
         }
     }
 
     private static boolean knows(Node node, NodeEndpoint peer) {
-        return node.runtime.engine().view().values().stream()
+        return node.runtime.navigation().view().values().stream()
                 .flatMap(List::stream)
                 .anyMatch(candidate -> candidate.nodeId().equals(peer.nodeId()));
     }
@@ -70,16 +73,15 @@ class NavigationIntegrationTest {
         final PubSubTransport transport;
 
         Node(String name, int port, NodeIdentity identity, List<String> subscriptions, List<NodeEndpoint> samples) {
-            NodeConfig.NavigationSection config = new NodeConfig.NavigationSection();
-            config.cycleIntervalMs = 150;
-            config.staleAfterMs = 60_000;
-            SubscriptionStore store = SubscriptionStore.loadOrCreate(dir.resolve(name + "-subscriptions.txt"));
+            SubscriptionStore store = SubscriptionStore.loadOrCreate(dir.resolve(name + "-subscriptions.json"));
             subscriptions.forEach(store::add);
-            runtime = new NavigationRuntime(identity.nodeId().value(), "127.0.0.1", port, store, config,
+            runtime = new NavigationRuntime(identity.nodeId().value(), "127.0.0.1", port, store,
+                    new NavigationRuntime.Settings(2, 2, 150, 60_000),
                     () -> TOPICS, () -> samples);
-            NodeEventService events = new NodeEventService(identity, dir.resolve(name + "-events"), topicId -> Optional.empty());
+            NodeEventCoordinator events = new NodeEventCoordinator(identity, dir.resolve(name + "-events"), topicId -> Optional.empty());
             transport = new PubSubTransport(new TransportConfig(name, "127.0.0.1", port, List.of(), 100, 500, 50, 100),
-                    identity, new NodeTransportListener(null, runtime, null, events));
+                    identity, new NodeEndpoint(identity.nodeId().value(), "127.0.0.1", port),
+                    new NodeTransportListener(null, runtime, null, events));
             runtime.attach(transport);
         }
 

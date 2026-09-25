@@ -8,7 +8,6 @@ logback = "1.5.6"
 netty = "4.1.112.Final"
 parquet = "1.15.2"
 slf4j = "2.0.13"
-snakeyaml = "2.2"
 
 [libraries]
 avro = { module = "org.apache.avro:avro", version.ref = "avro" }
@@ -21,4 +20,4 @@ logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "lo
 netty-all = { module = "io.netty:netty-all", version.ref = "netty" }
 parquet-avro = { module = "org.apache.parquet:parquet-avro", version.ref = "parquet" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
-snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
+jackson-dataformat-yaml = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml", version.ref = "jackson" }

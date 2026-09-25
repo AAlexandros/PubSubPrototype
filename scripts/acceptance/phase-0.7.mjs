@@ -75,6 +75,9 @@ timing:
   requestTimeoutMs: 3000
   retries: 1
   cleanupIntervalMs: 1000
+  failureProbeAttempts: 3
+  failureProbeTimeoutMs: 5000
+  maintenanceIntervalMs: 1000
 epoch:
   zeroTimeMs: ${epochZero}
   lengthMs: ${epochLength}

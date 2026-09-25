@@ -29,6 +29,7 @@ public final class ReplicationServerMain {
     }
 
     public static void main(String[] args) throws Exception {
+        // Load replication server configuration
         if (args.length != 1) {
             System.err.println("Usage: replication-server <config.yaml>");
             System.exit(2);

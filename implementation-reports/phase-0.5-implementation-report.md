@@ -22,7 +22,7 @@ under `implementation-reports/evidence/phase-0.5/`.
 ## Completed
 
 - Added a transport- and registry-independent `libs/navigation` module:
-  `TopicOrdering` (deterministic lexicographic ordinal assignment from an
+  `TopicIndex` (deterministic lexicographic ordinal assignment from an
   active topic-id set), `FingerTopics` (cyclic distance and `x, x +/- b^0,
   x +/- b^1, ...` target enumeration, stopping once the distance exceeds
   `T/2`, duplicates collapsed), a bounded `NavigationView` (up to `c`
@@ -76,11 +76,11 @@ under `implementation-reports/evidence/phase-0.5/`.
 | Area | Files and purpose |
 | --- | --- |
 | Modules | `settings.gradle.kts`; new `libs/navigation/build.gradle.kts`; dependency added to `libs/protocol-core/build.gradle.kts` and `apps/pubsub-node/build.gradle.kts`. |
-| Navigation core | `libs/navigation/src/main/java/org/pubsub/prototype/navigation/{NavigationPeerDescriptor,NavigationExchange,TopicOrdering,FingerTopics,NavigationView,NavigationEngine,SubscriptionStore}.java`. |
+| Navigation core | `libs/navigation/src/main/java/org/pubsub/prototype/navigation/{NavigationPeerDescriptor,NavigationExchange,TopicIndex,FingerTopics,NavigationView,NavigationEngine,SubscriptionStore}.java`. |
 | Wire protocol | `MessageType.java` (`NAVIGATION_REQUEST`/`NAVIGATION_RESPONSE`), `ProtocolMessage.java` (`navigation` field, `navigationGossip` factory), `ProtocolCodec.java` (validation) under `libs/protocol-core/src/main/java/org/pubsub/prototype/protocol/`. |
 | Transport | `PeerSessionHandler.java` under `libs/transport-netty/src/main/java/org/pubsub/prototype/transport/` (dispatch new message types through the existing generic sampling path). |
 | Node runtime | New `NavigationRuntime.java`, `NodeTransportListener.java`; changes to `NodeConfig.java`, `NodeConfigLoader.java`, `RegistrySynchronizer.java`, `PubSubNodeMain.java`, `EventControlServer.java` under `apps/pubsub-node/src/main/java/org/pubsub/prototype/node/`. |
-| Tests | `TopicOrderingTest.java`, `FingerTopicsTest.java`, `NavigationViewTest.java`, `NavigationEngineTest.java`, `SubscriptionStoreTest.java` (`libs/navigation`); `NavigationCodecTest.java` (`libs/protocol-core`); `NavigationIntegrationTest.java` (`apps/pubsub-node`). |
+| Tests | `TopicIndexTest.java`, `FingerTopicsTest.java`, `NavigationViewTest.java`, `NavigationEngineTest.java`, `SubscriptionStoreTest.java` (`libs/navigation`); `NavigationCodecTest.java` (`libs/protocol-core`); `NavigationIntegrationTest.java` (`apps/pubsub-node`). |
 | Operations | `ops/config/phase-0.5/node-{1,2,3}.yaml`, `ops/infra/phase-0.5/compose.yaml`, `scripts/acceptance/phase-0.5.sh`, `scripts/acceptance/phase-0.5.mjs`. |
 | Documentation | `README.md`, `documentation/scripts.md`, `libs/navigation/README.md`, this report. |
 | Generated evidence | `implementation-reports/evidence/phase-0.5/` (ignored by Git, following the existing repository convention). |
@@ -92,7 +92,7 @@ Docker Desktop Linux containers, the existing Cardano testnet integration, and
 the real Aiken registry contract.
 
 - `gradlew.bat build`: passed (all modules, including the new `libs:navigation`).
-- Unit tests: `TopicOrderingTest`, `FingerTopicsTest`, `NavigationViewTest`,
+- Unit tests: `TopicIndexTest`, `FingerTopicsTest`, `NavigationViewTest`,
   `NavigationEngineTest`, `SubscriptionStoreTest` cover deterministic ordering
   from an unordered/duplicate topic-id set, cyclic modulo distance, finger-topic
   generation (including the `T/2` stopping rule and multi-subscription union),
@@ -159,7 +159,7 @@ Evidence is under `implementation-reports/evidence/phase-0.5/`:
   replacement logic directly rather than its logarithmic bucket-index scheme,
   and a peer's distance is treated as unknown (worst-ranked) until its real
   subscriptions are learned through an actual gossip exchange. See
-  [the module reference mapping](../libs/navigation/README.md) for the full
+  [the navigation reference mapping](../libs/docs/navigation.md) for the full
   mapping and adaptations. Neither reference repository was modified. Only the
   Navigation layer (`VicinityNav` equivalent) is in scope for Phase 0.5; the
   ring-based same-topic dissemination layer (`VicinityTop`/`Dissemination` in

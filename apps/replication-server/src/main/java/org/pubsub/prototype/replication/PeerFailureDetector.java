@@ -5,6 +5,9 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.pubsub.prototype.replication.ReplicationConfigConstants.FAILURE_PROBE_ATTEMPTS;
+import static org.pubsub.prototype.util.Validators.requirePositive;
+
 final class PeerFailureDetector {
     enum Transition { NONE, SUSPECTED, CONFIRMED_DOWN, RECOVERED }
 
@@ -13,8 +16,7 @@ final class PeerFailureDetector {
     private final Set<String> confirmedDown = ConcurrentHashMap.newKeySet();
 
     PeerFailureDetector(int attemptsRequired) {
-        if (attemptsRequired < 1) throw new IllegalArgumentException("failureProbeAttempts must be positive");
-        this.attemptsRequired = attemptsRequired;
+        this.attemptsRequired = requirePositive(attemptsRequired, FAILURE_PROBE_ATTEMPTS);
     }
 
     Transition failed(String serverId) {

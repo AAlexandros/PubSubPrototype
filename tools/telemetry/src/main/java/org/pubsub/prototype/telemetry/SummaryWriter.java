@@ -12,66 +12,61 @@ import java.util.ArrayList;
 import java.util.List;
 
 final class SummaryWriter {
-    private static final String STAGE_FIELD = "stage";
-    private static final String PUBLISHED_STAGE = "PUBLISHED";
-    private static final String ACCEPTED_STAGE = "ACCEPTED";
-    private static final String DUPLICATE_STAGE = "DUPLICATE";
-
     static void write(Path runDir) throws IOException {
         Path derived = runDir.resolve(TelemetryLayout.DERIVED_DIRECTORY);
         Files.createDirectories(derived);
-        List<JsonNode> lifecycle = read(TelemetryLayout.rawDataset(runDir, "event_lifecycle"));
-        List<JsonNode> messages = read(TelemetryLayout.rawDataset(runDir, "message_transmissions"));
-        List<JsonNode> persistence = read(TelemetryLayout.rawDataset(runDir, "persistence_operations"));
-        List<JsonNode> resources = read(TelemetryLayout.rawDataset(runDir, "resource_samples"));
-        List<JsonNode> subscriptions = read(TelemetryLayout.rawDataset(runDir, "subscriptions"));
-        List<JsonNode> overlays = read(TelemetryLayout.rawDataset(runDir, "overlay_edges"));
-        List<JsonNode> cardano = read(TelemetryLayout.rawDataset(runDir, "cardano_transactions"));
-        long published = lifecycle.stream().filter(x -> PUBLISHED_STAGE.equals(x.path(STAGE_FIELD).asText()))
-                .map(x -> x.path("eventId").asText()).distinct().count();
-        long accepted = lifecycle.stream().filter(x -> ACCEPTED_STAGE.equals(x.path(STAGE_FIELD).asText()))
-                .map(x -> x.path("eventId").asText() + "@" + x.path("nodeId").asText()).distinct().count();
-        long duplicates = lifecycle.stream().filter(x -> DUPLICATE_STAGE.equals(x.path(STAGE_FIELD).asText())).count();
-        long transmissionBytes = messages.stream().mapToLong(x -> x.path("bytes").asLong()).sum();
-        double meanCpu = resources.stream().filter(x -> x.hasNonNull("cpuPercent"))
-                .mapToDouble(x -> x.path("cpuPercent").asDouble()).average().orElse(0);
-        double meanPersistence = persistence.stream().filter(x -> x.hasNonNull("durationMs"))
-                .mapToDouble(x -> x.path("durationMs").asDouble()).average().orElse(0);
-        long subscriberCount = subscriptions.stream().filter(x -> x.path("subscribed").asBoolean())
-                .map(x -> x.path("nodeId").asText()).distinct().count();
+        List<JsonNode> lifecycle = read(TelemetryLayout.rawDataset(runDir, TelemetryConstants.Dataset.EVENT_LIFECYCLE));
+        List<JsonNode> messages = read(TelemetryLayout.rawDataset(runDir, TelemetryConstants.Dataset.MESSAGE_TRANSMISSIONS));
+        List<JsonNode> persistence = read(TelemetryLayout.rawDataset(runDir, TelemetryConstants.Dataset.PERSISTENCE_OPERATIONS));
+        List<JsonNode> resources = read(TelemetryLayout.rawDataset(runDir, TelemetryConstants.Dataset.RESOURCE_SAMPLES));
+        List<JsonNode> subscriptions = read(TelemetryLayout.rawDataset(runDir, TelemetryConstants.Dataset.SUBSCRIPTIONS));
+        List<JsonNode> overlays = read(TelemetryLayout.rawDataset(runDir, TelemetryConstants.Dataset.OVERLAY_EDGES));
+        List<JsonNode> cardano = read(TelemetryLayout.rawDataset(runDir, TelemetryConstants.Dataset.CARDANO_TRANSACTIONS));
+        long published = lifecycle.stream().filter(x -> TelemetryConstants.Stage.PUBLISHED.equals(x.path(TelemetryConstants.Field.STAGE).asText()))
+                .map(x -> x.path(TelemetryConstants.Field.EVENT_ID).asText()).distinct().count();
+        long accepted = lifecycle.stream().filter(x -> TelemetryConstants.Stage.ACCEPTED.equals(x.path(TelemetryConstants.Field.STAGE).asText()))
+                .map(x -> x.path(TelemetryConstants.Field.EVENT_ID).asText() + "@" + x.path(TelemetryConstants.Field.NODE_ID).asText()).distinct().count();
+        long duplicates = lifecycle.stream().filter(x -> TelemetryConstants.Stage.DUPLICATE.equals(x.path(TelemetryConstants.Field.STAGE).asText())).count();
+        long transmissionBytes = messages.stream().mapToLong(x -> x.path(TelemetryConstants.Field.BYTES).asLong()).sum();
+        double meanCpu = resources.stream().filter(x -> x.hasNonNull(TelemetryConstants.Field.CPU_PERCENT))
+                .mapToDouble(x -> x.path(TelemetryConstants.Field.CPU_PERCENT).asDouble()).average().orElse(0);
+        double meanPersistence = persistence.stream().filter(x -> x.hasNonNull(TelemetryConstants.Field.DURATION_MS))
+                .mapToDouble(x -> x.path(TelemetryConstants.Field.DURATION_MS).asDouble()).average().orElse(0);
+        long subscriberCount = subscriptions.stream().filter(x -> x.path(TelemetryConstants.Field.SUBSCRIBED).asBoolean())
+                .map(x -> x.path(TelemetryConstants.Field.NODE_ID).asText()).distinct().count();
         double coverage = published == 0 || subscriberCount == 0
                 ? 0 : Math.min(1, (double) accepted / (published * subscriberCount));
-        double p95Persistence = percentile(persistence.stream().filter(x -> x.hasNonNull("durationMs"))
-                .mapToDouble(x -> x.path("durationMs").asDouble()).sorted().toArray(), 0.95);
-        double meanCardano = cardano.stream().mapToDouble(x -> x.path("durationMs").asDouble()).average().orElse(0);
-        long distinctEdges = overlays.stream().map(x -> x.path("layer").asText() + ':' + x.path("nodeId").asText()
-                + ':' + x.path("peerNodeId").asText() + ':' + x.path("topicId").asText()).distinct().count();
+        double p95Persistence = percentile(persistence.stream().filter(x -> x.hasNonNull(TelemetryConstants.Field.DURATION_MS))
+                .mapToDouble(x -> x.path(TelemetryConstants.Field.DURATION_MS).asDouble()).sorted().toArray(), 0.95);
+        double meanCardano = cardano.stream().mapToDouble(x -> x.path(TelemetryConstants.Field.DURATION_MS).asDouble()).average().orElse(0);
+        long distinctEdges = overlays.stream().map(x -> x.path(TelemetryConstants.Field.LAYER).asText() + ':' + x.path(TelemetryConstants.Field.NODE_ID).asText()
+                + ':' + x.path(TelemetryConstants.Field.PEER_NODE_ID).asText() + ':' + x.path(TelemetryConstants.Field.TOPIC_ID).asText()).distinct().count();
         ObjectNode summary = TelemetryJson.MAPPER.createObjectNode();
-        summary.put("publishedEventCount", published);
-        summary.put("acceptedObservationCount", accepted);
-        summary.put("deliveryHitRatio", coverage);
-        summary.put("deliveryCoverage", coverage);
-        summary.put("duplicateCount", duplicates);
-        summary.put("messageCount", messages.size());
-        summary.put("messageBytes", transmissionBytes);
-        summary.put("messageOverheadPerPublishedEvent", published == 0 ? 0 : (double) messages.size() / published);
-        summary.put("meanPersistenceLatencyMs", meanPersistence);
-        summary.put("p95PersistenceLatencyMs", p95Persistence);
-        summary.put("meanCpuPercent", meanCpu);
-        summary.put("overlayDistinctEdgeCount", distinctEdges);
-        summary.put("meanCardanoControlPlaneLatencyMs", meanCardano);
+        summary.put(TelemetryConstants.Metric.PUBLISHED_EVENT_COUNT, published);
+        summary.put(TelemetryConstants.Metric.ACCEPTED_OBSERVATION_COUNT, accepted);
+        summary.put(TelemetryConstants.Metric.DELIVERY_HIT_RATIO, coverage);
+        summary.put(TelemetryConstants.Metric.DELIVERY_COVERAGE, coverage);
+        summary.put(TelemetryConstants.Metric.DUPLICATE_COUNT, duplicates);
+        summary.put(TelemetryConstants.Metric.MESSAGE_COUNT, messages.size());
+        summary.put(TelemetryConstants.Metric.MESSAGE_BYTES, transmissionBytes);
+        summary.put(TelemetryConstants.Metric.MESSAGE_OVERHEAD_PER_PUBLISHED_EVENT, published == 0 ? 0 : (double) messages.size() / published);
+        summary.put(TelemetryConstants.Metric.MEAN_PERSISTENCE_LATENCY_MS, meanPersistence);
+        summary.put(TelemetryConstants.Metric.P95_PERSISTENCE_LATENCY_MS, p95Persistence);
+        summary.put(TelemetryConstants.Metric.MEAN_CPU_PERCENT, meanCpu);
+        summary.put(TelemetryConstants.Metric.OVERLAY_DISTINCT_EDGE_COUNT, distinctEdges);
+        summary.put(TelemetryConstants.Metric.MEAN_CARDANO_CONTROL_PLANE_LATENCY_MS, meanCardano);
         TelemetryJson.MAPPER.writerWithDefaultPrettyPrinter()
                 .writeValue(derived.resolve(TelemetryLayout.SUMMARY_JSON).toFile(), summary);
         String csv = "metric,value\n" +
-                "publishedEventCount," + published + "\n" +
-                "acceptedObservationCount," + accepted + "\n" +
-                "deliveryHitRatio," + summary.path("deliveryHitRatio").asDouble() + "\n" +
-                "duplicateCount," + duplicates + "\n" +
-                "messageCount," + messages.size() + "\n" +
-                "messageBytes," + transmissionBytes + "\n" +
-                "meanPersistenceLatencyMs," + meanPersistence + "\n" +
-                "p95PersistenceLatencyMs," + p95Persistence + "\n" +
-                "meanCpuPercent," + meanCpu + "\n";
+                TelemetryConstants.Metric.PUBLISHED_EVENT_COUNT + ',' + published + "\n" +
+                TelemetryConstants.Metric.ACCEPTED_OBSERVATION_COUNT + ',' + accepted + "\n" +
+                TelemetryConstants.Metric.DELIVERY_HIT_RATIO + ',' + summary.path(TelemetryConstants.Metric.DELIVERY_HIT_RATIO).asDouble() + "\n" +
+                TelemetryConstants.Metric.DUPLICATE_COUNT + ',' + duplicates + "\n" +
+                TelemetryConstants.Metric.MESSAGE_COUNT + ',' + messages.size() + "\n" +
+                TelemetryConstants.Metric.MESSAGE_BYTES + ',' + transmissionBytes + "\n" +
+                TelemetryConstants.Metric.MEAN_PERSISTENCE_LATENCY_MS + ',' + meanPersistence + "\n" +
+                TelemetryConstants.Metric.P95_PERSISTENCE_LATENCY_MS + ',' + p95Persistence + "\n" +
+                TelemetryConstants.Metric.MEAN_CPU_PERCENT + ',' + meanCpu + "\n";
         Files.writeString(derived.resolve(TelemetryLayout.SUMMARY_CSV), csv, StandardCharsets.UTF_8);
     }
 

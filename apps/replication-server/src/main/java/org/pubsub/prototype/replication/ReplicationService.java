@@ -20,6 +20,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.pubsub.prototype.util.PersistenceConstants.SINCE_TIMESTAMP_FIELD;
+import static org.pubsub.prototype.util.Validators.requireNonNegative;
+
 final class ReplicationService {
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationService.class);
     private final ReplicationServer self;
@@ -100,7 +103,7 @@ final class ReplicationService {
     }
 
     List<PublisherProgress> publisherProgress(String topicId, long sinceTimestamp) {
-        if (sinceTimestamp < 0) throw new IllegalArgumentException("sinceTimestamp must be non-negative");
+        requireNonNegative(sinceTimestamp, SINCE_TIMESTAMP_FIELD);
         String key = EventKeys.topicLogKey(topicId);
         TopicState topic = validatorTopic(topicId);
         for (ReplicationServer candidate : DhtAssignment.responsibleServers(key, activeHealthyServers(), topic.replicationFactor())) {

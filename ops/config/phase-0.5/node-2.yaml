@@ -25,9 +25,11 @@ peerSampling:
   swapLength: 2
   cycleIntervalMs: 2000
   ageThreshold: 10
+  proofFanout: 2
   randomSeed: 2
 navigation:
   capacity: 2
   routingBase: 2
   cycleIntervalMs: 2000
   staleAfterMs: 20000
+  subscriptionsPath: /data/identity/subscriptions.json

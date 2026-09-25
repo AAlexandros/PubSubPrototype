@@ -77,9 +77,9 @@ if (mode === 'prepare-devnet') {
 } else if (mode === 'finger-topics') {
   const current = await views();
   for (const node of current) {
-    const ordinals = node.subscriptions.map(id => node.topicOrdering.indexOf(id)).filter(i => i >= 0);
+    const ordinals = node.subscriptions.map(id => node.topicIndex.indexOf(id)).filter(i => i >= 0);
     const expected = new Set();
-    for (const ordinal of ordinals) for (const t of fingerTopics(ordinal, node.topicOrdering.length, 2)) expected.add(t);
+    for (const ordinal of ordinals) for (const t of fingerTopics(ordinal, node.topicIndex.length, 2)) expected.add(t);
     const actual = new Set(node.fingerTopics);
     if (expected.size !== actual.size || [...expected].some(t => !actual.has(t))) {
       throw Error(`Finger topics mismatch for ${node.nodeId}: expected ${[...expected]} got ${[...actual]}`);
@@ -107,8 +107,8 @@ if (mode === 'prepare-devnet') {
     // established by the new persistent subscription being reflected in the view
     // and by the endpoint returning a valid finger set for the current ordering.
     if (!after.subscriptions.includes(arg2)) return false;
-    if (!after.fingerTopics.every(t => Number.isInteger(t) && t >= 0 && t < after.topicOrdering.length)) return false;
-    if (after.topicOrdering.length !== before.topicOrdering.length) return false;
+    if (!after.fingerTopics.every(t => Number.isInteger(t) && t >= 0 && t < after.topicIndex.length)) return false;
+    if (after.topicIndex.length !== before.topicIndex.length) return false;
     save(`resubscribe-node-${arg1}`, {before, after}); return true;
   });
 } else if (mode === 'removed') {
@@ -135,13 +135,13 @@ if (mode === 'prepare-devnet') {
 } else if (mode === 'topic-created') {
   await wait(async () => {
     const current = await views();
-    if (!current.every(n => n.topicOrdering.includes(arg1))) return false;
+    if (!current.every(n => n.topicIndex.includes(arg1))) return false;
     save('topic-created-views', current); return true;
   });
 } else if (mode === 'topic-deleted') {
   await wait(async () => {
     const current = await views();
-    if (current.some(n => n.topicOrdering.includes(arg1))) return false;
+    if (current.some(n => n.topicIndex.includes(arg1))) return false;
     save('topic-deleted-views', current); return true;
   });
 } else throw Error(`Unknown mode ${mode}`);

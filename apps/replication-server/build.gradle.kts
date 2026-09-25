@@ -3,10 +3,8 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":libs:http-support"))
-    implementation(project(":libs:persistence-core"))
-    implementation(project(":libs:registry-cardano"))
-    implementation(libs.snakeyaml)
+    implementation(project(":libs"))
+    implementation(libs.jackson.dataformat.yaml)
     implementation(libs.slf4j.api)
     runtimeOnly(libs.logback.classic)
 

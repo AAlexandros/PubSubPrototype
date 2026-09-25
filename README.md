@@ -142,12 +142,7 @@ local state you need to keep. Historical acceptance entrypoints remain under
 | --- | --- |
 | [`apps/pubsub-node`](apps/pubsub-node) | Runnable node: configuration, control API, overlays, event validation/delivery, persistence and recovery integration |
 | [`apps/replication-server`](apps/replication-server) | Runnable storage server: HTTP API, replica placement, failure detection, repair, and safe release |
-| [`libs/peer-sampling`](libs/peer-sampling) | Peer-sampling contract and SecureCyclon implementation |
-| [`libs/navigation`](libs/navigation), [`libs/dissemination`](libs/dissemination) | Topic-aware routing information and live-event overlay |
-| [`libs/event-core`](libs/event-core), [`libs/protocol-core`](libs/protocol-core), [`libs/transport-netty`](libs/transport-netty) | Signed event model, wire messages/codec, identity, framing, sessions, and reconnection |
-| [`libs/registry-cardano`](libs/registry-cardano) | Registry interfaces and Cardano CLI/ledger integration |
-| [`libs/persistence-core`](libs/persistence-core) | Persistence records, DHT placement, local stores, replication client, membership, and recovery |
-| [`libs/http-support`](libs/http-support) | Shared HTTP paths, methods, parameters, error codes, and JSON exchange helpers |
+| [`libs`](libs) | One Gradle library project with separate Java packages for sampling, navigation, dissemination, events, protocol, Netty transport, registry, persistence, HTTP, and shared utilities |
 | [`contracts`](contracts) | Topic and replication registry Aiken contracts |
 | [`tools/telemetry`](tools/telemetry) | JSONL validation, Parquet normalization, aggregation, summaries, and dictionary generation |
 | [`ops/config`](ops/config) | Checked-in node, server, testbed, and scenario configuration |

@@ -35,7 +35,7 @@ node_file "$ROOT_DIR/scripts/replication/registry-data.mjs" export \
   "$(host_path "$ROOT_DIR/contracts/replication-registry/plutus.json")" \
   "$(host_path "$ROOT_DIR/contracts/replication-registry/build/replication-registry.plutus.json")"
 if grep -qi microsoft /proc/version 2>/dev/null; then
-  (cd "$ROOT_DIR" && cmd.exe /c gradlew.bat -q -g .gradle-user-home :libs:persistence-core:test)
+  (cd "$ROOT_DIR" && cmd.exe /c gradlew.bat -q -g .gradle-user-home :libs:test)
 else
-  "$ROOT_DIR/gradlew" -q --gradle-user-home "$ROOT_DIR/.gradle-user-home" :libs:persistence-core:test
+  "$ROOT_DIR/gradlew" -q --gradle-user-home "$ROOT_DIR/.gradle-user-home" :libs:test
 fi

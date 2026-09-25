@@ -24,8 +24,8 @@ registry_cli() {
   mkdir -p "$REGISTRY_RUNTIME_DIR"
   runtime_arg="$(host_path "$REGISTRY_RUNTIME_DIR")"
   if command -v timeout >/dev/null 2>&1; then
-    (cd "$ROOT_DIR" && export ROOT_DIR && export -f pubsub_is_wsl pubsub_is_msys pubsub_uses_windows_tools pubsub_run_gradle run_gradle && timeout "${REGISTRY_CLI_TIMEOUT_SECONDS:-600}s" bash -c 'run_gradle "$@"' _ -q :libs:registry-cardano:run --args="$runtime_arg $*")
+    (cd "$ROOT_DIR" && export ROOT_DIR && export -f pubsub_is_wsl pubsub_is_msys pubsub_uses_windows_tools pubsub_run_gradle run_gradle && timeout "${REGISTRY_CLI_TIMEOUT_SECONDS:-600}s" bash -c 'run_gradle "$@"' _ -q :libs:runRegistryCli --args="$runtime_arg $*")
   else
-    (cd "$ROOT_DIR" && run_gradle -q :libs:registry-cardano:run --args="$runtime_arg $*")
+    (cd "$ROOT_DIR" && run_gradle -q :libs:runRegistryCli --args="$runtime_arg $*")
   fi
 }

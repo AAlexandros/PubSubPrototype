@@ -60,7 +60,7 @@ final class RunNormalizer {
                 count++;
             }
         }
-        if (count == 0 && dataset.name().equals("runs")) {
+        if (count == 0 && dataset.name().equals(TelemetryConstants.Dataset.RUNS)) {
             throw new IllegalArgumentException(input + " must contain a run record");
         }
     }

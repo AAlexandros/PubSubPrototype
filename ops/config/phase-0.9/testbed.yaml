@@ -17,6 +17,7 @@ secureCyclon:
   swapLength: 4
   cycleIntervalMs: 1000
   ageThreshold: 20
+  proofFanout: 8
 navigation:
   capacity: 4
   routingBase: 2

@@ -17,12 +17,12 @@ final class RunAggregator {
         List<Path> runs;
         try (var paths = Files.walk(resultsDir, 3)) {
             runs = paths.filter(path -> Files.isDirectory(path.resolve(TelemetryLayout.RAW_DIRECTORY)))
-                    .filter(path -> !path.startsWith(resultsDir.resolve("combined")))
+                    .filter(path -> !path.startsWith(resultsDir.resolve(TelemetryConstants.Layout.COMBINED_DIRECTORY)))
                     .sorted().toList();
         }
         if (runs.isEmpty()) throw new IllegalArgumentException("No experiment runs found below " + resultsDir);
         System.err.println("[phase-0.9] Aggregating " + runs.size() + " run(s) below " + resultsDir);
-        Path combined = resultsDir.resolve("combined");
+        Path combined = resultsDir.resolve(TelemetryConstants.Layout.COMBINED_DIRECTORY);
         Files.createDirectories(combined.resolve(TelemetryLayout.RAW_DIRECTORY));
         for (DatasetCatalog.Dataset dataset : DatasetCatalog.ALL.values()) {
             Path target = TelemetryLayout.rawDataset(combined, dataset.name());
@@ -41,14 +41,14 @@ final class RunAggregator {
             else System.err.println("[phase-0.9] Reusing normalized run " + run);
         }
         RunNormalizer.normalize(combined);
-        DataDictionaryWriter.write(resultsDir.resolve("data-dictionary.md"));
+        DataDictionaryWriter.write(resultsDir.resolve(TelemetryConstants.Layout.DATA_DICTIONARY_FILE));
         ObjectNode manifest = TelemetryJson.MAPPER.createObjectNode();
-        manifest.put("generatedAt", Instant.now().toString());
-        manifest.put("runCount", runs.size());
-        manifest.set("runs", TelemetryJson.MAPPER.valueToTree(
+        manifest.put(TelemetryConstants.Field.GENERATED_AT, Instant.now().toString());
+        manifest.put(TelemetryConstants.Field.RUN_COUNT, runs.size());
+        manifest.set(TelemetryConstants.Field.RUNS, TelemetryJson.MAPPER.valueToTree(
                 runs.stream().map(resultsDir::relativize).map(Path::toString).toList()));
         TelemetryJson.MAPPER.writerWithDefaultPrettyPrinter()
-                .writeValue(combined.resolve("manifest.json").toFile(), manifest);
+                .writeValue(combined.resolve(TelemetryConstants.Layout.MANIFEST_FILE).toFile(), manifest);
         System.err.println("[phase-0.9] Aggregation complete: " + combined);
     }
 

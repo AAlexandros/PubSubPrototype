@@ -24,6 +24,15 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Executors;
 
+import static org.pubsub.prototype.http.ApiFields.EVENT_KEY;
+import static org.pubsub.prototype.http.ApiFields.EVENT_KEYS;
+import static org.pubsub.prototype.http.ApiFields.MEMBERSHIP;
+import static org.pubsub.prototype.http.ApiFields.SERVER_ID;
+import static org.pubsub.prototype.http.ApiFields.STATUS;
+import static org.pubsub.prototype.http.ApiValues.UP;
+import static org.pubsub.prototype.util.PersistenceConstants.EVENT_KEY_FIELD;
+import static org.pubsub.prototype.util.PersistenceConstants.TOPIC_ID_FIELD;
+
 final class ReplicationHttpServer implements AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationHttpServer.class);
     private static final int MAX_REQUEST_BYTES = 4 * 1024 * 1024;
@@ -66,10 +75,10 @@ final class ReplicationHttpServer implements AutoCloseable {
                 StoredEvent event = service.persist(read(exchange, EventEnvelope.class));
                 respond(exchange, 201, event);
             } else if (HttpMethods.GET.equals(exchange.getRequestMethod()) && !suffix.isEmpty()) {
-                String key = PersistenceHex.require256(suffix, "eventKey");
+                String key = PersistenceHex.require256(suffix, EVENT_KEY_FIELD);
                 var found = service.lookup(key);
                 if (found.isPresent()) respond(exchange, 200, found.orElseThrow());
-                else respond(exchange, 404, Map.of(HttpErrorCodes.ERROR, "event_not_found", "eventKey", key));
+                else respond(exchange, 404, Map.of(HttpErrorCodes.ERROR, "event_not_found", EVENT_KEY, key));
             } else {
                 respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
             }
@@ -92,10 +101,10 @@ final class ReplicationHttpServer implements AutoCloseable {
                 service.storeReplica(event);
                 respond(exchange, 201, event);
             } else if (HttpMethods.GET.equals(exchange.getRequestMethod()) && !suffix.isEmpty()) {
-                String key = PersistenceHex.require256(suffix, "eventKey");
+                String key = PersistenceHex.require256(suffix, EVENT_KEY_FIELD);
                 var found = service.lookupLocal(key);
                 if (found.isPresent()) respond(exchange, 200, found.orElseThrow());
-                else respond(exchange, 404, Map.of(HttpErrorCodes.ERROR, "event_not_found", "eventKey", key));
+                else respond(exchange, 404, Map.of(HttpErrorCodes.ERROR, "event_not_found", EVENT_KEY, key));
             } else respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
         } catch (IllegalArgumentException ex) {
             respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, JsonHttp.safeMessage(ex)));
@@ -112,7 +121,7 @@ final class ReplicationHttpServer implements AutoCloseable {
             }
             long sinceTimestamp = JsonHttp.queryLong(exchange.getRequestURI(), ApiParameters.SINCE_TIMESTAMP, 0);
             respond(exchange, 200, service.publisherProgress(
-                    PersistenceHex.require256(parts[0], "topicId"), sinceTimestamp));
+                    PersistenceHex.require256(parts[0], TOPIC_ID_FIELD), sinceTimestamp));
         } catch (IllegalArgumentException ex) {
             respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, JsonHttp.safeMessage(ex)));
         }
@@ -125,7 +134,7 @@ final class ReplicationHttpServer implements AutoCloseable {
                 respond(exchange, 404, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.NOT_FOUND));
                 return;
             }
-            String topicId = PersistenceHex.require256(parts[0], "topicId");
+            String topicId = PersistenceHex.require256(parts[0], TOPIC_ID_FIELD);
             if (HttpMethods.GET.equals(exchange.getRequestMethod())) {
                 respond(exchange, 200, service.localPublisherProgress(topicId));
             } else if (HttpMethods.POST.equals(exchange.getRequestMethod())) {
@@ -144,10 +153,10 @@ final class ReplicationHttpServer implements AutoCloseable {
             return;
         }
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("status", "UP");
-        result.put("serverId", self.serverId());
-        result.put("membership", membership.activeServers());
-        result.put("eventKeys", service.store().eventKeys());
+        result.put(STATUS, UP);
+        result.put(SERVER_ID, self.serverId());
+        result.put(MEMBERSHIP, membership.activeServers());
+        result.put(EVENT_KEYS, service.store().eventKeys());
         respond(exchange, 200, result);
     }
 

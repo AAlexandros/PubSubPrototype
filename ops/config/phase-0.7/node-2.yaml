@@ -10,9 +10,9 @@ transport:
   reconnectInitialMs: 1000
   reconnectMaxMs: 10000
 registry:
-  enabled: true
   runtimeDir: /registry
   signer: node-2
+  cliBackend: CACHE_ONLY
   pollIntervalMs: 1000
 control: {host: 0.0.0.0, port: 8000}
 peerSampling:
@@ -26,7 +26,6 @@ peerSampling:
 navigation: {capacity: 2, routingBase: 2, cycleIntervalMs: 2000, staleAfterMs: 20000, subscriptionsPath: /data/identity/subscriptions.json}
 dissemination: {randomLinkCount: 1, cycleIntervalMs: 2000, staleAfterMs: 20000, randomSeed: 102}
 persistence:
-  enabled: true
   membershipPath: /replication-registry/servers.json
   deliveryStatePath: /data/identity/recovery-state.json
   connectionTimeoutMs: 1000

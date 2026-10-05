@@ -75,7 +75,7 @@ epoch_length_ms="$(node -p "Number(process.env.CARDANO_TESTNET_SLOT_LENGTH || 2)
 epoch_zero_ms="$(node -p "Date.now() - Number('$current_epoch') * Number('$epoch_length_ms')")"
 acceptance server-configs "$ROOT_DIR/ops/infra/devnet/runtime/phase-0.7" "$ids_csv" "$epoch_zero_ms" "$epoch_length_ms"
 
-topic="$(./scripts/registry/create-topic.sh node-1 phase-0.7-open-topic node-2 - 2 3600 | tail -1)"
+topic="$(./scripts/registry/create-topic.sh node-1 phase-0.7-open-topic "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 2 3600 | tail -1)"
 printf '%s\n' "$topic" > "$EVIDENCE_DIR/topic-id.txt"
 "${COMPOSE[@]}" up -d --build --force-recreate replication-server-1 replication-server-2 replication-server-3
 for n in 1 2 3; do wait_log "replication-server-$n" REPLICATION_SERVER_STARTED; done

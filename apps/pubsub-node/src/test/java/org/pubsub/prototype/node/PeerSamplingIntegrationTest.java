@@ -86,6 +86,16 @@ class PeerSamplingIntegrationTest {
                 public void samplingReceived(NodeId peer, ProtocolMessage message) {
                     runtime.messageReceived(peer, message);
                 }
+
+                @Override
+                public void peerDisconnected(NodeId peer) {
+                    runtime.peerDisconnected(peer);
+                }
+
+                @Override
+                public void peerConnected(NodeId peer) {
+                    runtime.peerConnected(peer);
+                }
             };
             transport = new PubSubTransport(
                     new TransportConfig(name, "127.0.0.1", port, seeds, 100, 500, 50, 100),

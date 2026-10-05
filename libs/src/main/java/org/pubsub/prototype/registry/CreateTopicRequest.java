@@ -6,6 +6,10 @@ import static org.pubsub.prototype.util.Validators.requireNonBlank;
 import static org.pubsub.prototype.util.Validators.requireNonNull;
 import static org.pubsub.prototype.util.Validators.requirePositive;
 
+/**
+ * Initial metadata required to create a topic in the registry.
+ * It is used to validate and pass the data around.
+ */
 public record CreateTopicRequest(
         String name,
         List<String> admins,

@@ -8,7 +8,7 @@ import org.pubsub.prototype.protocol.MessageType;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.ProtocolMessage;
 import org.pubsub.prototype.sampling.NodeEndpoint;
-import org.pubsub.prototype.transport.PubSubTransport;
+import org.pubsub.prototype.transport.TransportSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,7 +32,7 @@ public final class DisseminationRuntime implements CyclicTransportRuntime {
     private final Supplier<List<String>> activeTopicsSupplier;
     private final long interval;
     private final String nodeId;
-    private PubSubTransport transport;
+    private TransportSender sender;
 
     public DisseminationRuntime(String nodeId, String host, int port, Settings settings,
                                 NavigationRuntime navigation, Supplier<List<String>> activeTopicsSupplier) {
@@ -52,8 +52,8 @@ public final class DisseminationRuntime implements CyclicTransportRuntime {
     }
 
     @Override
-    public void attach(PubSubTransport transport) {
-        this.transport = transport;
+    public void attach(TransportSender sender) {
+        this.sender = sender;
     }
 
     @Override
@@ -78,7 +78,7 @@ public final class DisseminationRuntime implements CyclicTransportRuntime {
                 var candidates = navigation.navigation().peersForTopic(topicId);
                 if (message.type() == MessageType.DISSEMINATION_REQUEST) {
                     var response = engine.request(peer.value(), message.dissemination(), candidates, now);
-                    transport.replySampling(peer, ProtocolMessage.disseminationGossip(
+                    sender.replySampling(peer, ProtocolMessage.disseminationGossip(
                             MessageType.DISSEMINATION_RESPONSE, message.requestId(), response));
                 } else {
                     engine.response(peer.value(), message.dissemination(), candidates, now);
@@ -102,7 +102,7 @@ public final class DisseminationRuntime implements CyclicTransportRuntime {
     public void disseminate(EventEnvelope event, NodeId source) {
         String sourceId = source == null ? null : source.value();
         for (DisseminationPeerDescriptor peer : engine.forwardingTargets(event.topicId(), sourceId)) {
-            transport.sendEvent(new NodeEndpoint(peer.nodeId(), peer.host(), peer.port()), event);
+            sender.sendEvent(new NodeEndpoint(peer.nodeId(), peer.host(), peer.port()), event);
             LOG.info("EVENT_DISSEMINATED topicId={} nodeId={} peerNodeId={} eventId={}",
                     event.topicId(), nodeId, peer.nodeId(), event.eventId());
         }
@@ -119,7 +119,7 @@ public final class DisseminationRuntime implements CyclicTransportRuntime {
                     .filter(active::contains).filter(topicId -> !current.contains(topicId)).forEach(topicId ->
                     engine.subscribe(topicId, navigation.navigation().peersForTopic(topicId), now));
             engine.cycle(now, navigation.navigation()::peersForTopic).forEach(out ->
-                    transport.sendSampling(new NodeEndpoint(
+                    sender.sendSampling(new NodeEndpoint(
                                     out.peer().nodeId(), out.peer().host(), out.peer().port()),
                             ProtocolMessage.disseminationGossip(
                                     MessageType.DISSEMINATION_REQUEST, out.requestId(), out.exchange())));

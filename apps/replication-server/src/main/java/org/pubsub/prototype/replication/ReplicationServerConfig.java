@@ -1,15 +1,11 @@
 package org.pubsub.prototype.replication;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import org.pubsub.prototype.persistence.PersistenceHex;
 import org.pubsub.prototype.persistence.ReplicationServer;
+import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 import org.pubsub.prototype.util.Validation;
+import org.pubsub.prototype.util.YamlFiles;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.pubsub.prototype.util.PersistenceConstants.SERVER_ID_FIELD;
@@ -31,6 +27,7 @@ import static org.pubsub.prototype.replication.ReplicationConfigConstants.SERVER
 import static org.pubsub.prototype.replication.ReplicationConfigConstants.STORAGE_PATH;
 import static org.pubsub.prototype.replication.ReplicationConfigConstants.TOPIC_REGISTRY_RUNTIME_DIR;
 import static org.pubsub.prototype.replication.ReplicationConfigConstants.TOPIC_REGISTRY_SIGNER;
+import static org.pubsub.prototype.replication.ReplicationConfigConstants.TOPIC_REGISTRY_CLI_BACKEND;
 import static org.pubsub.prototype.util.Validators.require;
 import static org.pubsub.prototype.util.Validators.requireNonBlank;
 import static org.pubsub.prototype.util.Validators.requireNonNull;
@@ -38,13 +35,10 @@ import static org.pubsub.prototype.util.Validators.requireNonNull;
 record ReplicationServerConfig(String serverId, String listenHost, String advertisedHost, int port,
                                Path storagePath, Path membershipPath, long membershipPollMs,
                                Path topicRegistryRuntimeDir, String topicRegistrySigner,
+                               CardanoCliBackend topicRegistryCliBackend,
                                long requestTimeoutMs, long connectionTimeoutMs, int retries,
                                long cleanupIntervalMs, long epochZeroTimeMs, long epochLengthMs,
                                int failureProbeAttempts, long failureProbeTimeoutMs, long maintenanceIntervalMs) {
-    private static final ObjectMapper YAML_MAPPER = YAMLMapper.builder()
-            .enable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
-            .build();
-
     ReplicationServerConfig {
         serverId = PersistenceHex.require256(serverId, SERVER_ID_FIELD);
         Validation.start()
@@ -66,11 +60,7 @@ record ReplicationServerConfig(String serverId, String listenHost, String advert
     }
 
     static ReplicationServerConfig load(Path file) {
-        try (InputStream input = Files.newInputStream(file)) {
-            return YAML_MAPPER.readValue(input, FileConfig.class).toConfig();
-        } catch (IOException ex) {
-            throw new IllegalStateException("Unable to read replication-server config " + file, ex);
-        }
+        return YamlFiles.read(file, FileConfig.class).toConfig();
     }
 
     private static final class FileConfig {
@@ -92,6 +82,7 @@ record ReplicationServerConfig(String serverId, String listenHost, String advert
                     requireNonNull(registry.pollIntervalMs, POLL_INTERVAL_MS),
                     Path.of(requireNonBlank(registry.topicRegistryRuntimeDir, TOPIC_REGISTRY_RUNTIME_DIR)),
                     requireNonBlank(registry.topicRegistrySigner, TOPIC_REGISTRY_SIGNER),
+                    requireNonNull(registry.topicRegistryCliBackend, TOPIC_REGISTRY_CLI_BACKEND),
                     requireNonNull(timing.requestTimeoutMs, REQUEST_TIMEOUT_MS),
                     requireNonNull(timing.connectionTimeoutMs, CONNECTION_TIMEOUT_MS),
                     requireNonNull(timing.retries, RETRIES),
@@ -117,6 +108,7 @@ record ReplicationServerConfig(String serverId, String listenHost, String advert
         public Long pollIntervalMs;
         public String topicRegistryRuntimeDir;
         public String topicRegistrySigner;
+        public CardanoCliBackend topicRegistryCliBackend;
     }
 
     private static final class TimingSection {

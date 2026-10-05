@@ -2,7 +2,7 @@ package org.pubsub.prototype.node.runtimes;
 
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.ProtocolMessage;
-import org.pubsub.prototype.transport.PubSubTransport;
+import org.pubsub.prototype.transport.TransportSender;
 
 /**
  * A node runtime that periodically advances protocol state and handles one
@@ -12,8 +12,8 @@ import org.pubsub.prototype.transport.PubSubTransport;
  * they do not participate in the Pub/Sub transport message cycle.</p>
  */
 public interface CyclicTransportRuntime extends AutoCloseable {
-    /** Binds the transport used to send protocol messages. */
-    void attach(PubSubTransport transport);
+    /** Binds the outbound transport operations used to send protocol messages. */
+    void attach(TransportSender sender);
 
     /** Starts periodic protocol processing. */
     void start();

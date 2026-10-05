@@ -80,7 +80,7 @@ epoch_zero_ms="$(node -p "Date.now() - Number('$current_epoch') * Number('$epoch
 IFS=,; all_ids="${ids[*]}"; initial_ids="${ids[0]},${ids[1]},${ids[2]}"; unset IFS
 acceptance server-configs "$ROOT_DIR/ops/infra/devnet/runtime/phase-0.8" "$all_ids" "$epoch_zero_ms" "$epoch_length_ms"
 
-topic="$(./scripts/registry/create-topic.sh node-1 phase-0.8-open-topic node-2 - 2 3600 | tail -1)"
+topic="$(./scripts/registry/create-topic.sh node-1 phase-0.8-open-topic "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 2 3600 | tail -1)"
 printf '%s\n' "$topic" > "$EVIDENCE_DIR/topic-id.txt"
 "${COMPOSE[@]}" up -d --build --force-recreate replication-server-1 replication-server-2 replication-server-3
 for n in 1 2 3; do wait_log "replication-server-$n" REPLICATION_SERVER_STARTED; done

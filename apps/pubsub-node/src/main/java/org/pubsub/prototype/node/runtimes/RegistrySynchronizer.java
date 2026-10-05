@@ -16,6 +16,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public final class RegistrySynchronizer implements TopicStateProvider, AutoCloseable {
+
+    // Default logger
     private static final Logger LOG = LoggerFactory.getLogger(RegistrySynchronizer.class);
 
     private final CardanoTopicRegistry registry;

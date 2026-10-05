@@ -73,8 +73,22 @@ request. Recovery queries publisher progress, reconstructs missing event keys,
 fetches stored envelopes, revalidates them, replays them in sequence order, and
 advances the durable delivery cursor.
 
+The event coordinator calls persistence for normal storage, but persistence does
+not retain a reference or callback to the event coordinator. When the control API
+starts recovery, it supplies `eventService::acceptRecovered` only to that
+`recover(...)` call. This per-request callback keeps recovery delivery explicit
+and avoids a circular dependency between event processing and persistence.
+
 ## Important boundary
 
 The Topic Registry synchronizer supplies cached topic rules to validation and
 routing. It is not in the per-message network path: an event does not wait for a
 Cardano query while being forwarded.
+
+The network boundary is intentionally duplex. Netty reports inbound activity
+through `TransportListener`, while node runtimes send outbound messages through
+the small `TransportSender` interface. `PubSubTransport` implements the sender,
+but runtimes do not depend on that concrete Netty class. The resulting listener/
+sender object loop is accepted for this prototype because peer protocols must
+both receive and send continuously; queues or a separate message bus would add
+machinery without changing that two-way flow.

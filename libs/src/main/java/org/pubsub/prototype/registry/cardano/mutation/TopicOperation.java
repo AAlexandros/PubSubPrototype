@@ -1,4 +1,4 @@
-package org.pubsub.prototype.registry.cardano;
+package org.pubsub.prototype.registry.cardano.mutation;
 
 public enum TopicOperation {
     DELETE_TOPIC("deleteTopic", true),
@@ -27,7 +27,7 @@ public enum TopicOperation {
         return ownerOnly;
     }
 
-    boolean hasActorValue() {
+    public boolean hasActorValue() {
         return switch (this) {
             case ADD_OWNER, REMOVE_OWNER, ADD_ADMIN, REMOVE_ADMIN, ADD_PUBLISHER, REMOVE_PUBLISHER -> true;
             default -> false;

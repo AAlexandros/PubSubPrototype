@@ -104,7 +104,7 @@ printf '%s\n' "$node1_publisher" | tee "$EVIDENCE_DIR/registered-publisher-key-i
 printf '%s\n' "$node2_publisher" | tee "$EVIDENCE_DIR/unregistered-publisher-key-id.txt"
 
 echo "Creating moderated topic"
-moderated_topic="$(./scripts/registry/create-topic.sh node-1 moderated node-2 - 3 3600 | tail -1)"
+moderated_topic="$(./scripts/registry/create-topic.sh node-1 moderated "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 3 3600 | tail -1)"
 echo "$moderated_topic" | tee "$EVIDENCE_DIR/moderated-topic-id.txt"
 ./scripts/registry/add-publisher.sh --node node-1 "$moderated_topic" node-1 | tee "$EVIDENCE_DIR/add-event-publisher-transaction.txt"
 ./scripts/registry/query.sh --topic "$moderated_topic" | tee "$EVIDENCE_DIR/moderated-topic-after-publisher.json"

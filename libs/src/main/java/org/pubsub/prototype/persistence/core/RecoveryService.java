@@ -29,17 +29,14 @@ public final class RecoveryService implements AutoCloseable {
     private final PersistenceClient client;
     private final DeliveryStateStore state;
     private final PersistenceEventValidator validator;
-    private final Consumer<EventEnvelope> delivery;
     private final ExecutorService fetchers;
 
     public RecoveryService(PersistenceClient client, DeliveryStateStore state,
-                           PersistenceEventValidator validator, Consumer<EventEnvelope> delivery,
-                           int concurrency) {
+                           PersistenceEventValidator validator, int concurrency) {
         requirePositive(concurrency, CONCURRENCY_FIELD);
         this.client = client;
         this.state = state;
         this.validator = validator;
-        this.delivery = delivery;
         this.fetchers = Executors.newFixedThreadPool(concurrency, runnable -> {
             Thread thread = new Thread(runnable, "event-recovery-fetch");
             thread.setDaemon(true);
@@ -47,7 +44,8 @@ public final class RecoveryService implements AutoCloseable {
         });
     }
 
-    public RecoveryResult recover(String topicId) {
+    /** Recovers one topic and sends accepted events to the callback used for this operation only. */
+    public RecoveryResult recover(String topicId, Consumer<EventEnvelope> delivery) {
         LOG.info("RECOVERY_STARTED topicId={}", topicId);
         List<Missing> missing = new ArrayList<>();
         long offlineTimestamp = state.latestDeliveredTimestamp(topicId);

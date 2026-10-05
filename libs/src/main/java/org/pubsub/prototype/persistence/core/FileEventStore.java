@@ -8,6 +8,7 @@ import org.pubsub.prototype.persistence.PersistenceHex;
 import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.StoredEvent;
 import org.pubsub.prototype.registry.TopicState;
+import org.pubsub.prototype.util.JsonSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,7 +69,7 @@ public final class FileEventStore {
         Optional<StoredEvent> existing = get(key);
         if (existing.isPresent()) return existing.orElseThrow();
         try {
-            AtomicFiles.write(eventPath(key), PersistenceJson.MAPPER.writeValueAsBytes(record));
+            AtomicFiles.write(eventPath(key), JsonSupport.MAPPER.writeValueAsBytes(record));
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to store event " + key, ex);
         }
@@ -88,7 +89,7 @@ public final class FileEventStore {
         StoredEvent selected = existing.filter(value -> !record.storedAt().isBefore(value.storedAt())).orElse(record);
         if (existing.isPresent() && selected == existing.orElseThrow()) return;
         try {
-            AtomicFiles.write(eventPath(record.eventKey()), PersistenceJson.MAPPER.writeValueAsBytes(selected));
+            AtomicFiles.write(eventPath(record.eventKey()), JsonSupport.MAPPER.writeValueAsBytes(selected));
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to store event replica " + record.eventKey(), ex);
         }
@@ -98,7 +99,7 @@ public final class FileEventStore {
         Path path = eventPath(eventKey);
         if (!Files.exists(path)) return Optional.empty();
         try {
-            StoredEvent event = PersistenceJson.MAPPER.readValue(path.toFile(), StoredEvent.class);
+            StoredEvent event = JsonSupport.MAPPER.readValue(path.toFile(), StoredEvent.class);
             if (event.expiresAfterEpoch() <= epochs.currentEpoch()) {
                 Files.deleteIfExists(path);
                 LOG.info("EVENT_EXPIRED eventKey={} eventId={} topicId={} publisherKeyId={} sequenceNumber={}",
@@ -178,7 +179,7 @@ public final class FileEventStore {
         Path path = topicIndexPath();
         if (!Files.exists(path)) return List.of();
         try {
-            return PersistenceJson.MAPPER.readValue(path.toFile(), TOPIC_INDEX_TYPE).stream()
+            return JsonSupport.MAPPER.readValue(path.toFile(), TOPIC_INDEX_TYPE).stream()
                     .filter(this::hasTopicLog).sorted().toList();
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to read topic-log index", ex);
@@ -195,7 +196,7 @@ public final class FileEventStore {
             if (removed) {
                 Set<String> topics = new TreeSet<>(topicIds());
                 topics.remove(PersistenceHex.require256(topicId, TOPIC_ID_FIELD));
-                AtomicFiles.write(topicIndexPath(), PersistenceJson.MAPPER.writeValueAsBytes(topics));
+                AtomicFiles.write(topicIndexPath(), JsonSupport.MAPPER.writeValueAsBytes(topics));
             }
             return removed;
         } catch (IOException ex) {
@@ -240,7 +241,7 @@ public final class FileEventStore {
         Path path = progressPath(topicId);
         if (!Files.exists(path)) return Map.of();
         try {
-            return PersistenceJson.MAPPER.readValue(path.toFile(), PROGRESS_TYPE);
+            return JsonSupport.MAPPER.readValue(path.toFile(), PROGRESS_TYPE);
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to read topic log " + topicId, ex);
         }
@@ -250,8 +251,8 @@ public final class FileEventStore {
         try {
             Set<String> topics = new TreeSet<>(topicIds());
             topics.add(PersistenceHex.require256(topicId, TOPIC_ID_FIELD));
-            AtomicFiles.write(topicIndexPath(), PersistenceJson.MAPPER.writeValueAsBytes(topics));
-            AtomicFiles.write(progressPath(topicId), PersistenceJson.MAPPER.writeValueAsBytes(values));
+            AtomicFiles.write(topicIndexPath(), JsonSupport.MAPPER.writeValueAsBytes(topics));
+            AtomicFiles.write(progressPath(topicId), JsonSupport.MAPPER.writeValueAsBytes(values));
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to write topic log " + topicId, ex);
         }

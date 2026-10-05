@@ -16,6 +16,7 @@ import org.pubsub.prototype.node.service.NodeEventCoordinator;
 import org.pubsub.prototype.node.util.AsyncUtil;
 import org.pubsub.prototype.registry.TopicId;
 import org.pubsub.prototype.sampling.PeerSamplingService;
+import org.pubsub.prototype.util.JsonSupport;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -38,7 +39,7 @@ import static org.pubsub.prototype.http.ApiFields.VIEW;
 import static org.pubsub.prototype.http.ApiFields.VIEWS;
 
 public final class EventControlServer implements AutoCloseable {
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = JsonSupport.MAPPER;
 
     private final HttpServer server;
     private final NodeEventCoordinator events;
@@ -97,7 +98,7 @@ public final class EventControlServer implements AutoCloseable {
                             return;
                         }
                         navigation.subscribe(new TopicId(topicId).value());
-                        if (dissemination != null) dissemination.subscribe(topicId);
+                        dissemination.subscribe(topicId);
                         respond(exchange, 200, Map.of(TOPIC_ID, topicId, SUBSCRIBED, true));
                     }
                     case HttpMethods.DELETE -> {
@@ -106,7 +107,7 @@ public final class EventControlServer implements AutoCloseable {
                             return;
                         }
                         navigation.unsubscribe(new TopicId(topicId).value());
-                        if (dissemination != null) dissemination.unsubscribe(topicId);
+                        dissemination.unsubscribe(topicId);
                         respond(exchange, 200, Map.of(TOPIC_ID, topicId, SUBSCRIBED, false));
                     }
                     default -> respond(exchange, 405, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.METHOD_NOT_ALLOWED));
@@ -160,7 +161,8 @@ public final class EventControlServer implements AutoCloseable {
             String topicId = JsonHttp.suffix(exchange.getRequestURI(), ApiPaths.EVENT_RECOVER);
             try {
                 if (topicId.isEmpty()) throw new IllegalArgumentException("topicId is required");
-                respond(exchange, 200, persistence.recover(new TopicId(topicId).value()));
+                respond(exchange, 200, persistence.recover(
+                        new TopicId(topicId).value(), events::acceptRecovered));
             } catch (RuntimeException ex) {
                 respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, JsonHttp.safeMessage(ex)));
             }

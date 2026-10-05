@@ -70,6 +70,7 @@ registry:
   pollIntervalMs: 500
   topicRegistryRuntimeDir: /registry
   topicRegistrySigner: node-${index + 1}
+  topicRegistryCliBackend: CACHE_ONLY
 timing:
   connectionTimeoutMs: 1000
   requestTimeoutMs: 3000

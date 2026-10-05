@@ -6,49 +6,36 @@ import org.pubsub.prototype.registry.RegistrySnapshot;
 import org.pubsub.prototype.registry.TopicId;
 import org.pubsub.prototype.registry.TopicRegistry;
 import org.pubsub.prototype.registry.TopicState;
+import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
+import org.pubsub.prototype.registry.cardano.datum.CardanoCliUtxoParser;
+import org.pubsub.prototype.registry.cardano.datum.CardanoScriptUtxo;
+import org.pubsub.prototype.registry.cardano.mutation.TopicMutation;
+import org.pubsub.prototype.registry.cardano.transaction.CardanoTransactionBuilder;
+import org.pubsub.prototype.util.TextFiles;
 
-import java.nio.file.Path;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 public final class CardanoTopicRegistry implements TopicRegistry {
-    private final TopicDatumCodec codec;
-    private final CardanoCli cardanoCli;
+    private final CardanoRegistryConfig config;
+    private final CardanoCommandRunner commandRunner;
     private final CardanoCliUtxoParser utxoParser;
+    private final CardanoRegistryDeploymentManager deployments;
     private final CardanoTransactionBuilder transactions;
 
     public CardanoTopicRegistry(CardanoRegistryConfig config) {
-        this(config, new TopicDatumCodec());
-    }
-
-    CardanoTopicRegistry(CardanoRegistryConfig config, TopicDatumCodec codec) {
-        this.codec = codec;
-        this.cardanoCli = new CardanoCli(config);
+        this.config = config;
+        this.commandRunner = CardanoCommandRunners.create(config);
         this.utxoParser = new CardanoCliUtxoParser();
-        this.transactions = new CardanoTransactionBuilder(config, cardanoCli);
-    }
-
-    public static CardanoTopicRegistry fromNetworkEnv(Path networkEnv, String signer) {
-        Path runtimeDir = networkEnv.toAbsolutePath().getParent()
-                .resolve(CardanoRegistryNames.RuntimeFile.REGISTRY_DIRECTORY.value());
-        return new CardanoTopicRegistry(new CardanoRegistryConfig(runtimeDir, signer));
-    }
-
-    public void deploy() {
-        transactions.writeDeployment(transactions.deploy());
+        this.deployments = new CardanoRegistryDeploymentManager(config, commandRunner);
+        this.transactions = new CardanoTransactionBuilder(config, commandRunner, deployments);
     }
 
     @Override
     public RegistrySnapshot snapshot() {
         return new RegistrySnapshot(readOnChainTopics().stream().filter(TopicState::active).toList(), Instant.now());
-    }
-
-    public RegistrySnapshot snapshotIncludingTombstones() {
-        return new RegistrySnapshot(readOnChainTopics(), Instant.now());
     }
 
     @Override
@@ -108,13 +95,18 @@ public final class CardanoTopicRegistry implements TopicRegistry {
         mutate(topicId, TopicMutation.setRetentionPeriod(retentionPeriod));
     }
 
-    public String encodeDatum(TopicState topic) {
-        return codec.encode(topic);
+    public void deploy() {
+        deployments.initialize();
+    }
+
+    /** Returns active and tombstoned topics visible to the registry. */
+    public RegistrySnapshot snapshotIncludingTombstones() {
+        return new RegistrySnapshot(readOnChainTopics(), Instant.now());
     }
 
     public String scriptUtxosJson() {
-        RegistryDeployment deployment = transactions.readDeployment();
-        String json = cardanoCli.queryScriptUtxosJson(deployment.validatorAddress()).orElseThrow(
+        RegistryDeployment deployment = deployments.read();
+        String json = commandRunner.queryScriptUtxosJson(deployment.validatorAddress()).orElseThrow(
                 () -> new RegistryConflictException("Cardano registry is unavailable; script UTxOs cannot be queried")
         );
         writeScriptUtxoCache(json);
@@ -164,21 +156,17 @@ public final class CardanoTopicRegistry implements TopicRegistry {
     }
 
     private List<TopicState> readOnChainTopics() {
-        RegistryDeployment deployment = transactions.readDeployment();
-        Optional<String> scriptUtxosJson = cardanoCli.queryScriptUtxosJson(deployment.validatorAddress());
+        RegistryDeployment deployment = deployments.read();
+        Optional<String> scriptUtxosJson = commandRunner.queryScriptUtxosJson(deployment.validatorAddress());
         if (scriptUtxosJson.isPresent()) {
             String json = scriptUtxosJson.orElseThrow();
             writeScriptUtxoCache(json);
             return parseTopics(json, deployment);
         }
-        if (Files.exists(transactions.config().scriptUtxoCacheFile())) {
-            try {
-                return parseTopics(Files.readString(transactions.config().scriptUtxoCacheFile(), StandardCharsets.UTF_8), deployment);
-            } catch (IOException ex) {
-                throw new IllegalStateException("Unable to read Cardano script UTxO cache", ex);
-            }
+        if (Files.exists(config.scriptUtxoCacheFile())) {
+            return parseTopics(TextFiles.read(config.scriptUtxoCacheFile()), deployment);
         }
-        if (Files.exists(transactions.config().deploymentFile())) {
+        if (Files.exists(config.deploymentFile())) {
             return List.of();
         }
         throw new RegistryConflictException("Cardano registry is unavailable");
@@ -192,8 +180,8 @@ public final class CardanoTopicRegistry implements TopicRegistry {
     }
 
     private Optional<CardanoScriptUtxo> topicUtxo(TopicId topicId) {
-        RegistryDeployment deployment = transactions.readDeployment();
-        Optional<String> scriptUtxosJson = cardanoCli.queryScriptUtxosJson(deployment.validatorAddress());
+        RegistryDeployment deployment = deployments.read();
+        Optional<String> scriptUtxosJson = commandRunner.queryScriptUtxosJson(deployment.validatorAddress());
         if (scriptUtxosJson.isEmpty()) {
             return Optional.empty();
         }
@@ -206,11 +194,6 @@ public final class CardanoTopicRegistry implements TopicRegistry {
     }
 
     private void writeScriptUtxoCache(String json) {
-        try {
-            Files.createDirectories(transactions.config().runtimeDir());
-            Files.writeString(transactions.config().scriptUtxoCacheFile(), json, StandardCharsets.UTF_8);
-        } catch (IOException ex) {
-            throw new IllegalStateException("Unable to write Cardano script UTxO cache", ex);
-        }
+        TextFiles.write(config.scriptUtxoCacheFile(), json);
     }
 }

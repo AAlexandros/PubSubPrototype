@@ -7,7 +7,7 @@ import org.pubsub.prototype.node.util.AsyncUtil;
 import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.securecyclon.GossipExchange;
 import org.pubsub.prototype.securecyclon.SecureCyclon;
-import org.pubsub.prototype.transport.PubSubTransport;
+import org.pubsub.prototype.transport.TransportSender;
 import org.pubsub.prototype.util.SecureCyclonEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,9 +19,10 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
- * Bridges the serialized, transport-free protocol to the existing Netty runtime.
+ * Bridges the serialized, transport-free protocol to outbound transport operations.
  */
 public final class PeerSamplingRuntime implements CyclicTransportRuntime {
 
@@ -39,7 +40,7 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
     private final int proofFanout;
     private final Random proofFanoutRandom;
     private final NodeEndpoint self;
-    private PubSubTransport transport;
+    private TransportSender sender;
 
     public PeerSamplingRuntime(NodeEndpoint self, Settings settings) {
         this.self = self;
@@ -56,8 +57,8 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
     }
 
     @Override
-    public void attach(PubSubTransport transport) {
-        this.transport = transport;
+    public void attach(TransportSender sender) {
+        this.sender = sender;
     }
 
     @Override
@@ -80,7 +81,7 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
         try {
             ProtocolMessage request = ProtocolMessage.gossip(
                     MessageType.SECURECYCLON_REQUEST, outgoing.requestId(), outgoing.exchange());
-            transport.sendSampling(outgoing.partner(), request);
+            sender.sendSampling(outgoing.partner(), request);
         } catch (RuntimeException ex) {
             LOG.warn(SecureCyclonEvent.CYCLE + " reason=transport_error; will_retry", ex);
         }
@@ -103,7 +104,7 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
                                 peer.value(), message.exchange(), System.currentTimeMillis());
                         ProtocolMessage responseMessage = ProtocolMessage.gossip(
                                 MessageType.SECURECYCLON_RESPONSE, message.requestId(), response);
-                        transport.replySampling(peer, responseMessage);
+                        sender.replySampling(peer, responseMessage);
                     }
                     case SECURECYCLON_RESPONSE -> sampling.handleSwapResponse(
                             peer.value(), message.requestId(), message.exchange(), System.currentTimeMillis());
@@ -136,7 +137,26 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
         sampling.bootstrap(peer);
     }
 
-    private void disseminateNewProofs(NodeId sender) {
+    /** Records transport liveness on the sampling executor, preserving protocol serialization. */
+    public void peerDisconnected(NodeId peer) {
+        submit(() -> sampling.peerUnavailable(peer.value(), System.currentTimeMillis()));
+    }
+
+    /** A verified HELLO connection is stronger evidence than an old gossip descriptor. */
+    public void peerConnected(NodeId peer) {
+        submit(() -> sampling.peerAvailable(peer.value()));
+    }
+
+    private void submit(Runnable task) {
+        if (executor.isShutdown()) return;
+        try {
+            executor.execute(task);
+        } catch (RejectedExecutionException ignored) {
+            // Shutdown may race a final Netty connection callback.
+        }
+    }
+
+    private void disseminateNewProofs(NodeId sourcePeer) {
         for (var proof : sampling.drainProofs()) {
             // Construct a message that contains the new proof
             GossipExchange gossip = new GossipExchange(List.of(), List.of(), List.of(proof));
@@ -144,7 +164,7 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
             // Disseminate the new proof to proofFanout random peers in the view
             List<NodeEndpoint> recipients = new ArrayList<>(sampling.view());
             // Do not send the new proof back to the sender
-            recipients.removeIf(candidate -> candidate.nodeId().equals(sender.value()));
+            recipients.removeIf(candidate -> candidate.nodeId().equals(sourcePeer.value()));
             Collections.shuffle(recipients, proofFanoutRandom);
             int recipientCount = Math.min(proofFanout, recipients.size());
 
@@ -152,7 +172,7 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
                 NodeId target = new NodeId(recipient.nodeId());
                 ProtocolMessage proofMessage = ProtocolMessage.gossip(
                         MessageType.SECURECYCLON_PROOF, UUID.randomUUID(), gossip);
-                transport.replySampling(target, proofMessage);
+                sender.replySampling(target, proofMessage);
             }
         }
     }

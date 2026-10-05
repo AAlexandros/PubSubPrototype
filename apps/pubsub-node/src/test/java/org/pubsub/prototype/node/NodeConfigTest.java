@@ -7,6 +7,7 @@ import org.pubsub.prototype.node.config.NodeConfig;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -32,7 +33,10 @@ class NodeConfigTest {
                   reconnectInitialMs: 1000
                   reconnectMaxMs: 10000
                 registry:
-                  enabled: false
+                  runtimeDir: /registry
+                  signer: node-1
+                  cliBackend: CACHE_ONLY
+                  pollIntervalMs: 1000
                 control:
                   host: 0.0.0.0
                   port: 8000
@@ -50,6 +54,18 @@ class NodeConfigTest {
                   cycleIntervalMs: 2000
                   staleAfterMs: 20000
                   subscriptionsPath: /data/identity/subscriptions.json
+                dissemination:
+                  randomLinkCount: 1
+                  cycleIntervalMs: 2000
+                  staleAfterMs: 20000
+                  randomSeed: 2
+                persistence:
+                  membershipPath: /registry/servers.json
+                  deliveryStatePath: /data/identity/recovery-state.json
+                  connectionTimeoutMs: 1000
+                  requestTimeoutMs: 3000
+                  retries: 1
+                  recoveryConcurrency: 8
                 """);
 
         assertEquals("node-1", config.node().name);
@@ -130,7 +146,8 @@ class NodeConfigTest {
                   randomSeed: 1
                 """));
 
-        assertEquals("dissemination requires navigation and peerSampling", exception.getMessage());
+        assertEquals("Pub-sub config must define registry, peerSampling, navigation, dissemination, and persistence sections",
+                exception.getMessage());
     }
 
     @Test
@@ -143,7 +160,8 @@ class NodeConfigTest {
                 peerSampling: {advertisedHost: pubsub-node-1, viewSize: 2, swapLength: 2, cycleIntervalMs: 2000, ageThreshold: 10, proofFanout: 2, randomSeed: 1}
                 """));
 
-        assertEquals("peerSampling and navigation must be configured together", exception.getMessage());
+        assertEquals("Pub-sub config must define registry, peerSampling, navigation, dissemination, and persistence sections",
+                exception.getMessage());
     }
 
     @Test
@@ -156,7 +174,8 @@ class NodeConfigTest {
                 navigation: {capacity: 2, routingBase: 2, cycleIntervalMs: 2000, staleAfterMs: 20000, subscriptionsPath: /data/identity/subscriptions.json}
                 """));
 
-        assertEquals("peerSampling and navigation must be configured together", exception.getMessage());
+        assertEquals("Pub-sub config must define registry, peerSampling, navigation, dissemination, and persistence sections",
+                exception.getMessage());
     }
 
     @Test
@@ -165,9 +184,12 @@ class NodeConfigTest {
                 node: {name: node-1, listenHost: 0.0.0.0, listenPort: 7000, identityPath: /data/identity}
                 peers: []
                 transport: {pingIntervalMs: 5000, pingTimeoutMs: 3000, reconnectInitialMs: 1000, reconnectMaxMs: 10000}
+                registry: {runtimeDir: /registry, signer: node-1, cliBackend: CACHE_ONLY, pollIntervalMs: 1000}
                 control: {host: 0.0.0.0, port: 8000}
                 peerSampling: {advertisedHost: pubsub-node-1, viewSize: 2, swapLength: 2, cycleIntervalMs: 2000, ageThreshold: 10, proofFanout: 2, randomSeed: 1}
                 navigation: {capacity: 257, routingBase: 2, cycleIntervalMs: 2000, staleAfterMs: 20000, subscriptionsPath: /data/identity/subscriptions.json}
+                dissemination: {randomLinkCount: 1, cycleIntervalMs: 2000, staleAfterMs: 20000, randomSeed: 2}
+                persistence: {membershipPath: /registry/servers.json, deliveryStatePath: /data/identity/recovery-state.json, connectionTimeoutMs: 1000, requestTimeoutMs: 3000, retries: 1, recoveryConcurrency: 8}
                 """));
 
         assertEquals("navigation.capacity must be between 1 and 256", capacityException.getMessage());
@@ -176,9 +198,12 @@ class NodeConfigTest {
                 node: {name: node-1, listenHost: 0.0.0.0, listenPort: 7000, identityPath: /data/identity}
                 peers: []
                 transport: {pingIntervalMs: 5000, pingTimeoutMs: 3000, reconnectInitialMs: 1000, reconnectMaxMs: 10000}
+                registry: {runtimeDir: /registry, signer: node-1, cliBackend: CACHE_ONLY, pollIntervalMs: 1000}
                 control: {host: 0.0.0.0, port: 8000}
                 peerSampling: {advertisedHost: pubsub-node-1, viewSize: 2, swapLength: 2, cycleIntervalMs: 2000, ageThreshold: 10, proofFanout: 2, randomSeed: 1}
                 navigation: {capacity: 2, routingBase: 1, cycleIntervalMs: 2000, staleAfterMs: 20000, subscriptionsPath: /data/identity/subscriptions.json}
+                dissemination: {randomLinkCount: 1, cycleIntervalMs: 2000, staleAfterMs: 20000, randomSeed: 2}
+                persistence: {membershipPath: /registry/servers.json, deliveryStatePath: /data/identity/recovery-state.json, connectionTimeoutMs: 1000, requestTimeoutMs: 3000, retries: 1, recoveryConcurrency: 8}
                 """));
 
         assertEquals("navigation.routingBase must be between 2 and 64", routingBaseException.getMessage());
@@ -206,15 +231,30 @@ class NodeConfigTest {
         assertEquals(0, config.sampling().ageThreshold);
     }
 
+    @Test
+    void checkedInPubSubConfigsSatisfyTheCompleteRoleContract() throws IOException {
+        Path configRoot = Path.of("..", "..", "ops", "config").toAbsolutePath().normalize();
+        try (Stream<Path> files = Files.walk(configRoot)) {
+            for (Path file : files.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().matches("node-\\d+\\.yaml"))
+                    .toList()) {
+                NodeConfig.load(file);
+            }
+        }
+    }
+
     private NodeConfig loadSamplingConfig(int viewSize, int swapLength, long cycleIntervalMs,
                                           int ageThreshold) throws IOException {
         return load("""
                 node: {name: node-1, listenHost: 0.0.0.0, listenPort: 7000, identityPath: /data/identity}
                 peers: []
                 transport: {pingIntervalMs: 5000, pingTimeoutMs: 3000, reconnectInitialMs: 1000, reconnectMaxMs: 10000}
+                registry: {runtimeDir: /registry, signer: node-1, cliBackend: CACHE_ONLY, pollIntervalMs: 1000}
                 control: {host: 0.0.0.0, port: 8000}
                 peerSampling: {advertisedHost: pubsub-node-1, viewSize: %d, swapLength: %d, cycleIntervalMs: %d, ageThreshold: %d, proofFanout: 2, randomSeed: 1}
                 navigation: {capacity: 2, routingBase: 2, cycleIntervalMs: 2000, staleAfterMs: 20000, subscriptionsPath: /data/identity/subscriptions.json}
+                dissemination: {randomLinkCount: 1, cycleIntervalMs: 2000, staleAfterMs: 20000, randomSeed: 2}
+                persistence: {membershipPath: /registry/servers.json, deliveryStatePath: /data/identity/recovery-state.json, connectionTimeoutMs: 1000, requestTimeoutMs: 3000, retries: 1, recoveryConcurrency: 8}
                 """.formatted(viewSize, swapLength, cycleIntervalMs, ageThreshold));
     }
 

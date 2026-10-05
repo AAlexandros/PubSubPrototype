@@ -34,6 +34,7 @@ public final class SecureCyclon implements PeerSamplingService {
     private final Consumer<String> log;
     private final List<NodeDescriptor> view = new ArrayList<>();
     private final Map<String, NodeDescriptor> history = new HashMap<>();
+    private final Map<String, Long> unavailableSince = new HashMap<>();
     private final Set<String> bootstrapped = new HashSet<>();
     private final Map<String, ViolationProof> blacklist = new LinkedHashMap<>();
     private final List<ViolationProof> newProofs = new ArrayList<>();
@@ -77,6 +78,21 @@ public final class SecureCyclon implements PeerSamplingService {
             view.add(NodeDescriptor.fresh(endpoint, 0).transfer(self.nodeId()));
             updated(List.of());
         }
+    }
+
+    /** Removes a disconnected peer and rejects its stale descriptors until it advertises itself anew. */
+    public synchronized void peerUnavailable(String nodeId, long now) {
+        if (nodeId == null || nodeId.equals(self.nodeId())) return;
+        unavailableSince.merge(nodeId, now, Math::max);
+        List<NodeDescriptor> before = List.copyOf(view);
+        view.removeIf(peer -> peer.creator().nodeId().equals(nodeId));
+        if (pending != null && pending.partnerId().equals(nodeId)) pending = null;
+        updated(before);
+    }
+
+    /** A verified transport connection is stronger evidence than an old gossip descriptor. */
+    public synchronized void peerAvailable(String nodeId) {
+        unavailableSince.remove(nodeId);
     }
 
     public synchronized Optional<Outgoing> executeCycle(long now) {
@@ -126,18 +142,19 @@ public final class SecureCyclon implements PeerSamplingService {
         // Validate the incoming exchange and proof
         validateExchange(sender, exchange, true, now);
         List<ValidatedProof> receivedProofs = validateProofs(exchange.proofs(), now);
+        GossipExchange availableExchange = availableDescriptors(exchange);
 
         // Detect inconsistencies and check respective proofs
-        DetectedInconsistencies detected = detectInconsistencies(exchange);
+        DetectedInconsistencies detected = detectInconsistencies(availableExchange);
         detected.proofs().forEach(this::acceptValidatedProof);
         if (detected.rejectExchange()) throw reject("Fresh-descriptor frequency exceeded");
         receivedProofs.forEach(this::acceptValidatedProof);
 
         List<NodeDescriptor> sent = selectPeers(sender, swapLength);
         List<NodeDescriptor> samples = List.copyOf(view);
-        remember(exchange, detected.forkedDescriptorIds());
+        remember(availableExchange, detected.forkedDescriptorIds());
         // Replace descriptors in the view with descriptors from the incoming exchange
-        replacePeers(sent, safeDescriptors(exchange.descriptors(), detected.forkedDescriptorIds()));
+        replacePeers(sent, safeDescriptors(availableExchange.descriptors(), detected.forkedDescriptorIds()));
 
         emit(SecureCyclonEvent.GOSSIP_RECEIVED, "peerNodeId=" + sender);
         return new GossipExchange(sent.stream().map(p -> p.transfer(sender)).toList(), samples, proofs());
@@ -151,16 +168,17 @@ public final class SecureCyclon implements PeerSamplingService {
         // Validate the incoming exchange and proof
         validateExchange(sender, exchange, false, now);
         List<ValidatedProof> receivedProofs = validateProofs(exchange.proofs(), now);
+        GossipExchange availableExchange = availableDescriptors(exchange);
 
         // Detect inconsistencies and check respective proofs
-        DetectedInconsistencies detected = detectInconsistencies(exchange);
+        DetectedInconsistencies detected = detectInconsistencies(availableExchange);
         detected.proofs().forEach(this::acceptValidatedProof);
         if (detected.rejectExchange()) throw reject("Fresh-descriptor frequency exceeded");
         receivedProofs.forEach(this::acceptValidatedProof);
 
-        remember(exchange, detected.forkedDescriptorIds());
+        remember(availableExchange, detected.forkedDescriptorIds());
         // Replace sent descriptors view with descriptors from the incoming exchange
-        replacePeers(pending.sent(), safeDescriptors(exchange.descriptors(), detected.forkedDescriptorIds()));
+        replacePeers(pending.sent(), safeDescriptors(availableExchange.descriptors(), detected.forkedDescriptorIds()));
         pending = null;
         emit(SecureCyclonEvent.GOSSIP_RECEIVED, "peerNodeId=" + sender);
     }
@@ -264,6 +282,25 @@ public final class SecureCyclon implements PeerSamplingService {
     private List<NodeDescriptor> safeDescriptors(List<NodeDescriptor> descriptors, Set<String> forkedDescriptorIds) {
         return descriptors.stream().filter(p -> !forkedDescriptorIds.contains(p.uniqueId()))
                 .filter(p -> !blacklist.containsKey(p.creator().nodeId())).toList();
+    }
+
+    private GossipExchange availableDescriptors(GossipExchange exchange) {
+        return new GossipExchange(
+                exchange.descriptors().stream().filter(this::isAvailable).toList(),
+                exchange.samples().stream().filter(this::isAvailable).toList(),
+                exchange.proofs()
+        );
+    }
+
+    private boolean isAvailable(NodeDescriptor descriptor) {
+        String nodeId = descriptor.creator().nodeId();
+        Long unavailableAt = unavailableSince.get(nodeId);
+        if (unavailableAt == null) return true;
+        if (descriptor.timestamp() > unavailableAt) {
+            unavailableSince.remove(nodeId);
+            return true;
+        }
+        return false;
     }
 
     private void replacePeers(List<NodeDescriptor> sent, List<NodeDescriptor> received) {

@@ -37,7 +37,7 @@ import static org.pubsub.prototype.util.TransportConstants.IDENTITY_FIELD;
 import static org.pubsub.prototype.util.TransportConstants.MAX_FRAME_LENGTH;
 import static org.pubsub.prototype.util.Validators.require;
 
-public final class PubSubTransport implements AutoCloseable {
+public final class PubSubTransport implements TransportSender, AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(PubSubTransport.class);
     private final TransportConfig config;
     private final NodeIdentity identity;
@@ -72,11 +72,13 @@ public final class PubSubTransport implements AutoCloseable {
         return advertisedEndpoint;
     }
 
+    @Override
     public void sendSampling(NodeEndpoint peer, ProtocolMessage message) {
         send(peer, message);
     }
 
     /** Sends an event only to the selected overlay peer, connecting dynamically when necessary. */
+    @Override
     public void sendEvent(NodeEndpoint peer, EventEnvelope event) {
         send(peer, ProtocolMessage.event(event));
     }
@@ -108,6 +110,7 @@ public final class PubSubTransport implements AutoCloseable {
         connect(endpoint, id);
     }
 
+    @Override
     public void replySampling(NodeId peer, ProtocolMessage message) {
         PeerSessionHandler handler = activePeers.get(peer);
         if (handler != null) handler.sendMessage(message);
@@ -162,12 +165,14 @@ public final class PubSubTransport implements AutoCloseable {
         return activePeers.size();
     }
 
+    @Override
     public void broadcastEvent(EventEnvelope event) {
         for (PeerSessionHandler handler : activePeers.values()) {
             handler.sendEvent(event);
         }
     }
 
+    @Override
     public void forwardEvent(EventEnvelope event, NodeId exceptPeer) {
         for (Map.Entry<NodeId, PeerSessionHandler> entry : activePeers.entrySet()) {
             if (!entry.getKey().equals(exceptPeer)) {

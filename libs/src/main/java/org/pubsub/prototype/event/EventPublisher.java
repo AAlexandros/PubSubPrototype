@@ -3,6 +3,7 @@ package org.pubsub.prototype.event;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.pubsub.prototype.registry.TopicId;
+import org.pubsub.prototype.util.JsonSupport;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -14,7 +15,8 @@ import java.util.Base64;
 import static org.pubsub.prototype.util.EventConstants.EVENTS_DIRECTORY;
 
 public final class EventPublisher {
-    private static final ObjectMapper MAPPER = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+    private static final ObjectMapper MAPPER = JsonSupport.MAPPER.copy()
+            .enable(SerializationFeature.INDENT_OUTPUT);
 
     private final KeyPair keyPair;
     private final Clock clock;

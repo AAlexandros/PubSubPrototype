@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import org.pubsub.prototype.event.EventCrypto;
 import org.pubsub.prototype.persistence.ReplicationRegistry;
 import org.pubsub.prototype.persistence.ReplicationServerState;
+import org.pubsub.prototype.util.JsonSupport;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -57,7 +58,7 @@ public final class FileReplicationRegistry implements ReplicationRegistry {
     private List<ReplicationServerState> read() {
         if (!Files.exists(file)) return List.of();
         try {
-            return PersistenceJson.MAPPER.readValue(file.toFile(), TYPE);
+            return JsonSupport.MAPPER.readValue(file.toFile(), TYPE);
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to reconstruct replication registry from " + file, ex);
         }
@@ -65,7 +66,7 @@ public final class FileReplicationRegistry implements ReplicationRegistry {
 
     private void write(List<ReplicationServerState> states) {
         try {
-            AtomicFiles.write(file, PersistenceJson.MAPPER.writerWithDefaultPrettyPrinter().writeValueAsBytes(states));
+            AtomicFiles.write(file, JsonSupport.MAPPER.writerWithDefaultPrettyPrinter().writeValueAsBytes(states));
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to persist replication registry " + file, ex);
         }

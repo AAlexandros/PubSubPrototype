@@ -29,6 +29,7 @@ class ReplicationServerConfigTest {
                   pollIntervalMs: 1000
                   topicRegistryRuntimeDir: /registry
                   topicRegistrySigner: replication-server-1
+                  topicRegistryCliBackend: CACHE_ONLY
                 timing:
                   requestTimeoutMs: 3000
                   connectionTimeoutMs: 1000
@@ -64,6 +65,7 @@ class ReplicationServerConfigTest {
                   pollIntervalMs: 1000
                   topicRegistryRuntimeDir: /registry
                   topicRegistrySigner: replication-server-1
+                  topicRegistryCliBackend: CACHE_ONLY
                 timing:
                   requestTimeoutMs: 3000
                   connectionTimeoutMs: 1000
@@ -94,6 +96,7 @@ class ReplicationServerConfigTest {
                   pollIntervalMs: 1000
                   topicRegistryRuntimeDir: /registry
                   topicRegistrySigner: replication-server-1
+                  topicRegistryCliBackend: CACHE_ONLY
                 timing:
                   requestTimeoutMs: 3000
                   connectionTimeoutMs: 1000

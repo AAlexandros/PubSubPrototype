@@ -3,6 +3,7 @@ package org.pubsub.prototype.persistence.core;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.pubsub.prototype.persistence.DeliveryProgress;
 import org.pubsub.prototype.persistence.PersistenceHex;
+import org.pubsub.prototype.util.JsonSupport;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -54,7 +55,7 @@ public final class DeliveryStateStore {
     private Map<String, Map<String, DeliveryProgress>> load() {
         if (!Files.exists(file)) return new LinkedHashMap<>();
         try {
-            return deepCopy(PersistenceJson.MAPPER.readValue(file.toFile(), TYPE));
+            return deepCopy(JsonSupport.MAPPER.readValue(file.toFile(), TYPE));
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to read delivery state " + file, ex);
         }
@@ -62,7 +63,7 @@ public final class DeliveryStateStore {
 
     private void write(Map<String, Map<String, DeliveryProgress>> value) {
         try {
-            AtomicFiles.write(file, PersistenceJson.MAPPER.writerWithDefaultPrettyPrinter().writeValueAsBytes(value));
+            AtomicFiles.write(file, JsonSupport.MAPPER.writerWithDefaultPrettyPrinter().writeValueAsBytes(value));
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to persist delivery state " + file, ex);
         }

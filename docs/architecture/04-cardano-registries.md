@@ -41,6 +41,71 @@ Event payloads and replica inventories are absent by design. Cardano records
 governance and discovery data, while the data and persistence planes handle the
 high-volume event path.
 
+## Cardano CLI execution
+
+The registry selects one command backend at construction time:
+
+- `HOST` runs the installed `cardano-cli` and requires network magic and a node socket path.
+- `DEVNET` runs `cardano-cli` through the devnet Docker Compose service and requires network magic.
+- `CACHE_ONLY` disables commands and lets application runtimes consume the materialized registry cache.
+
+Shared Java execution types live under `org.pubsub.prototype.cardano`: network
+settings, backend selection, process execution, and host/devnet runners. Topic
+datum encoding and Topic Registry transactions remain under
+`org.pubsub.prototype.registry.cardano`. The Replication Registry currently
+executes from Bash and shares the `cardano_cli` helper in the devnet scripts.
+
+There is no automatic fallback between backends. Application YAML selects
+`CACHE_ONLY`, while registry administration scripts select `DEVNET` by default.
+Set `CARDANO_CLI_BACKEND=HOST` to make those scripts use an installed CLI
+instead.
+
+Deployment metadata and the configured signing identity are loaded lazily and
+cached for the lifetime of a `CardanoTopicRegistry` instance. Changes to
+`deployment.env`, the configured signer, its payment address or key files, the
+network environment, or the CLI backend therefore require the owning process
+to be restarted. On-chain topic changes remain dynamic and continue to be
+observed through registry queries without a restart.
+
+The configured signer is the only identity read from the local `keys/`
+directory. Topic owner and administrator arguments cross the registry boundary
+as public 56-character Cardano payment-key hashes; the owner supplies those
+hashes through a separate trusted channel. The Java and shell boundaries reject
+identity names for these fields. Local acceptance tests use
+`scripts/registry/payment-key-hash.sh` only to derive hashes for generated
+devnet identities.
+
+For the complete generated command shapes, their purposes, and their owning
+scripts or Java components, see the
+[Cardano CLI command reference](../../documentation/cardano-cli.md).
+
+The `DEVNET` backend expands a command to:
+
+```text
+docker compose \
+  --env-file <devnet>/versions.env \
+  -f <devnet>/compose.yaml \
+  exec -T \
+  -e CARDANO_NODE_SOCKET_PATH=/devnet/runtime/testnet/socket/node1/sock \
+  cardano-node cardano-cli <arguments>
+```
+
+Paths inside `<arguments>` that belong to the host devnet directory are mapped
+under the container's `/devnet` mount.
+
+### Local Cardano pool node
+
+The Docker devnet currently creates one Cardano pool node. This is the blockchain
+process that validates transactions, maintains the test ledger, and produces
+blocks; it is unrelated to the Pub/Sub application nodes. The CLI connects to it
+through `/devnet/runtime/testnet/socket/node1/sock` inside the container. The
+host devnet runtime directory is mounted at `/devnet/runtime`, so the same socket
+is also available from the host through the generated network configuration.
+
+One pool node is enough for contract and integration testing. A multi-pool devnet
+would create additional node sockets, but the CLI could still use node 1 as its
+single query and submission endpoint.
+
 # D10 — Administrative actions and runtime observation
 
 D10 expands D4 over time. It distinguishes an explicit administrative write

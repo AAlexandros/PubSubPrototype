@@ -78,6 +78,7 @@ registry:
   pollIntervalMs: 500
   topicRegistryRuntimeDir: /registry
   topicRegistrySigner: ${signers[index]}
+  topicRegistryCliBackend: CACHE_ONLY
 timing:
   connectionTimeoutMs: 500
   requestTimeoutMs: 1500

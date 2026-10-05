@@ -49,7 +49,10 @@ pubsub_run_gradle() {
   local root="$1"
   shift
   if pubsub_uses_windows_tools; then
-    (cd "$root" && cmd.exe /c gradlew.bat -g .gradle-user-home "$@")
+    # Keep MSYS from rewriting cmd.exe's /c switch, but scope that exception to
+    # this native Windows invocation. Node and Docker calls still need normal
+    # Git-Bash path conversion.
+    (cd "$root" && MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' cmd.exe /c gradlew.bat -g .gradle-user-home "$@")
   else
     "$root/gradlew" --gradle-user-home "$root/.gradle-user-home" "$@"
   fi

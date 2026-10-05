@@ -60,8 +60,8 @@ ops/infra/devnet/scripts/fund-identities.sh > "$EVIDENCE_DIR/funded-address-bala
 ./scripts/registry/build.sh
 ./scripts/registry/deploy.sh > "$EVIDENCE_DIR/deployment.txt"
 
-topic_one="$(./scripts/registry/create-topic.sh node-1 phase-0.6-open-topic node-2 - 3 3600 | tail -1)"
-topic_two="$(./scripts/registry/create-topic.sh node-1 phase-0.6-isolated-topic node-2 - 2 3600 | tail -1)"
+topic_one="$(./scripts/registry/create-topic.sh node-1 phase-0.6-open-topic "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 3 3600 | tail -1)"
+topic_two="$(./scripts/registry/create-topic.sh node-1 phase-0.6-isolated-topic "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 2 3600 | tail -1)"
 printf '%s\n%s\n' "$topic_one" "$topic_two" > "$EVIDENCE_DIR/topic-ids.txt"
 
 "${COMPOSE[@]}" up -d --build --force-recreate --no-deps pubsub-node-1 pubsub-node-2 pubsub-node-3

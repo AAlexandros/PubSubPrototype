@@ -41,7 +41,7 @@ public final class ReplicationServerMain {
                 config.serverId(), members.get().size(), members.get());
         ReplicationMembership membership = members::get;
         CardanoTopicRegistry topics = new CardanoTopicRegistry(new CardanoRegistryConfig(
-                config.topicRegistryRuntimeDir(), config.topicRegistrySigner()));
+                config.topicRegistryRuntimeDir(), config.topicRegistrySigner(), config.topicRegistryCliBackend()));
         FileEventStore store = new FileEventStore(config.storagePath(), Clock.systemUTC(),
                 new SystemEpochProvider(Clock.systemUTC(), config.epochZeroTimeMs(), config.epochLengthMs()));
         store.ensureServerIdentity(config.serverId());

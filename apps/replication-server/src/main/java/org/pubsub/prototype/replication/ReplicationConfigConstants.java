@@ -11,6 +11,7 @@ final class ReplicationConfigConstants {
     static final String POLL_INTERVAL_MS = "registry.pollIntervalMs";
     static final String TOPIC_REGISTRY_RUNTIME_DIR = "registry.topicRegistryRuntimeDir";
     static final String TOPIC_REGISTRY_SIGNER = "registry.topicRegistrySigner";
+    static final String TOPIC_REGISTRY_CLI_BACKEND = "registry.topicRegistryCliBackend";
     static final String REQUEST_TIMEOUT_MS = "timing.requestTimeoutMs";
     static final String CONNECTION_TIMEOUT_MS = "timing.connectionTimeoutMs";
     static final String RETRIES = "timing.retries";

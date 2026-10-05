@@ -12,6 +12,7 @@ import org.pubsub.prototype.persistence.ReplicationServerState;
 import org.pubsub.prototype.persistence.StoredEvent;
 import org.pubsub.prototype.registry.TopicId;
 import org.pubsub.prototype.registry.TopicState;
+import org.pubsub.prototype.util.JsonSupport;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -133,14 +134,16 @@ class PersistenceCoreTest {
             assertEquals(10, initial.latestDeliveredTimestamp(TOPIC));
             List<Long> delivered = new ArrayList<>();
             PersistenceEventValidator validator = new PersistenceEventValidator(id -> java.util.Optional.of(topic(1, 10, List.of())));
-            try (RecoveryService recovery = new RecoveryService(client, new DeliveryStateStore(stateFile), validator,
-                    event -> delivered.add(event.sequenceNumber()), 2)) {
-                assertEquals(2, recovery.recover(TOPIC).deliveredCount());
+            try (RecoveryService recovery = new RecoveryService(
+                    client, new DeliveryStateStore(stateFile), validator, 2)) {
+                assertEquals(2, recovery.recover(
+                        TOPIC, event -> delivered.add(event.sequenceNumber())).deliveredCount());
                 assertEquals(List.of(1L, 2L), delivered);
             }
-            try (RecoveryService restarted = new RecoveryService(client, new DeliveryStateStore(stateFile), validator,
-                    event -> fail("duplicate delivery"), 2)) {
-                assertEquals(0, restarted.recover(TOPIC).deliveredCount());
+            try (RecoveryService restarted = new RecoveryService(
+                    client, new DeliveryStateStore(stateFile), validator, 2)) {
+                assertEquals(0, restarted.recover(
+                        TOPIC, event -> fail("duplicate delivery")).deliveredCount());
             }
         } finally {
             fake.stop(0);
@@ -148,7 +151,7 @@ class PersistenceCoreTest {
     }
 
     private static void json(com.sun.net.httpserver.HttpExchange exchange, Object value) throws java.io.IOException {
-        byte[] bytes = PersistenceJson.MAPPER.writeValueAsBytes(value);
+        byte[] bytes = JsonSupport.MAPPER.writeValueAsBytes(value);
         exchange.sendResponseHeaders(200, bytes.length);
         exchange.getResponseBody().write(bytes);
         exchange.close();

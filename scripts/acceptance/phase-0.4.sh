@@ -74,7 +74,7 @@ assert_runtime invalid
 wait_log pubsub-node-1 'SECURECYCLON_EXCHANGE_REJECTED.*reason=Request requires one fresh sender link first'
 
 # Exercise the existing on-chain registry and signed Phase 0.3 event path after convergence.
-topic="$(./scripts/registry/create-topic.sh node-1 open node-2 - 3 3600 | tail -1)"
+topic="$(./scripts/registry/create-topic.sh node-1 open "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 3 3600 | tail -1)"
 echo "$topic" > "$EVIDENCE_DIR/event-topic-id.txt"
 sleep 4
 ./scripts/events/publish.sh node-2 "$topic" 'phase-0.4-after-convergence' > "$EVIDENCE_DIR/published-event.json"

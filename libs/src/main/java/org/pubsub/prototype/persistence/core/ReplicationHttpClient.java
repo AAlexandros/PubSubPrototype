@@ -10,6 +10,7 @@ import org.pubsub.prototype.persistence.ReplicaInventory;
 import org.pubsub.prototype.persistence.ReplicaRepairRequest;
 import org.pubsub.prototype.persistence.ReplicationServer;
 import org.pubsub.prototype.persistence.StoredEvent;
+import org.pubsub.prototype.util.JsonSupport;
 
 import java.io.IOException;
 import java.net.http.HttpClient;
@@ -63,7 +64,7 @@ public final class ReplicationHttpClient implements AutoCloseable {
                     .GET().build());
             if (response.statusCode() == 404) return List.of();
             requireSuccess(response);
-            return PersistenceJson.MAPPER.readValue(response.body(), PersistenceJson.MAPPER.getTypeFactory()
+            return JsonSupport.MAPPER.readValue(response.body(), JsonSupport.MAPPER.getTypeFactory()
                     .constructCollectionType(List.class, PublisherProgress.class));
         } catch (IOException ex) {
             throw new IllegalStateException("Invalid replication-server response", ex);
@@ -98,7 +99,7 @@ public final class ReplicationHttpClient implements AutoCloseable {
             HttpResponse<byte[]> response = send(request(server, path).GET().build());
             if (response.statusCode() == 404) return Optional.empty();
             requireSuccess(response);
-            return Optional.of(PersistenceJson.MAPPER.readValue(response.body(), type));
+            return Optional.of(JsonSupport.MAPPER.readValue(response.body(), type));
         } catch (IOException ex) {
             throw new IllegalStateException("Invalid replication-server response", ex);
         }
@@ -108,7 +109,7 @@ public final class ReplicationHttpClient implements AutoCloseable {
         try {
             HttpResponse<byte[]> response = send(request(server, path).GET().build());
             requireSuccess(response);
-            return PersistenceJson.MAPPER.readValue(response.body(), type);
+            return JsonSupport.MAPPER.readValue(response.body(), type);
         } catch (IOException ex) {
             throw new IllegalStateException("Invalid replication-server response", ex);
         }
@@ -116,12 +117,12 @@ public final class ReplicationHttpClient implements AutoCloseable {
 
     private <T> T sendJson(ReplicationServer server, String path, String method, Object body, Class<T> type) {
         try {
-            byte[] json = PersistenceJson.MAPPER.writeValueAsBytes(body);
+            byte[] json = JsonSupport.MAPPER.writeValueAsBytes(body);
             HttpRequest request = request(server, path).header(JsonHttp.CONTENT_TYPE, JsonHttp.JSON_MEDIA_TYPE)
                     .method(method, HttpRequest.BodyPublishers.ofByteArray(json)).build();
             HttpResponse<byte[]> response = send(request);
             requireSuccess(response);
-            return PersistenceJson.MAPPER.readValue(response.body(), type);
+            return JsonSupport.MAPPER.readValue(response.body(), type);
         } catch (IOException ex) {
             throw new IllegalStateException("Replication request failed", ex);
         }

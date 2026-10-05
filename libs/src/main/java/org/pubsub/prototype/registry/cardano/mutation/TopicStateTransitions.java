@@ -1,4 +1,4 @@
-package org.pubsub.prototype.registry.cardano;
+package org.pubsub.prototype.registry.cardano.mutation;
 
 import org.pubsub.prototype.registry.RegistryAuthorizationException;
 import org.pubsub.prototype.registry.RegistryConflictException;
@@ -8,11 +8,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-final class TopicStateTransitions {
+public final class TopicStateTransitions {
     private TopicStateTransitions() {
     }
 
-    static TopicState apply(TopicState current, TopicMutation mutation) {
+    public static TopicState apply(TopicState current, TopicMutation mutation) {
         if (!current.active() && mutation.operation() != TopicOperation.DELETE_TOPIC) {
             throw new RegistryConflictException("inactive topic cannot be modified");
         }
@@ -29,7 +29,7 @@ final class TopicStateTransitions {
         };
     }
 
-    static void authorize(String signer, TopicState topic, TopicMutation mutation) {
+    public static void authorize(String signer, TopicState topic, TopicMutation mutation) {
         boolean owner = topic.owners().contains(signer);
         boolean admin = topic.admins().contains(signer);
         if (mutation.operation().ownerOnly() && !owner) {

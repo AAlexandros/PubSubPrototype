@@ -14,7 +14,7 @@ import org.pubsub.prototype.protocol.NodeIdentity;
 import org.pubsub.prototype.registry.TopicId;
 import org.pubsub.prototype.node.runtimes.DisseminationRuntime;
 import org.pubsub.prototype.node.runtimes.PersistenceRuntime;
-import org.pubsub.prototype.transport.PubSubTransport;
+import org.pubsub.prototype.transport.TransportSender;
 import org.pubsub.prototype.transport.TransportListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +28,7 @@ public final class NodeEventCoordinator implements TransportListener {
 
     private final EventPublisher publisher;
     private final EventValidator validator;
-    private PubSubTransport transport;
+    private TransportSender sender;
     private DisseminationRuntime dissemination;
     private PersistenceRuntime persistence;
 
@@ -37,8 +37,8 @@ public final class NodeEventCoordinator implements TransportListener {
         this.validator = new EventValidator(topics, new EventDeduplicator(10_000));
     }
 
-    public void attachTransport(PubSubTransport transport) {
-        this.transport = transport;
+    public void attachSender(TransportSender sender) {
+        this.sender = sender;
     }
 
     public void attachDissemination(DisseminationRuntime dissemination) {
@@ -64,7 +64,7 @@ public final class NodeEventCoordinator implements TransportListener {
                         event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber());
                 delivered(event, publisherKeyId, true);
             }
-            if (forceBroadcast || dissemination == null) transport.broadcastEvent(event);
+            if (forceBroadcast) sender.broadcastEvent(event);
             else dissemination.disseminate(event, null);
         }
         if (!result.accepted() && !forceBroadcast) {
@@ -88,8 +88,7 @@ public final class NodeEventCoordinator implements TransportListener {
     public EventEnvelope inject(EventEnvelope event) {
         LOG.info("EVENT_PUBLISHED eventId={} topicId={} publisherKeyId={} sequenceNumber={}",
                 event.eventId(), event.topicId(), EventCrypto.publisherKeyId(event), event.sequenceNumber());
-        if (dissemination == null) transport.broadcastEvent(event);
-        else dissemination.disseminate(event, null);
+        dissemination.disseminate(event, null);
         return event;
     }
 
@@ -109,8 +108,7 @@ public final class NodeEventCoordinator implements TransportListener {
             // Remote acceptance is a delivery-only path. The original publisher is
             // solely responsible for submitting the event to persistence.
             delivered(event, publisherKeyId, false);
-            if (dissemination == null) transport.forwardEvent(event, peerNodeId);
-            else dissemination.disseminate(event, peerNodeId);
+            dissemination.disseminate(event, peerNodeId);
             LOG.info("EVENT_FORWARDED eventId={} topicId={} publisherKeyId={} sequenceNumber={} peerNodeId={}",
                     event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber(), peerNodeId.value());
         } else if (result.sequenceStatus() == EventSequenceStatus.DUPLICATE) {
@@ -126,10 +124,8 @@ public final class NodeEventCoordinator implements TransportListener {
     }
 
     private void delivered(EventEnvelope event, String publisherKeyId, boolean persist) {
-        if (persistence != null) {
-            persistence.recordDelivered(event, publisherKeyId);
-            if (persist) persistence.persist(event);
-        }
+        persistence.recordDelivered(event, publisherKeyId);
+        if (persist) persistence.persist(event);
     }
 
     private void logRejection(EventEnvelope event, String publisherKeyId, EventRejectReason reason, NodeId peerNodeId) {

@@ -23,12 +23,12 @@ for (let index = 1; index <= nodeCount; index++) {
   identityPath: /data/identity
 peers: ${seed}
 transport: {pingIntervalMs: 3000, pingTimeoutMs: 2000, reconnectInitialMs: 500, reconnectMaxMs: 5000}
-registry: {enabled: true, runtimeDir: /registry, signer: node-1, pollIntervalMs: 1000}
+registry: {runtimeDir: /registry, signer: node-1, cliBackend: CACHE_ONLY, pollIntervalMs: 1000}
 control: {host: 0.0.0.0, port: ${settings.controlPort}}
 peerSampling: {advertisedHost: pubsub-node-${index}, viewSize: ${settings.secureCyclon.viewSize}, swapLength: ${settings.secureCyclon.swapLength}, cycleIntervalMs: ${settings.secureCyclon.cycleIntervalMs}, ageThreshold: ${settings.secureCyclon.ageThreshold}, proofFanout: ${settings.secureCyclon.proofFanout}, randomSeed: ${9000 + index}}
 navigation: {capacity: ${settings.navigation.capacity}, routingBase: ${settings.navigation.routingBase}, cycleIntervalMs: ${settings.navigation.cycleIntervalMs}, staleAfterMs: ${settings.navigation.staleAfterMs}, subscriptionsPath: /data/identity/subscriptions.json}
 dissemination: {randomLinkCount: ${settings.dissemination.randomLinkCount}, cycleIntervalMs: ${settings.dissemination.cycleIntervalMs}, staleAfterMs: ${settings.dissemination.staleAfterMs}, randomSeed: ${19000 + index}}
-persistence: {enabled: true, membershipPath: /replication-registry/servers.json, deliveryStatePath: /data/identity/recovery-state.json, connectionTimeoutMs: ${settings.persistence.connectionTimeoutMs}, requestTimeoutMs: ${settings.persistence.requestTimeoutMs}, retries: ${settings.persistence.retries}, recoveryConcurrency: ${settings.persistence.recoveryConcurrency}}
+persistence: {membershipPath: /replication-registry/servers.json, deliveryStatePath: /data/identity/recovery-state.json, connectionTimeoutMs: ${settings.persistence.connectionTimeoutMs}, requestTimeoutMs: ${settings.persistence.requestTimeoutMs}, retries: ${settings.persistence.retries}, recoveryConcurrency: ${settings.persistence.recoveryConcurrency}}
 `);
 }
 const signers = ['node-1', 'node-2', 'node-3'];
@@ -44,6 +44,7 @@ registry:
   pollIntervalMs: 500
   topicRegistryRuntimeDir: /registry
   topicRegistrySigner: ${signers[index - 1]}
+  topicRegistryCliBackend: CACHE_ONLY
 timing: {connectionTimeoutMs: 500, requestTimeoutMs: 1500, retries: 0, cleanupIntervalMs: 1000, failureProbeAttempts: 3, failureProbeTimeoutMs: 500, maintenanceIntervalMs: 500}
 epoch: {zeroTimeMs: 0, lengthMs: 432000000}
 `);

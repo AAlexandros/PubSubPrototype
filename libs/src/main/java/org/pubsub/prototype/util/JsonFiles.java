@@ -2,7 +2,6 @@ package org.pubsub.prototype.util;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -12,8 +11,7 @@ import java.nio.file.StandardCopyOption;
 
 /** Shared JSON file serialization with atomic replacement. */
 public final class JsonFiles {
-    private static final ObjectMapper MAPPER = new ObjectMapper()
-            .registerModule(new JavaTimeModule())
+    private static final ObjectMapper MAPPER = JsonSupport.MAPPER.copy()
             .enable(SerializationFeature.INDENT_OUTPUT);
 
     private JsonFiles() {

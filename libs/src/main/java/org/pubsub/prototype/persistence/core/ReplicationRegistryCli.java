@@ -2,6 +2,7 @@ package org.pubsub.prototype.persistence.core;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.pubsub.prototype.persistence.ReplicationServerState;
+import org.pubsub.prototype.util.JsonSupport;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -31,10 +32,10 @@ public final class ReplicationRegistryCli {
             case "register" -> {
                 ReplicationServerState server = new ReplicationServerState(args[2], args[3], args[4],
                         Integer.parseInt(args[5]), Long.parseLong(args[6]), Long.parseLong(args[7]), true);
-                System.out.println(PersistenceJson.MAPPER.valueToTree(registry.registerServer(server, args[3])));
+                System.out.println(JsonSupport.MAPPER.valueToTree(registry.registerServer(server, args[3])));
             }
             case "unregister" -> registry.unregisterServer(args[2], args[3]);
-            case "query" -> System.out.println(PersistenceJson.MAPPER.valueToTree(
+            case "query" -> System.out.println(JsonSupport.MAPPER.valueToTree(
                     registry.queryServers(args.length > 2 && "--all".equals(args[2]))));
             default -> throw new IllegalArgumentException("Unsupported command: " + args[1]);
         }
@@ -42,7 +43,7 @@ public final class ReplicationRegistryCli {
 
     static String serverId(Path verificationKey) {
         try {
-            JsonNode node = PersistenceJson.MAPPER.readTree(Files.readAllBytes(verificationKey));
+            JsonNode node = JsonSupport.MAPPER.readTree(Files.readAllBytes(verificationKey));
             String cborHex = node.path(CBOR_HEX_FIELD).asText();
             if (cborHex.isBlank()) {
                 throw new IllegalArgumentException("verification key has no " + CBOR_HEX_FIELD);

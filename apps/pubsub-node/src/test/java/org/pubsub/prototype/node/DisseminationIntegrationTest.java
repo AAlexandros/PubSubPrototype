@@ -3,15 +3,18 @@ package org.pubsub.prototype.node;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.navigation.SubscriptionStore;
-import org.pubsub.prototype.node.adapter.transport.NodeTransportListener;
 import org.pubsub.prototype.node.runtimes.DisseminationRuntime;
 import org.pubsub.prototype.node.runtimes.NavigationRuntime;
 import org.pubsub.prototype.node.service.NodeEventCoordinator;
 import org.pubsub.prototype.protocol.IdentityStore;
+import org.pubsub.prototype.protocol.MessageType;
+import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.NodeIdentity;
+import org.pubsub.prototype.protocol.ProtocolMessage;
 import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.transport.PubSubTransport;
 import org.pubsub.prototype.transport.TransportConfig;
+import org.pubsub.prototype.transport.TransportListener;
 
 import java.net.ServerSocket;
 import java.nio.file.Path;
@@ -74,10 +77,25 @@ class DisseminationIntegrationTest {
             transport = new PubSubTransport(new TransportConfig(name, "127.0.0.1", port,
                     List.of(), 100, 500, 50, 100), identity,
                     new NodeEndpoint(identity.nodeId().value(), "127.0.0.1", port),
-                    new NodeTransportListener(null, navigation, dissemination, events));
+                    new TransportListener() {
+                        @Override
+                        public void samplingReceived(NodeId peer, ProtocolMessage message) {
+                            if (message.type() == MessageType.NAVIGATION_REQUEST
+                                    || message.type() == MessageType.NAVIGATION_RESPONSE) {
+                                navigation.messageReceived(peer, message);
+                            } else {
+                                dissemination.messageReceived(peer, message);
+                            }
+                        }
+
+                        @Override
+                        public void peerDisconnected(NodeId peer) {
+                            dissemination.peerDisconnected(peer);
+                        }
+                    });
             navigation.attach(transport);
             dissemination.attach(transport);
-            events.attachTransport(transport);
+            events.attachSender(transport);
             events.attachDissemination(dissemination);
         }
 

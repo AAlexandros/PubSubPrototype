@@ -181,6 +181,24 @@ class SecureCyclonTest {
         assertTrue(a.view().isEmpty());
     }
 
+    @Test void rejectsDescriptorsFromBeforeADisconnectButAcceptsANewAdvertisementAfterRestart() {
+        SecureCyclon a = new SecureCyclon(A, 4, 2, 100, 10, new Random(0), ignored -> {});
+        a.bootstrap(B);
+        a.bootstrap(C);
+        a.peerUnavailable(C.nodeId(), 1_500);
+        assertFalse(a.view().contains(C));
+
+        NodeDescriptor staleC = NodeDescriptor.fresh(C, 1_000).transfer(B.nodeId()).transfer(A.nodeId());
+        a.handleSwapRequest(B.nodeId(), new GossipExchange(List.of(
+                NodeDescriptor.fresh(B, 1_600).transfer(A.nodeId()), staleC), List.of()), 1_600);
+        assertFalse(a.view().contains(C));
+
+        NodeDescriptor restartedC = NodeDescriptor.fresh(C, 1_700).transfer(B.nodeId()).transfer(A.nodeId());
+        a.handleSwapRequest(B.nodeId(), new GossipExchange(List.of(
+                NodeDescriptor.fresh(B, 1_700).transfer(A.nodeId()), restartedC), List.of()), 1_700);
+        assertTrue(a.view().contains(C));
+    }
+
     @Test void validatesAndAcceptsProofCarriedByGossip() {
         SecureCyclon detector = node(A);
         detector.handleSwapRequest(B.nodeId(), request(B, A, 1000), 1000);

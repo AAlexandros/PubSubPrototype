@@ -1,6 +1,5 @@
 package org.pubsub.prototype.node.bootstrap;
 
-import org.pubsub.prototype.event.TopicStateProvider;
 import org.pubsub.prototype.navigation.SubscriptionStore;
 import org.pubsub.prototype.node.adapter.http.EventControlServer;
 import org.pubsub.prototype.node.adapter.transport.NodeTransportListener;
@@ -21,14 +20,14 @@ import org.pubsub.prototype.transport.PubSubTransport;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static java.util.Optional.empty;
 
 /**
  * Owns construction and lifecycle for one Pub/Sub node process.
+ *
+ * <p>{@link #runUntilShutdown()} waits on the calling thread while network, HTTP, and scheduled
+ * work run on their own threads. The shutdown hook calls {@link #close()}, which stops components
+ * and releases the wait; repeated close calls are safe.</p>
  */
 public final class NodeApplication implements AutoCloseable {
     private final RegistrySynchronizer registry;
@@ -39,8 +38,6 @@ public final class NodeApplication implements AutoCloseable {
     private final PubSubTransport transport;
     private final EventControlServer controlServer;
     private final CountDownLatch stopped = new CountDownLatch(1);
-    private final AtomicBoolean started = new AtomicBoolean();
-    private final AtomicBoolean closed = new AtomicBoolean();
 
     private NodeApplication(RegistrySynchronizer registry, PersistenceRuntime persistence,
                             PeerSamplingRuntime sampling, NavigationRuntime navigation,
@@ -66,45 +63,41 @@ public final class NodeApplication implements AutoCloseable {
         NodeIdentity identity = IdentityStore.loadOrCreate(config.identityPath());
         // Initialize the topic registry synchronizer
         RegistrySynchronizer registry = createRegistry(config);
-        TopicStateProvider topics = registry == null ? topicId -> empty() : registry;
-        NodeEventCoordinator eventService = new NodeEventCoordinator(identity, config.identityPath(), topics);
+        // Initialize the event coordinator
+        NodeEventCoordinator eventService = new NodeEventCoordinator(identity, config.identityPath(), registry);
+        // Initialize the persistence runtime
+        PersistenceRuntime persistence = createPersistence(config, registry);
+        eventService.attachPersistence(persistence);
 
-        PersistenceRuntime persistence = createPersistence(config, topics);
-        if (persistence != null) {
-            persistence.attachDelivery(eventService::acceptRecovered);
-            eventService.attachPersistence(persistence);
-        }
-
-        PeerSamplingRuntime sampling = null;
-        NavigationRuntime navigation = null;
-        NodeEndpoint self = null;
-        if (config.sampling() != null) {
-            self = new NodeEndpoint(identity.nodeId().value(), config.sampling().advertisedHost,
-                    config.node().listenPort);
-            sampling = createSampling(config, self);
-            navigation = createNavigation(config, identity, registry, sampling);
-        }
+        // Initialize the node endpoint
+        NodeEndpoint self = new NodeEndpoint(identity.nodeId().value(), config.sampling().advertisedHost,
+                config.node().listenPort);
+        // Initialize the peer sampling runtime (Layer one)
+        PeerSamplingRuntime sampling = createSampling(config, self);
+        // Initialize the navigation runtime (Layer two)
+        NavigationRuntime navigation = createNavigation(config, identity, registry, sampling);
+        // Initialize the dissemination runtime (The actual dissemination layer)
         DisseminationRuntime dissemination = createDissemination(config, identity, registry, navigation);
 
+        // The pub-sub transport used to transmit the various messages between the nodes
         PubSubTransport transport = new PubSubTransport(config.toTransportConfig(), identity, self,
                 new NodeTransportListener(sampling, navigation, dissemination, eventService));
-        if (sampling != null) {
-            sampling.attach(transport);
-            navigation.attach(transport);
-        }
-        if (dissemination != null) dissemination.attach(transport);
-        eventService.attachTransport(transport);
+        // Attach the transport to all the runtimes
+        sampling.attach(transport);
+        navigation.attach(transport);
+        dissemination.attach(transport);
+        eventService.attachSender(transport);
         eventService.attachDissemination(dissemination);
 
+        // External control server for managing and monitoring the node
+        // ToDo: Conside making each node autonomus, completely removing the HTTP dependency
         EventControlServer controlServer = new EventControlServer(
                 config.controlHost(), config.controlPort(), eventService);
-        if (sampling != null) {
-            controlServer.addSampling(sampling.sampling(), identity.nodeId().value(),
-                    config.sampling().viewSize);
-            controlServer.addNavigation(navigation, identity.nodeId().value());
-        }
-        if (dissemination != null) controlServer.addDissemination(dissemination, identity.nodeId().value());
-        if (persistence != null) controlServer.addPersistence(persistence);
+        controlServer.addSampling(sampling.sampling(), identity.nodeId().value(),
+                config.sampling().viewSize);
+        controlServer.addNavigation(navigation, identity.nodeId().value());
+        controlServer.addDissemination(dissemination, identity.nodeId().value());
+        controlServer.addPersistence(persistence);
 
         return new NodeApplication(registry, persistence, sampling, navigation,
                 dissemination, transport, controlServer);
@@ -116,6 +109,7 @@ public final class NodeApplication implements AutoCloseable {
         try {
             start();
             stopped.await();
+        // finally block to cover all the edge cases that the start may fail
         } finally {
             close();
             try {
@@ -126,30 +120,28 @@ public final class NodeApplication implements AutoCloseable {
         }
     }
 
+    /**
+     * Start all the node runtimes.
+     * @throws InterruptedException
+     */
     public void start() throws InterruptedException {
-        if (!started.compareAndSet(false, true)) return;
-        if (registry != null) registry.start();
+        registry.start();
         controlServer.start();
         transport.start();
-        if (sampling != null) {
-            sampling.start();
-            navigation.start();
-        }
-        if (dissemination != null) dissemination.start();
+        sampling.start();
+        navigation.start();
+        dissemination.start();
     }
 
     @Override
     public void close() {
-        if (!closed.compareAndSet(false, true)) return;
         try {
             controlServer.close();
-            if (registry != null) registry.close();
-            if (sampling != null) {
-                sampling.close();
-                navigation.close();
-            }
-            if (dissemination != null) dissemination.close();
-            if (persistence != null) persistence.close();
+            registry.close();
+            sampling.close();
+            navigation.close();
+            dissemination.close();
+            persistence.close();
             transport.close();
         } finally {
             stopped.countDown();
@@ -157,25 +149,25 @@ public final class NodeApplication implements AutoCloseable {
     }
 
     private static RegistrySynchronizer createRegistry(NodeConfig config) {
-        if (!config.registryEnabled()) return null;
         return new RegistrySynchronizer(
                 new CardanoTopicRegistry(new CardanoRegistryConfig(
-                        Path.of(config.registry().runtimeDir), config.registry().signer)),
+                        Path.of(config.registry().runtimeDir),
+                        config.registry().signer,
+                        config.registry().cliBackend)),
                 config.registry().pollIntervalMs);
     }
 
     // Runtime creation helpers
 
-    private static PersistenceRuntime createPersistence(NodeConfig config, TopicStateProvider topics) {
+    private static PersistenceRuntime createPersistence(NodeConfig config, RegistrySynchronizer registry) {
         NodeConfig.PersistenceSection persistence = config.persistence();
-        if (persistence == null || !persistence.enabled) return null;
         return new PersistenceRuntime(new PersistenceRuntime.Settings(
                 Path.of(persistence.membershipPath),
                 Path.of(persistence.deliveryStatePath),
                 Duration.ofMillis(persistence.connectionTimeoutMs),
                 Duration.ofMillis(persistence.requestTimeoutMs),
                 persistence.retries,
-                persistence.recoveryConcurrency), topics);
+                persistence.recoveryConcurrency), registry);
     }
 
     private static PeerSamplingRuntime createSampling(NodeConfig config, NodeEndpoint self) {
@@ -196,7 +188,7 @@ public final class NodeApplication implements AutoCloseable {
                 SubscriptionStore.loadOrCreate(config.subscriptionsPath()),
                 new NavigationRuntime.Settings(navigation.capacity, navigation.routingBase,
                         navigation.cycleIntervalMs, navigation.staleAfterMs),
-                registry == null ? List::of : registry::activeTopicIds,
+                registry::activeTopicIds,
                 () -> sampling.sampling().view());
     }
 
@@ -204,7 +196,6 @@ public final class NodeApplication implements AutoCloseable {
                                                             RegistrySynchronizer registry,
                                                             NavigationRuntime navigation) {
         NodeConfig.DisseminationSection dissemination = config.dissemination();
-        if (dissemination == null) return null;
         return new DisseminationRuntime(
                 identity.nodeId().value(), config.sampling().advertisedHost,
                 config.node().listenPort,
@@ -212,6 +203,6 @@ public final class NodeApplication implements AutoCloseable {
                         dissemination.cycleIntervalMs, dissemination.staleAfterMs,
                         dissemination.randomSeed),
                 navigation,
-                registry == null ? List::of : registry::activeTopicIds);
+                registry::activeTopicIds);
     }
 }

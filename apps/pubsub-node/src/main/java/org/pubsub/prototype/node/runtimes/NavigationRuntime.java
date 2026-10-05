@@ -8,7 +8,7 @@ import org.pubsub.prototype.protocol.MessageType;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.ProtocolMessage;
 import org.pubsub.prototype.sampling.NodeEndpoint;
-import org.pubsub.prototype.transport.PubSubTransport;
+import org.pubsub.prototype.transport.TransportSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
- * Bridges the transport-free Vicinity navigation engine to the Netty runtime and Cardano registry.
+ * Bridges the transport-free Vicinity navigation engine to outbound transport operations and the topic registry.
  */
 public final class NavigationRuntime implements CyclicTransportRuntime {
 
@@ -37,7 +37,7 @@ public final class NavigationRuntime implements CyclicTransportRuntime {
     private final Supplier<List<NodeEndpoint>> samplingViewSupplier;
     private final long interval;
     private final String nodeId;
-    private PubSubTransport transport;
+    private TransportSender sender;
     private List<String> lastActiveTopics = List.of();
 
     /**
@@ -63,8 +63,8 @@ public final class NavigationRuntime implements CyclicTransportRuntime {
     }
 
     @Override
-    public void attach(PubSubTransport transport) {
-        this.transport = transport;
+    public void attach(TransportSender sender) {
+        this.sender = sender;
     }
 
     @Override
@@ -85,7 +85,7 @@ public final class NavigationRuntime implements CyclicTransportRuntime {
             for (NodeEndpoint sample : samplingViewSupplier.get()) {
                 navigation.ingestSample(sample.nodeId(), sample.host(), sample.port(), now);
             }
-            navigation.cycle(now).ifPresent(out -> transport.sendSampling(
+            navigation.cycle(now).ifPresent(out -> sender.sendSampling(
                     new NodeEndpoint(out.peer().nodeId(), out.peer().host(), out.peer().port()),
                     ProtocolMessage.navigationGossip(MessageType.NAVIGATION_REQUEST, out.requestId(), out.exchange())));
         } catch (RuntimeException ex) {
@@ -103,7 +103,7 @@ public final class NavigationRuntime implements CyclicTransportRuntime {
                         var response = navigation.request(peer.value(), message.navigation(), now);
                         ProtocolMessage responseMessage = ProtocolMessage.navigationGossip(
                                 MessageType.NAVIGATION_RESPONSE, message.requestId(), response);
-                        transport.replySampling(peer, responseMessage);
+                        sender.replySampling(peer, responseMessage);
                     }
                     case NAVIGATION_RESPONSE ->
                             navigation.response(peer.value(), message.navigation(), now);

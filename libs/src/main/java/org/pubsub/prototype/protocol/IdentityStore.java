@@ -2,6 +2,7 @@ package org.pubsub.prototype.protocol;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import org.pubsub.prototype.util.JsonSupport;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -29,7 +30,8 @@ import static org.pubsub.prototype.util.Validators.requireNonNull;
  * IMPORTANT: If you want to reset the identity, just remove the identity.json file.
  */
 public final class IdentityStore {
-    private static final ObjectMapper MAPPER = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+    private static final ObjectMapper MAPPER = JsonSupport.MAPPER.copy()
+            .enable(SerializationFeature.INDENT_OUTPUT);
 
     private record StoredIdentity(String publicKey, String privateKey) {
         private StoredIdentity {

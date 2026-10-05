@@ -13,8 +13,8 @@ import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.ReplicaRepairRequest;
 import org.pubsub.prototype.persistence.ReplicationServer;
 import org.pubsub.prototype.persistence.StoredEvent;
-import org.pubsub.prototype.persistence.core.PersistenceJson;
 import org.pubsub.prototype.persistence.core.ReplicationMembership;
+import org.pubsub.prototype.util.JsonSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -191,11 +191,11 @@ final class ReplicationHttpServer implements AutoCloseable {
     }
 
     private static <T> T read(HttpExchange exchange, Class<T> type) throws IOException {
-        return JsonHttp.readBounded(exchange, PersistenceJson.MAPPER, type, MAX_REQUEST_BYTES);
+        return JsonHttp.readBounded(exchange, JsonSupport.MAPPER, type, MAX_REQUEST_BYTES);
     }
 
     private static void respond(HttpExchange exchange, int status, Object body) throws IOException {
-        JsonHttp.respond(exchange, PersistenceJson.MAPPER, status, body);
+        JsonHttp.respond(exchange, JsonSupport.MAPPER, status, body);
     }
 
     @Override

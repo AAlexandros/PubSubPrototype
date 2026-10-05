@@ -35,6 +35,8 @@ or the [architecture guide](docs/architecture/README.md) for the complete flow.
 
 Cardano and Aiken versions are pinned by the repository. The testbed scripts
 use locally installed Cardano tools when available and otherwise use Docker.
+The [Cardano CLI command reference](documentation/cardano-cli.md) documents the
+host and Docker execution forms and every CLI command used by the prototype.
 
 ## Build and test
 
@@ -169,6 +171,8 @@ local state you need to keep. Historical acceptance entrypoints remain under
   model, internals, deployment, data flow, timing, and sequences.
 - [Complete script reference](documentation/scripts.md) - every lifecycle,
   registry, event, experiment, and historical acceptance command.
+- [Cardano CLI command reference](documentation/cardano-cli.md) - every
+  `cardano-cli` invocation, its purpose, and its host or Docker execution form.
 - [Phase 0.9 specification](specs/phase-0.9.md) and
   [implementation report](implementation-reports/phase-0.9-implementation-report.md) -
   requirements, scope, and validation evidence.

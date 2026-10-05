@@ -6,6 +6,18 @@ import static org.pubsub.prototype.util.Validators.require;
 import static org.pubsub.prototype.util.Validators.requireNonNull;
 import static org.pubsub.prototype.util.Validators.requirePositive;
 
+/**
+ * A record object that holds the state of the topic, as it is stored in the registry contract.
+ *
+ * @param topicId the unique identifier of the topic. It is a mandatory field
+ * @param name the name of the topic. It is a mandatory field
+ * @param owners the list of owners of the topic. At least one owner is required
+ * @param admins the list of admins of the topic
+ * @param publishers the list of publishers of the topic
+ * @param replicationFactor the replication factor of the topic. It must be a positive integer
+ * @param retentionPeriod the retention period of the topic in milliseconds. It must be a positive value
+ * @param active indicates whether the topic is active or tombstoned
+ */
 public record TopicState(
         TopicId topicId,
         String name,

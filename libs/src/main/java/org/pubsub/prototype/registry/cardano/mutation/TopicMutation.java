@@ -1,4 +1,4 @@
-package org.pubsub.prototype.registry.cardano;
+package org.pubsub.prototype.registry.cardano.mutation;
 
 import org.pubsub.prototype.registry.TopicId;
 import org.pubsub.prototype.registry.TopicRegistry;
@@ -58,7 +58,7 @@ public record TopicMutation(TopicOperation operation, String value) {
         }
     }
 
-    String operationValue() {
+    public String operationValue() {
         return operation.value();
     }
 }

@@ -1,16 +1,12 @@
 package org.pubsub.prototype.node.config;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import org.pubsub.prototype.transport.PeerEndpoint;
 import org.pubsub.prototype.transport.TransportConfig;
 import org.pubsub.prototype.util.Validation;
+import org.pubsub.prototype.util.YamlFiles;
+import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -23,18 +19,10 @@ public record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSec
                          @JsonProperty(PEER_SAMPLING_SECTION) SamplingSection sampling,
                          NavigationSection navigation, DisseminationSection dissemination,
                          PersistenceSection persistence) {
-    private static final ObjectMapper YAML_MAPPER = YAMLMapper.builder()
-            .enable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
-            .build();
-
     public static NodeConfig load(Path path) {
-        try (InputStream input = Files.newInputStream(path)) {
-            NodeConfig config = YAML_MAPPER.readValue(input, NodeConfig.class);
-            validate(config);
-            return config;
-        } catch (IOException ex) {
-            throw new IllegalStateException("Unable to read config " + path, ex);
-        }
+        NodeConfig config = YamlFiles.read(path, NodeConfig.class);
+        validate(config);
+        return config;
     }
 
     public TransportConfig toTransportConfig() {
@@ -52,10 +40,6 @@ public record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSec
 
     public Path identityPath() {
         return Path.of(node.identityPath);
-    }
-
-    public boolean registryEnabled() {
-        return registry != null && Boolean.TRUE.equals(registry.enabled);
     }
 
     public String controlHost() {
@@ -99,64 +83,52 @@ public record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSec
                 .port(config.control.port, CONTROL_PORT)
                 .throwIfInvalid();
 
-        require(config.dissemination == null || config.navigation != null && config.sampling != null,
-                "dissemination requires navigation and peerSampling");
-        require((config.sampling == null) == (config.navigation == null),
-                "peerSampling and navigation must be configured together");
-        if (config.registry != null) {
-            requireNonNull(config.registry.enabled, REGISTRY_ENABLED);
-            if (config.registryEnabled()) {
-                Validation.start()
-                        .nonBlank(config.registry.runtimeDir, REGISTRY_RUNTIME_DIR)
-                        .nonBlank(config.registry.signer, REGISTRY_SIGNER)
-                        .positive(config.registry.pollIntervalMs, REGISTRY_POLL_INTERVAL_MS)
-                        .throwIfInvalid();
-            }
-        }
-        if (config.sampling != null) {
-            int maximumSwapLength = config.sampling.viewSize == null ? MAX_OVERLAY_SIZE : config.sampling.viewSize;
-            Validation.start()
-                    .nonBlank(config.sampling.advertisedHost, SAMPLING_ADVERTISED_HOST)
-                    .range(config.sampling.viewSize, MINIMUM_POSITIVE_VALUE, MAX_OVERLAY_SIZE, SAMPLING_VIEW_SIZE)
-                    .range(config.sampling.swapLength, MINIMUM_POSITIVE_VALUE,
-                            maximumSwapLength, SAMPLING_SWAP_LENGTH)
-                    .positive(config.sampling.cycleIntervalMs, SAMPLING_CYCLE_INTERVAL_MS)
-                    .range(config.sampling.ageThreshold, 0, MAX_AGE_THRESHOLD, SAMPLING_AGE_THRESHOLD)
-                    .positive(config.sampling.proofFanout, SAMPLING_PROOF_FANOUT)
-                    .required(config.sampling.randomSeed, SAMPLING_RANDOM_SEED)
-                    .throwIfInvalid();
-            requireValidHistoryAge(config.sampling);
-        }
-        if (config.navigation != null) {
-            Validation.start()
-                    .range(config.navigation.capacity, MINIMUM_POSITIVE_VALUE, MAX_OVERLAY_SIZE, NAVIGATION_CAPACITY)
-                    .range(config.navigation.routingBase, MIN_ROUTING_BASE, MAX_ROUTING_BASE, NAVIGATION_ROUTING_BASE)
-                    .positive(config.navigation.cycleIntervalMs, NAVIGATION_CYCLE_INTERVAL_MS)
-                    .positive(config.navigation.staleAfterMs, NAVIGATION_STALE_AFTER_MS)
-                    .nonBlank(config.navigation.subscriptionsPath, NAVIGATION_SUBSCRIPTIONS_PATH)
-                    .throwIfInvalid();
-        }
-        if (config.dissemination != null) {
-            Validation.start()
-                    .positive(config.dissemination.randomLinkCount, DISSEMINATION_RANDOM_LINK_COUNT)
-                    .positive(config.dissemination.cycleIntervalMs, DISSEMINATION_CYCLE_INTERVAL_MS)
-                    .positive(config.dissemination.staleAfterMs, DISSEMINATION_STALE_AFTER_MS)
-                    .required(config.dissemination.randomSeed, DISSEMINATION_RANDOM_SEED)
-                    .throwIfInvalid();
-        }
-        if (config.persistence != null) {
-            requireNonNull(config.persistence.enabled, PERSISTENCE_ENABLED);
-            if (config.persistence.enabled) {
-                Validation.start()
-                        .nonBlank(config.persistence.membershipPath, PERSISTENCE_MEMBERSHIP_PATH)
-                        .nonBlank(config.persistence.deliveryStatePath, PERSISTENCE_DELIVERY_STATE_PATH)
-                        .positive(config.persistence.connectionTimeoutMs, PERSISTENCE_CONNECTION_TIMEOUT_MS)
-                        .positive(config.persistence.requestTimeoutMs, PERSISTENCE_REQUEST_TIMEOUT_MS)
-                        .nonNegative(config.persistence.retries, PERSISTENCE_RETRIES)
-                        .positive(config.persistence.recoveryConcurrency, PERSISTENCE_RECOVERY_CONCURRENCY)
-                        .throwIfInvalid();
-            }
-        }
+        require(config.registry != null && config.sampling != null && config.navigation != null
+                        && config.dissemination != null && config.persistence != null,
+                "Pub-sub config must define registry, peerSampling, navigation, dissemination, and persistence sections");
+        Validation.start()
+                .nonBlank(config.registry.runtimeDir, REGISTRY_RUNTIME_DIR)
+                .nonBlank(config.registry.signer, REGISTRY_SIGNER)
+                .required(config.registry.cliBackend, REGISTRY_CLI_BACKEND)
+                .positive(config.registry.pollIntervalMs, REGISTRY_POLL_INTERVAL_MS)
+                .throwIfInvalid();
+
+        int maximumSwapLength = config.sampling.viewSize == null ? MAX_OVERLAY_SIZE : config.sampling.viewSize;
+        Validation.start()
+                .nonBlank(config.sampling.advertisedHost, SAMPLING_ADVERTISED_HOST)
+                .range(config.sampling.viewSize, MINIMUM_POSITIVE_VALUE, MAX_OVERLAY_SIZE, SAMPLING_VIEW_SIZE)
+                .range(config.sampling.swapLength, MINIMUM_POSITIVE_VALUE,
+                        maximumSwapLength, SAMPLING_SWAP_LENGTH)
+                .positive(config.sampling.cycleIntervalMs, SAMPLING_CYCLE_INTERVAL_MS)
+                .range(config.sampling.ageThreshold, 0, MAX_AGE_THRESHOLD, SAMPLING_AGE_THRESHOLD)
+                .positive(config.sampling.proofFanout, SAMPLING_PROOF_FANOUT)
+                .required(config.sampling.randomSeed, SAMPLING_RANDOM_SEED)
+                .throwIfInvalid();
+        requireValidHistoryAge(config.sampling);
+
+        Validation.start()
+                .range(config.navigation.capacity, MINIMUM_POSITIVE_VALUE, MAX_OVERLAY_SIZE, NAVIGATION_CAPACITY)
+                .range(config.navigation.routingBase, MIN_ROUTING_BASE, MAX_ROUTING_BASE, NAVIGATION_ROUTING_BASE)
+                .positive(config.navigation.cycleIntervalMs, NAVIGATION_CYCLE_INTERVAL_MS)
+                .positive(config.navigation.staleAfterMs, NAVIGATION_STALE_AFTER_MS)
+                .nonBlank(config.navigation.subscriptionsPath, NAVIGATION_SUBSCRIPTIONS_PATH)
+                .throwIfInvalid();
+
+        Validation.start()
+                .positive(config.dissemination.randomLinkCount, DISSEMINATION_RANDOM_LINK_COUNT)
+                .positive(config.dissemination.cycleIntervalMs, DISSEMINATION_CYCLE_INTERVAL_MS)
+                .positive(config.dissemination.staleAfterMs, DISSEMINATION_STALE_AFTER_MS)
+                .required(config.dissemination.randomSeed, DISSEMINATION_RANDOM_SEED)
+                .throwIfInvalid();
+
+        Validation.start()
+                .nonBlank(config.persistence.membershipPath, PERSISTENCE_MEMBERSHIP_PATH)
+                .nonBlank(config.persistence.deliveryStatePath, PERSISTENCE_DELIVERY_STATE_PATH)
+                .positive(config.persistence.connectionTimeoutMs, PERSISTENCE_CONNECTION_TIMEOUT_MS)
+                .positive(config.persistence.requestTimeoutMs, PERSISTENCE_REQUEST_TIMEOUT_MS)
+                .nonNegative(config.persistence.retries, PERSISTENCE_RETRIES)
+                .positive(config.persistence.recoveryConcurrency, PERSISTENCE_RECOVERY_CONCURRENCY)
+                .throwIfInvalid();
     }
 
     private static void requireValidHistoryAge(SamplingSection sampling) {
@@ -195,7 +167,6 @@ public record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSec
     }
 
     public static final class PersistenceSection {
-        public Boolean enabled;
         public String membershipPath;
         public String deliveryStatePath;
         public Long connectionTimeoutMs;
@@ -224,9 +195,9 @@ public record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSec
     }
 
     public static final class RegistrySection {
-        public Boolean enabled;
         public String runtimeDir;
         public String signer;
+        public CardanoCliBackend cliBackend;
         public Long pollIntervalMs;
     }
 

@@ -4,7 +4,6 @@ plugins {
 
 dependencies {
     implementation(project(":libs"))
-    implementation(libs.jackson.dataformat.yaml)
     implementation(libs.slf4j.api)
     runtimeOnly(libs.logback.classic)
 

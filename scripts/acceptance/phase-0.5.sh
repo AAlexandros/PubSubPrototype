@@ -60,7 +60,7 @@ ops/infra/devnet/scripts/fund-identities.sh > "$EVIDENCE_DIR/funded-address-bala
 # At least five active topics, created and owned by distinct signers.
 declare -a TOPIC_IDS
 for i in 1 2 3 4 5; do
-  topic="$(./scripts/registry/create-topic.sh node-1 "phase-0.5-topic-$i" node-2 - 3 3600 | tail -1)"
+  topic="$(./scripts/registry/create-topic.sh node-1 "phase-0.5-topic-$i" "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 3 3600 | tail -1)"
   TOPIC_IDS+=("$topic")
 done
 printf '%s\n' "${TOPIC_IDS[@]}" > "$EVIDENCE_DIR/active-topic-ordering-input.txt"
@@ -92,7 +92,7 @@ sleep 3
 assert_runtime restarted
 
 # Topic creation/deletion recomputes topic ordering and finger topics without restart.
-new_topic="$(./scripts/registry/create-topic.sh node-1 phase-0.5-topic-created node-2 - 3 3600 | tail -1)"
+new_topic="$(./scripts/registry/create-topic.sh node-1 phase-0.5-topic-created "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 3 3600 | tail -1)"
 assert_runtime topic-created "$new_topic"
 ./scripts/registry/delete-topic.sh node-1 "${TOPIC_IDS[4]}"
 assert_runtime topic-deleted "${TOPIC_IDS[4]}"

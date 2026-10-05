@@ -10,6 +10,8 @@ import org.pubsub.prototype.node.runtimes.PeerSamplingRuntime;
 import org.pubsub.prototype.node.service.NodeEventCoordinator;
 import org.pubsub.prototype.transport.TransportListener;
 
+import java.util.Objects;
+
 /** Dispatches transport events to the peer-sampling, navigation, and event sub-listeners by message type. */
 public final class NodeTransportListener implements TransportListener {
     private final PeerSamplingRuntime sampling;
@@ -19,28 +21,28 @@ public final class NodeTransportListener implements TransportListener {
 
     public NodeTransportListener(PeerSamplingRuntime sampling, NavigationRuntime navigation,
                                  DisseminationRuntime dissemination, NodeEventCoordinator events) {
-        this.sampling = sampling;
-        this.navigation = navigation;
-        this.events = events;
-        this.dissemination = dissemination;
+        this.sampling = Objects.requireNonNull(sampling);
+        this.navigation = Objects.requireNonNull(navigation);
+        this.events = Objects.requireNonNull(events);
+        this.dissemination = Objects.requireNonNull(dissemination);
     }
 
     @Override
     public void seedResolved(NodeEndpoint peer) {
-        if (sampling != null) sampling.seedResolved(peer);
+        sampling.seedResolved(peer);
     }
 
     @Override
     public void samplingReceived(NodeId peer, ProtocolMessage message) {
         switch (message.type()) {
             case SECURECYCLON_REQUEST, SECURECYCLON_RESPONSE, SECURECYCLON_PROOF -> {
-                if (sampling != null) sampling.messageReceived(peer, message);
+                sampling.messageReceived(peer, message);
             }
             case NAVIGATION_REQUEST, NAVIGATION_RESPONSE -> {
-                if (navigation != null) navigation.messageReceived(peer, message);
+                navigation.messageReceived(peer, message);
             }
             case DISSEMINATION_REQUEST, DISSEMINATION_RESPONSE -> {
-                if (dissemination != null) dissemination.messageReceived(peer, message);
+                dissemination.messageReceived(peer, message);
             }
             default -> {
             }
@@ -54,6 +56,12 @@ public final class NodeTransportListener implements TransportListener {
 
     @Override
     public void peerDisconnected(NodeId nodeId) {
-        if (dissemination != null) dissemination.peerDisconnected(nodeId);
+        sampling.peerDisconnected(nodeId);
+        dissemination.peerDisconnected(nodeId);
+    }
+
+    @Override
+    public void peerConnected(NodeId nodeId) {
+        sampling.peerConnected(nodeId);
     }
 }

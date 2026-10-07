@@ -246,14 +246,14 @@ Use the repository entrypoints rather than these expanded forms:
 
 ```bash
 ./scripts/replication/deploy.sh
-./scripts/replication/register-server.sh <serverId> <operator> <host> <port> <startEpoch> <endEpoch>
-./scripts/replication/unregister-server.sh <serverId> <operator>
+./scripts/replication/register-server.sh <replication-server-config>
+./scripts/replication/unregister-server.sh <replication-server-config>
 ./scripts/replication/query-servers.sh
 ```
 
 ## Maintenance rule
 
 When adding or changing a `cardano-cli` invocation, update this page in the
-same change. Search both Java and shell call sites because Topic Registry
-commands are constructed in Java while devnet and Replication Registry
-commands are primarily assembled by Bash scripts.
+same change. Search both Java and shell call sites: Topic Registry and
+Replication Registry commands are constructed in Java, while shell scripts
+provide the repository's operational entrypoints.

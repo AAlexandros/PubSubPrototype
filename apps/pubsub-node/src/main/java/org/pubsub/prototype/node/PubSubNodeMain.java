@@ -1,6 +1,6 @@
 package org.pubsub.prototype.node;
 
-import org.pubsub.prototype.node.bootstrap.NodeApplication;
+import org.pubsub.prototype.node.bootstrap.PubSubNodeApplication;
 import org.pubsub.prototype.node.config.NodeConfig;
 
 import java.nio.file.Path;
@@ -16,6 +16,6 @@ public final class PubSubNodeMain {
         }
 
         NodeConfig config = NodeConfig.load(Path.of(args[0]));
-        NodeApplication.create(config).runUntilShutdown();
+        PubSubNodeApplication.create(config).runUntilShutdown();
     }
 }

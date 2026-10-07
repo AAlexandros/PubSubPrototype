@@ -1,16 +1,20 @@
 package org.pubsub.prototype.persistence;
 
-import static org.pubsub.prototype.util.PersistenceConstants.COMMITMENT_END_EPOCH_FIELD;
-import static org.pubsub.prototype.util.PersistenceConstants.COMMITMENT_START_EPOCH_FIELD;
-import static org.pubsub.prototype.util.PersistenceConstants.HOST_FIELD;
-import static org.pubsub.prototype.util.PersistenceConstants.OPERATOR_FIELD;
-import static org.pubsub.prototype.util.PersistenceConstants.PORT_FIELD;
-import static org.pubsub.prototype.util.PersistenceConstants.SERVER_ID_FIELD;
-import static org.pubsub.prototype.util.Validators.require;
-import static org.pubsub.prototype.util.Validators.requireNonBlank;
-import static org.pubsub.prototype.util.Validators.requireNonNegative;
-import static org.pubsub.prototype.util.Validators.requirePort;
-
+/**
+ * A replication-server registration as stored in, or observed from, the registry.
+ *
+ * <p>This is registry state, not this process's local configuration. A server's operator submits
+ * its configured endpoint and commitment when registering; consumers then obtain states for all
+ * servers from the registry.</p>
+ *
+ * @param serverId the permanent identifier of the replication server
+ * @param operator the Cardano account responsible for and authorized to change this registration
+ * @param host the server's advertised network host
+ * @param port the server's advertised network port
+ * @param commitmentStartEpoch the first Cardano epoch covered by the service commitment
+ * @param commitmentEndEpoch the last Cardano epoch covered by the service commitment
+ * @param active whether the server is an active member of the replication-server set
+ */
 public record ReplicationServerState(
         String serverId,
         String operator,
@@ -20,20 +24,18 @@ public record ReplicationServerState(
         long commitmentEndEpoch,
         boolean active
 ) {
-    public ReplicationServerState {
-        serverId = PersistenceHex.require256(serverId, SERVER_ID_FIELD);
-        operator = requireNonBlank(operator, OPERATOR_FIELD);
-        host = requireNonBlank(host, HOST_FIELD);
-        requirePort(port, PORT_FIELD);
-        requireNonNegative(commitmentStartEpoch, COMMITMENT_START_EPOCH_FIELD);
-        require(commitmentEndEpoch >= commitmentStartEpoch,
-                "invalid " + COMMITMENT_START_EPOCH_FIELD + " and " + COMMITMENT_END_EPOCH_FIELD + " range");
-    }
 
-    public ReplicationServer member() {
+    /**
+     * Returns the endpoint information needed to contact this server.
+     */
+    public ReplicationServer endpoint() {
         return new ReplicationServer(serverId, host, port);
     }
 
+    /**
+     * Returns this registration as an inactive tombstone, preserving its identity and commitment.
+     * Authorization of the unregistration is performed by the registry.
+     */
     public ReplicationServerState deactivate() {
         return new ReplicationServerState(serverId, operator, host, port,
                 commitmentStartEpoch, commitmentEndEpoch, false);

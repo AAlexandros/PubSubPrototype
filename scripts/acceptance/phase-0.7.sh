@@ -65,15 +65,17 @@ ids=()
 for n in 1 2 3; do
   id="$(./scripts/replication/server-id.sh "ops/infra/devnet/keys/node-$n/payment.vkey")"
   ids+=("$id")
-  ./scripts/replication/register-server.sh "$id" "node-$n" "replication-server-$n" 8100 0 100000 \
-    > "$EVIDENCE_DIR/registration-$n.txt"
 done
 IFS=,; ids_csv="${ids[*]}"; unset IFS
-./scripts/replication/query-servers.sh > "$EVIDENCE_DIR/on-chain-server-registrations.json"
 current_epoch="$(ops/infra/devnet/scripts/status.sh | node -e 'let x=""; process.stdin.on("data",d=>x+=d).on("end",()=>console.log(JSON.parse(x).epoch))')"
 epoch_length_ms="$(node -p "Number(process.env.CARDANO_TESTNET_SLOT_LENGTH || 2) * Number(process.env.CARDANO_TESTNET_EPOCH_LENGTH || 500) * 1000")"
 epoch_zero_ms="$(node -p "Date.now() - Number('$current_epoch') * Number('$epoch_length_ms')")"
 acceptance server-configs "$ROOT_DIR/ops/infra/devnet/runtime/phase-0.7" "$ids_csv" "$epoch_zero_ms" "$epoch_length_ms"
+for n in 1 2 3; do
+  ./scripts/replication/register-server.sh "$ROOT_DIR/ops/infra/devnet/runtime/phase-0.7/server-$n.yaml" \
+    > "$EVIDENCE_DIR/registration-$n.txt"
+done
+./scripts/replication/query-servers.sh > "$EVIDENCE_DIR/on-chain-server-registrations.json"
 
 topic="$(./scripts/registry/create-topic.sh node-1 phase-0.7-open-topic "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 2 3600 | tail -1)"
 printf '%s\n' "$topic" > "$EVIDENCE_DIR/topic-id.txt"

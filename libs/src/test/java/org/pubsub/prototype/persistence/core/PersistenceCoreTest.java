@@ -66,17 +66,18 @@ class PersistenceCoreTest {
     }
 
     @Test
-    void registryAuthorizesControllerFiltersAndReconstructs() {
+    void registrySnapshotFiltersAndReconstructs() throws Exception {
         Path file = temp.resolve("servers.json");
-        FileReplicationRegistry registry = new FileReplicationRegistry(file);
-        ReplicationServerState state = new ReplicationServerState("ab".repeat(32), "operator-1", "localhost",
+        ReplicationServerState active = new ReplicationServerState("ab".repeat(32), "operator-1", "localhost",
                 9000, 2, 9, true);
-        registry.registerServer(state, "operator-1");
-        assertThrows(SecurityException.class, () -> registry.unregisterServer(state.serverId(), "operator-2"));
-        assertEquals(List.of(state), new FileReplicationRegistry(file).queryServers(false));
-        registry.unregisterServer(state.serverId(), "operator-1");
-        assertTrue(registry.queryServers(false).isEmpty());
-        assertEquals(1, new FileReplicationRegistry(file).queryServers(true).size());
+        ReplicationServerState inactive = new ReplicationServerState("cd".repeat(32), "operator-2", "localhost",
+                9001, 3, 10, false);
+        JsonSupport.MAPPER.writeValue(file.toFile(), List.of(active, inactive));
+
+        FileReplicationRegistry registry = new FileReplicationRegistry(file);
+        assertEquals(List.of(active), registry.queryServers(false));
+        assertEquals(List.of(active, inactive), registry.queryServers(true));
+        assertEquals(List.of(active.endpoint()), registry.activeServers());
     }
 
     @Test

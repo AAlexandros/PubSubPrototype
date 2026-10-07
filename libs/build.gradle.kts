@@ -17,12 +17,5 @@ tasks.register<JavaExec>("runRegistryCli") {
     group = "application"
     description = "Runs the Cardano topic registry CLI."
     classpath = sourceSets.main.get().runtimeClasspath
-    mainClass.set("org.pubsub.prototype.registry.cardano.RegistryCli")
-}
-
-tasks.register<JavaExec>("runReplicationRegistryCli") {
-    group = "application"
-    description = "Runs the replication registry CLI."
-    classpath = sourceSets.main.get().runtimeClasspath
-    mainClass.set("org.pubsub.prototype.persistence.core.ReplicationRegistryCli")
+    mainClass.set("org.pubsub.prototype.registry.topic.cardano.RegistryCli")
 }

@@ -11,6 +11,8 @@ import java.nio.file.Path;
 import static org.pubsub.prototype.util.PersistenceConstants.SERVER_ID_FIELD;
 import static org.pubsub.prototype.replication.ReplicationConfigConstants.ADVERTISED_HOST;
 import static org.pubsub.prototype.replication.ReplicationConfigConstants.CLEANUP_INTERVAL_MS;
+import static org.pubsub.prototype.replication.ReplicationConfigConstants.COMMITMENT_END_EPOCH;
+import static org.pubsub.prototype.replication.ReplicationConfigConstants.COMMITMENT_START_EPOCH;
 import static org.pubsub.prototype.replication.ReplicationConfigConstants.CONNECTION_TIMEOUT_MS;
 import static org.pubsub.prototype.replication.ReplicationConfigConstants.EPOCH_LENGTH_MS;
 import static org.pubsub.prototype.replication.ReplicationConfigConstants.EPOCH_ZERO_TIME_MS;
@@ -21,6 +23,8 @@ import static org.pubsub.prototype.replication.ReplicationConfigConstants.MAINTE
 import static org.pubsub.prototype.replication.ReplicationConfigConstants.MEMBERSHIP_PATH;
 import static org.pubsub.prototype.replication.ReplicationConfigConstants.POLL_INTERVAL_MS;
 import static org.pubsub.prototype.replication.ReplicationConfigConstants.PORT;
+import static org.pubsub.prototype.replication.ReplicationConfigConstants.REGISTRATION_OPERATOR;
+import static org.pubsub.prototype.replication.ReplicationConfigConstants.REPLICATION_REGISTRY_CLI_BACKEND;
 import static org.pubsub.prototype.replication.ReplicationConfigConstants.REQUEST_TIMEOUT_MS;
 import static org.pubsub.prototype.replication.ReplicationConfigConstants.RETRIES;
 import static org.pubsub.prototype.replication.ReplicationConfigConstants.SERVER_ID;
@@ -34,6 +38,7 @@ import static org.pubsub.prototype.util.Validators.requireNonNull;
 
 record ReplicationServerConfig(String serverId, String listenHost, String advertisedHost, int port,
                                Path storagePath, Path membershipPath, long membershipPollMs,
+                               Registration registration,
                                Path topicRegistryRuntimeDir, String topicRegistrySigner,
                                CardanoCliBackend topicRegistryCliBackend,
                                long requestTimeoutMs, long connectionTimeoutMs, int retries,
@@ -65,13 +70,14 @@ record ReplicationServerConfig(String serverId, String listenHost, String advert
 
     private static final class FileConfig {
         public ServerSection server;
+        public RegistrationSection registration;
         public RegistrySection registry;
         public TimingSection timing;
         public EpochSection epoch;
 
         ReplicationServerConfig toConfig() {
-            require(server != null && registry != null && timing != null && epoch != null,
-                    "Config must define server, registry, timing, and epoch sections");
+            require(server != null && registration != null && registry != null && timing != null && epoch != null,
+                    "Config must define server, registration, registry, timing, and epoch sections");
             return new ReplicationServerConfig(
                     requireNonBlank(server.serverId, SERVER_ID),
                     requireNonBlank(server.listenHost, LISTEN_HOST),
@@ -80,6 +86,10 @@ record ReplicationServerConfig(String serverId, String listenHost, String advert
                     Path.of(requireNonBlank(server.storagePath, STORAGE_PATH)),
                     Path.of(requireNonBlank(registry.membershipPath, MEMBERSHIP_PATH)),
                     requireNonNull(registry.pollIntervalMs, POLL_INTERVAL_MS),
+                    new Registration(requireNonBlank(registration.operator, REGISTRATION_OPERATOR),
+                            requireNonNull(registration.commitmentStartEpoch, COMMITMENT_START_EPOCH),
+                            requireNonNull(registration.commitmentEndEpoch, COMMITMENT_END_EPOCH),
+                            requireNonNull(registration.cliBackend, REPLICATION_REGISTRY_CLI_BACKEND)),
                     Path.of(requireNonBlank(registry.topicRegistryRuntimeDir, TOPIC_REGISTRY_RUNTIME_DIR)),
                     requireNonBlank(registry.topicRegistrySigner, TOPIC_REGISTRY_SIGNER),
                     requireNonNull(registry.topicRegistryCliBackend, TOPIC_REGISTRY_CLI_BACKEND),
@@ -101,6 +111,25 @@ record ReplicationServerConfig(String serverId, String listenHost, String advert
         public String advertisedHost;
         public Integer port;
         public String storagePath;
+    }
+
+    private static final class RegistrationSection {
+        public String operator;
+        public Long commitmentStartEpoch;
+        public Long commitmentEndEpoch;
+        public CardanoCliBackend cliBackend;
+    }
+
+    record Registration(String operator, long commitmentStartEpoch, long commitmentEndEpoch,
+                        CardanoCliBackend cliBackend) {
+        Registration {
+            Validation.start()
+                    .nonNegative(commitmentStartEpoch, COMMITMENT_START_EPOCH)
+                    .nonNegative(commitmentEndEpoch, COMMITMENT_END_EPOCH)
+                    .throwIfInvalid();
+            require(commitmentEndEpoch >= commitmentStartEpoch,
+                    "invalid " + COMMITMENT_START_EPOCH + " and " + COMMITMENT_END_EPOCH + " range");
+        }
     }
 
     private static final class RegistrySection {

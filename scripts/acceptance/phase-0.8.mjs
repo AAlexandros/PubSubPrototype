@@ -73,6 +73,11 @@ if (mode === 'prepare-devnet') {
   advertisedHost: replication-server-${index + 1}
   port: 8100
   storagePath: /data
+registration:
+  operator: ${signers[index]}
+  cliBackend: DEVNET
+  commitmentStartEpoch: 0
+  commitmentEndEpoch: 100000
 registry:
   membershipPath: /replication-registry/servers.json
   pollIntervalMs: 500

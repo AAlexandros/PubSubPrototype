@@ -7,6 +7,10 @@ final class ReplicationConfigConstants {
     static final String ADVERTISED_HOST = "server.advertisedHost";
     static final String PORT = "server.port";
     static final String STORAGE_PATH = "server.storagePath";
+    static final String REGISTRATION_OPERATOR = "registration.operator";
+    static final String COMMITMENT_START_EPOCH = "registration.commitmentStartEpoch";
+    static final String COMMITMENT_END_EPOCH = "registration.commitmentEndEpoch";
+    static final String REPLICATION_REGISTRY_CLI_BACKEND = "registration.cliBackend";
     static final String MEMBERSHIP_PATH = "registry.membershipPath";
     static final String POLL_INTERVAL_MS = "registry.pollIntervalMs";
     static final String TOPIC_REGISTRY_RUNTIME_DIR = "registry.topicRegistryRuntimeDir";

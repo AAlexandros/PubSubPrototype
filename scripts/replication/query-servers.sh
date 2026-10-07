@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 . "$(dirname "$0")/common.sh"
+test "$#" -le 1 && { test "$#" -eq 0 || test "$1" = "--all"; } \
+  || { echo "Usage: query-servers.sh [--all]" >&2; exit 2; }
 runtime_dir="$(dirname "$REPLICATION_REGISTRY_STATE")"
 if [ -f "$runtime_dir/deployment.env" ]; then
-  . "$ROOT_DIR/ops/infra/devnet/scripts/common.sh"
-  . "$runtime_dir/deployment.env"
-  utxos="$runtime_dir/script-utxos.json"
-  cardano_cli query utxo --address "$REPLICATION_REGISTRY_VALIDATOR_ADDRESS" \
-    --testnet-magic "$NETWORK_MAGIC" --output-json > "$utxos"
-  node_file "$ROOT_DIR/scripts/replication/registry-data.mjs" decode "$(host_path "$utxos")" "$(host_path "$REPLICATION_REGISTRY_STATE")"
+  backend="${CARDANO_CLI_BACKEND:-DEVNET}"
 else
-  replication_registry_cli query "${1:-}"
+  backend="${CARDANO_CLI_BACKEND:-CACHE_ONLY}"
 fi
+all_arg=()
+if [ "${1:-}" = "--all" ]; then all_arg=(--all); fi
+replication_registry_cli query "$(host_path "$runtime_dir")" "$backend" "${all_arg[@]}"

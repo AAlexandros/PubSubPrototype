@@ -11,6 +11,7 @@ import static org.pubsub.prototype.util.CryptoConstants.SHA_256_ALGORITHM;
 
 @FunctionalInterface
 public interface ReplicationMembership {
+    /** Returns an immutable snapshot of the active replication-server endpoints. */
     List<ReplicationServer> activeServers();
 
     default String version() {

@@ -91,12 +91,12 @@ Introduced in Phase 0.3 to publish and inject signed event envelopes through a n
 
 | Script | Purpose | Phase |
 |---|---|---|
-| `build.sh` / `deploy.sh` | Build the Aiken validator, export its Plutus V3 script, and derive the devnet validator address. | Phase 0.7 |
-| `server-id.sh` | Derive `SHA-256(encoded Cardano verification key)` from a payment VKey CBOR encoding. | Phase 0.7 |
-| `register-server.sh` | Submit or update a signed registration datum at the replication-registry validator. | Phase 0.7 |
-| `unregister-server.sh` | Spend a registration under the controlling signer and write its inactive tombstone. | Phase 0.7 |
-| `query-servers.sh` | Query registry UTxOs and atomically rebuild the decoded membership snapshot used by nodes and servers. | Phase 0.7 |
-| `registry-data.mjs` | Encode/decode Aiken data and export the compiled validator for Cardano CLI. | Phase 0.7 |
+| `build.sh` / `deploy.sh` | Build the Aiken validator, export its Plutus V3 script, and deploy its address through the Java registry CLI. | Phase 0.7 |
+| `server-id.sh` | Derive `SHA-256(encoded Cardano verification key)` from a payment VKey CBOR encoding through the Java registry CLI. | Phase 0.7 |
+| `register-server.sh` | Register or update the server configured in a replication-server YAML file through the Java registry client. | Phase 0.7 |
+| `unregister-server.sh` | Unregister the configured server under its configured signer through the Java registry client. | Phase 0.7 |
+| `query-servers.sh` | Query registry UTxOs and rebuild the membership snapshot used by nodes and servers through the Java registry client. | Phase 0.7 |
+| `registry-data.mjs` | Export the compiled Aiken validator as a Plutus V3 script artifact. | Phase 0.7 |
 
 ## Aiken smart contracts — `contracts/topic-registry/`
 
@@ -136,3 +136,33 @@ Not shell scripts, but the on-chain logic that the registry scripts above build,
 | `scripts/experiments/run.sh` and `run.mjs` | Validate a scenario, execute the real workload/fault schedule, and capture correlated raw telemetry. |
 | `scripts/experiments/aggregate.sh` | Validate schemas, normalize runs to Apache Parquet, combine repetitions, preserve raw inputs, and emit summaries/dictionary. |
 | `scripts/acceptance/phase-0.9.sh` and `phase-0.9.mjs` | Clean five-node integrated acceptance and evidence audit across registries, overlays, dissemination, persistence, recovery, repair, telemetry, Parquet, and Mermaid sources. |
+
+### Local experiment execution flow
+
+Run a scenario without the acceptance flow or the Gradle test suite with:
+
+```bash
+./scripts/experiments/run.sh ops/config/phase-0.9/scenarios/e1-scaling-10.yaml
+```
+
+The invocation chain is:
+
+```text
+scripts/experiments/run.sh
+  -> scripts/testbed/up.sh --nodes <scenario nodeCount>
+    -> scripts/testbed/bootstrap.sh                         [first run or topology change only]
+      -> scripts/registry/build.sh
+      -> scripts/registry/deploy.sh
+      -> scripts/replication/build.sh
+      -> scripts/replication/deploy.sh
+      -> scripts/replication/register-server.sh             x3
+      -> scripts/replication/query-servers.sh
+      -> scripts/testbed/generate.mjs
+    -> Docker Compose starts Pub/Sub nodes and replication servers
+  -> scripts/experiments/run.mjs
+    -> creates topics, subscribes nodes, publishes events, injects scenario faults,
+       and gathers raw telemetry
+  -> scripts/experiments/telemetry.sh normalize
+```
+
+On later runs with the same node count, `up.sh` reuses the existing testbed and skips bootstrap. Use `scripts/testbed/status.sh` or `scripts/testbed/logs.sh` to inspect it, `scripts/experiments/aggregate.sh results` to combine completed runs, and `scripts/testbed/down.sh` to stop it while retaining volumes and state.

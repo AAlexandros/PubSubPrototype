@@ -30,14 +30,14 @@ ids=()
 for operator in "${operators[@]}"; do
   ids+=("$(scripts/replication/server-id.sh "ops/infra/devnet/keys/$operator/payment.vkey")")
 done
+IFS=,; ids_csv="${ids[*]}"; unset IFS
+node scripts/testbed/generate.mjs "$ROOT_DIR" "$node_count" "$ids_csv" >/dev/null
 scripts/replication/query-servers.sh >/dev/null 2>&1 || true
 for index in 0 1 2; do
   if [[ ! -f "$REPLICATION_REGISTRY_STATE" ]] || ! grep -q "${ids[$index]}" "$REPLICATION_REGISTRY_STATE"; then
-    scripts/replication/register-server.sh "${ids[$index]}" "${operators[$index]}" "replication-server-$((index + 1))" 8100 0 100000
+    scripts/replication/register-server.sh "$TESTBED_RUNTIME/config/server-$((index + 1)).yaml"
   fi
 done
 scripts/replication/query-servers.sh > "$TESTBED_RUNTIME/replication-membership.json"
-IFS=,; ids_csv="${ids[*]}"; unset IFS
-node scripts/testbed/generate.mjs "$ROOT_DIR" "$node_count" "$ids_csv" >/dev/null
 printf '%s\n' "$node_count" > "$TESTBED_RUNTIME/node-count.txt"
 echo "Phase 0.9 testbed bootstrapped: $node_count Pub/Sub nodes, 3 replication servers, registries ready"

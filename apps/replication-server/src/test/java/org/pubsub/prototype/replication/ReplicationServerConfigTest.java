@@ -24,6 +24,11 @@ class ReplicationServerConfigTest {
                   advertisedHost: replication-server-1
                   port: 8100
                   storagePath: /data
+                registration:
+                  operator: replication-server-1
+                  cliBackend: DEVNET
+                  commitmentStartEpoch: 0
+                  commitmentEndEpoch: 100000
                 registry:
                   membershipPath: /registry/servers.json
                   pollIntervalMs: 1000
@@ -48,6 +53,8 @@ class ReplicationServerConfigTest {
         assertEquals(3000, config.requestTimeoutMs());
         assertEquals(432_000_000, config.epochLengthMs());
         assertEquals(3, config.failureProbeAttempts());
+        assertEquals("replication-server-1", config.registration().operator());
+        assertEquals(100_000, config.registration().commitmentEndEpoch());
     }
 
     @Test
@@ -60,6 +67,11 @@ class ReplicationServerConfigTest {
                   port: 8100
                   storagePath: /data
                   unexpected: true
+                registration:
+                  operator: replication-server-1
+                  cliBackend: DEVNET
+                  commitmentStartEpoch: 0
+                  commitmentEndEpoch: 100000
                 registry:
                   membershipPath: /registry/servers.json
                   pollIntervalMs: 1000
@@ -91,6 +103,11 @@ class ReplicationServerConfigTest {
                   advertisedHost: replication-server-1
                   port: 8100
                   storagePath: /data
+                registration:
+                  operator: replication-server-1
+                  cliBackend: DEVNET
+                  commitmentStartEpoch: 0
+                  commitmentEndEpoch: 100000
                 registry:
                   membershipPath: /registry/servers.json
                   pollIntervalMs: 1000

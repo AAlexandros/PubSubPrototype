@@ -5,6 +5,7 @@ import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.event.TopicStateProvider;
 import org.pubsub.prototype.node.util.AsyncUtil;
 import org.pubsub.prototype.persistence.RecoveryResult;
+import org.pubsub.prototype.persistence.ReplicationRegistryReader;
 import org.pubsub.prototype.persistence.core.DeliveryStateStore;
 import org.pubsub.prototype.persistence.core.FileReplicationRegistry;
 import org.pubsub.prototype.persistence.core.PersistenceClient;
@@ -32,7 +33,7 @@ public final class PersistenceRuntime implements AutoCloseable {
     public PersistenceRuntime(Settings settings, TopicStateProvider topics) {
         this.deliveryState = new DeliveryStateStore(settings.deliveryStatePath());
         this.http = new ReplicationHttpClient(settings.connectionTimeout(), settings.requestTimeout(), settings.retries());
-        FileReplicationRegistry registry = new FileReplicationRegistry(settings.membershipPath());
+        ReplicationRegistryReader registry = new FileReplicationRegistry(settings.membershipPath());
         this.client = new PersistenceClient(registry::activeServers, http);
         this.recovery = new RecoveryService(client, deliveryState,
                 new PersistenceEventValidator(topics), settings.recoveryConcurrency());

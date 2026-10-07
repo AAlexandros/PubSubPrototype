@@ -69,16 +69,16 @@ ids=()
 for operator in "${operators[@]}"; do
   ids+=("$(./scripts/replication/server-id.sh "ops/infra/devnet/keys/$operator/payment.vkey")")
 done
-for n in 1 2 3; do
-  ./scripts/replication/register-server.sh "${ids[$((n-1))]}" "${operators[$((n-1))]}" "replication-server-$n" 8100 0 100000 \
-    > "$EVIDENCE_DIR/initial-registration-$n.txt"
-done
-./scripts/replication/query-servers.sh > "$EVIDENCE_DIR/initial-cardano-replication-membership.json"
 current_epoch="$(ops/infra/devnet/scripts/status.sh | node -e 'let x=""; process.stdin.on("data",d=>x+=d).on("end",()=>console.log(JSON.parse(x).epoch))')"
 epoch_length_ms="$(node -p "Number(process.env.CARDANO_TESTNET_SLOT_LENGTH || 2) * Number(process.env.CARDANO_TESTNET_EPOCH_LENGTH || 500) * 1000")"
 epoch_zero_ms="$(node -p "Date.now() - Number('$current_epoch') * Number('$epoch_length_ms')")"
 IFS=,; all_ids="${ids[*]}"; initial_ids="${ids[0]},${ids[1]},${ids[2]}"; unset IFS
 acceptance server-configs "$ROOT_DIR/ops/infra/devnet/runtime/phase-0.8" "$all_ids" "$epoch_zero_ms" "$epoch_length_ms"
+for n in 1 2 3; do
+  ./scripts/replication/register-server.sh "$ROOT_DIR/ops/infra/devnet/runtime/phase-0.8/server-$n.yaml" \
+    > "$EVIDENCE_DIR/initial-registration-$n.txt"
+done
+./scripts/replication/query-servers.sh > "$EVIDENCE_DIR/initial-cardano-replication-membership.json"
 
 topic="$(./scripts/registry/create-topic.sh node-1 phase-0.8-open-topic "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 2 3600 | tail -1)"
 printf '%s\n' "$topic" > "$EVIDENCE_DIR/topic-id.txt"
@@ -124,7 +124,7 @@ wait_log "replication-server-$failed_index" REPLICATION_SERVER_STARTED
 acceptance recovered "$failed_id" 1,2,3
 for sequence in 0 1 2 3 4; do acceptance replicas "$all_ids" "$EVIDENCE_DIR/published-sequence-$sequence.json" 2 1,2,3 "post-rejoin-event-$sequence" >/dev/null; done
 
-./scripts/replication/register-server.sh "${ids[3]}" registry-deployer replication-server-4 8100 0 100000 \
+./scripts/replication/register-server.sh "$ROOT_DIR/ops/infra/devnet/runtime/phase-0.8/server-4.yaml" \
   > "$EVIDENCE_DIR/s4-registration-transaction.txt"
 ./scripts/replication/query-servers.sh > "$EVIDENCE_DIR/post-s4-cardano-membership.json"
 "${COMPOSE[@]}" up -d --build --force-recreate replication-server-4
@@ -139,7 +139,8 @@ acceptance topic-log-factor "$topic" 3 1,2,3,4 factor-3-topic-log
 for sequence in 0 1 2 3 4; do acceptance replicas "$all_ids" "$EVIDENCE_DIR/published-sequence-$sequence.json" 2 1,2,3,4 "factor-2-event-$sequence" >/dev/null; done
 acceptance topic-log-factor "$topic" 2 1,2,3,4 factor-2-topic-log
 
-./scripts/replication/unregister-server.sh "${ids[2]}" node-3 > "$EVIDENCE_DIR/server-unregistration-transaction.txt"
+./scripts/replication/unregister-server.sh "$ROOT_DIR/ops/infra/devnet/runtime/phase-0.8/server-3.yaml" \
+  > "$EVIDENCE_DIR/server-unregistration-transaction.txt"
 ./scripts/replication/query-servers.sh > "$EVIDENCE_DIR/post-unregister-cardano-membership.json"
 post_unregister_ids="${ids[0]},${ids[1]},${ids[3]}"
 acceptance membership "$post_unregister_ids" 1,2,3,4 post-unregister-membership-snapshots

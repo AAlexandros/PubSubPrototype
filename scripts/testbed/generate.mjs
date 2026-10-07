@@ -39,6 +39,11 @@ for (let index = 1; index <= 3; index++) {
   advertisedHost: replication-server-${index}
   port: ${settings.replicationPort}
   storagePath: /data
+registration:
+  operator: ${signers[index - 1]}
+  cliBackend: DEVNET
+  commitmentStartEpoch: 0
+  commitmentEndEpoch: 100000
 registry:
   membershipPath: /replication-registry/servers.json
   pollIntervalMs: 500

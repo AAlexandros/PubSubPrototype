@@ -62,6 +62,8 @@ public final class ReplicationServerApplication implements AutoCloseable {
         LOG.info("REPLICATION_REGISTRY_SYNCED serverId={} activeServerCount={} membership={}",
                 config.serverId(), members.get().size(), members.get());
         ReplicationMembership membership = members::get;
+
+        // Creates its own topic registry instance that is used to validate events, acquiring replication factors etc.
         CardanoTopicRegistry topics = new CardanoTopicRegistry(new CardanoRegistryConfig(
                 config.topicRegistryRuntimeDir(), config.topicRegistrySigner(), config.topicRegistryCliBackend()));
         FileEventStore store = new FileEventStore(config.storagePath(), Clock.systemUTC(),

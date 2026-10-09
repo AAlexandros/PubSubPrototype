@@ -4,11 +4,13 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import org.pubsub.prototype.event.EventCrypto;
 import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.persistence.EventKeys;
-import org.pubsub.prototype.persistence.PersistenceHex;
 import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.StoredEvent;
 import org.pubsub.prototype.registry.TopicState;
+import org.pubsub.prototype.util.AtomicFiles;
 import org.pubsub.prototype.util.JsonSupport;
+import org.pubsub.prototype.util.HexCodec;
+import org.pubsub.prototype.util.PersistenceConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,22 +28,15 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
-import static org.pubsub.prototype.util.PersistenceConstants.EVENTS_DIRECTORY;
-import static org.pubsub.prototype.util.PersistenceConstants.EVENT_KEY_FIELD;
-import static org.pubsub.prototype.util.PersistenceConstants.JSON_EXTENSION;
-import static org.pubsub.prototype.util.PersistenceConstants.JSON_EXTENSION_PATTERN;
-import static org.pubsub.prototype.util.PersistenceConstants.METADATA_DIRECTORY;
-import static org.pubsub.prototype.util.PersistenceConstants.SERVER_ID_FIELD;
-import static org.pubsub.prototype.util.PersistenceConstants.SERVER_ID_FILE;
-import static org.pubsub.prototype.util.PersistenceConstants.TOPIC_ID_FIELD;
-import static org.pubsub.prototype.util.PersistenceConstants.TOPIC_INDEX_FILE;
-import static org.pubsub.prototype.util.PersistenceConstants.TOPIC_LOGS_DIRECTORY;
+import static org.pubsub.prototype.util.EventConstants.EVENT_ID_FIELD;
 import static org.pubsub.prototype.util.Validators.require;
 
 public final class FileEventStore {
     private static final Logger LOG = LoggerFactory.getLogger(FileEventStore.class);
     private static final TypeReference<Map<String, PublisherProgress>> PROGRESS_TYPE = new TypeReference<>() { };
     private static final TypeReference<Set<String>> TOPIC_INDEX_TYPE = new TypeReference<>() { };
+
+    // Paths for storing the events and topic logs within the file-based event store
     private final Path root;
     private final Path events;
     private final Path topicLogs;
@@ -50,14 +45,14 @@ public final class FileEventStore {
 
     public FileEventStore(Path root, Clock clock, EpochProvider epochs) {
         this.root = root;
-        this.events = root.resolve(EVENTS_DIRECTORY);
-        this.topicLogs = root.resolve(TOPIC_LOGS_DIRECTORY);
+        this.events = root.resolve(PersistenceConstants.EVENTS_DIRECTORY);
+        this.topicLogs = root.resolve(PersistenceConstants.TOPIC_LOGS_DIRECTORY);
         this.clock = clock;
         this.epochs = epochs;
         try {
             Files.createDirectories(events);
             Files.createDirectories(topicLogs);
-            Files.createDirectories(root.resolve(METADATA_DIRECTORY));
+            Files.createDirectories(root.resolve(PersistenceConstants.METADATA_DIRECTORY));
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to initialize persistence store " + root, ex);
         }
@@ -84,7 +79,7 @@ public final class FileEventStore {
 
     public synchronized void storeReplica(StoredEvent record) {
         require(EventKeys.eventKey(record.eventEnvelope()).equals(record.eventKey()),
-                "eventKey does not match event envelope");
+                PersistenceConstants.EVENT_KEY_FIELD + " does not match " + PersistenceConstants.EVENT_ENVELOPE_FIELD);
         Optional<StoredEvent> existing = get(record.eventKey());
         StoredEvent selected = existing.filter(value -> !record.storedAt().isBefore(value.storedAt())).orElse(record);
         if (existing.isPresent() && selected == existing.orElseThrow()) return;
@@ -102,7 +97,11 @@ public final class FileEventStore {
             StoredEvent event = JsonSupport.MAPPER.readValue(path.toFile(), StoredEvent.class);
             if (event.expiresAfterEpoch() <= epochs.currentEpoch()) {
                 Files.deleteIfExists(path);
-                LOG.info("EVENT_EXPIRED eventKey={} eventId={} topicId={} publisherKeyId={} sequenceNumber={}",
+                LOG.info("EVENT_EXPIRED " + PersistenceConstants.EVENT_KEY_FIELD + "={} "
+                                + EVENT_ID_FIELD + "={} "
+                                + PersistenceConstants.TOPIC_ID_FIELD + "={} "
+                                + PersistenceConstants.PUBLISHER_KEY_ID_FIELD + "={} "
+                                + PersistenceConstants.SEQUENCE_NUMBER_FIELD + "={}",
                         event.eventKey(), event.eventEnvelope().eventId(), event.eventEnvelope().topicId(),
                         EventCrypto.publisherKeyId(event.eventEnvelope()), event.eventEnvelope().sequenceNumber());
                 return Optional.empty();
@@ -141,8 +140,10 @@ public final class FileEventStore {
         if (!Files.exists(events)) return 0;
         int removed = 0;
         try (var paths = Files.list(events)) {
-            for (Path path : paths.filter(value -> value.getFileName().toString().endsWith(JSON_EXTENSION)).toList()) {
-                String key = path.getFileName().toString().replaceFirst(JSON_EXTENSION_PATTERN, "");
+            for (Path path : paths.filter(value -> value.getFileName().toString()
+                    .endsWith(PersistenceConstants.JSON_EXTENSION)).toList()) {
+                String key = path.getFileName().toString()
+                        .replaceFirst(PersistenceConstants.JSON_EXTENSION_PATTERN, "");
                 if (get(key).isEmpty() && !Files.exists(path)) removed++;
             }
         } catch (IOException ex) {
@@ -153,8 +154,9 @@ public final class FileEventStore {
 
     public synchronized List<String> eventKeys() {
         try (var paths = Files.list(events)) {
-            return paths.filter(path -> path.getFileName().toString().endsWith(JSON_EXTENSION))
-                    .map(path -> path.getFileName().toString().replaceFirst(JSON_EXTENSION_PATTERN, ""))
+            return paths.filter(path -> path.getFileName().toString().endsWith(PersistenceConstants.JSON_EXTENSION))
+                    .map(path -> path.getFileName().toString()
+                            .replaceFirst(PersistenceConstants.JSON_EXTENSION_PATTERN, ""))
                     .sorted().toList();
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to inventory events", ex);
@@ -195,7 +197,7 @@ public final class FileEventStore {
             boolean removed = Files.deleteIfExists(progressPath(topicId));
             if (removed) {
                 Set<String> topics = new TreeSet<>(topicIds());
-                topics.remove(PersistenceHex.require256(topicId, TOPIC_ID_FIELD));
+                topics.remove(HexCodec.normalizeSha256(topicId, PersistenceConstants.TOPIC_ID_FIELD));
                 AtomicFiles.write(topicIndexPath(), JsonSupport.MAPPER.writeValueAsBytes(topics));
             }
             return removed;
@@ -205,8 +207,8 @@ public final class FileEventStore {
     }
 
     public synchronized void ensureServerIdentity(String serverId) {
-        String normalized = PersistenceHex.require256(serverId, SERVER_ID_FIELD);
-        Path path = root.resolve(METADATA_DIRECTORY).resolve(SERVER_ID_FILE);
+        String normalized = HexCodec.normalizeSha256(serverId, PersistenceConstants.SERVER_ID_FIELD);
+        Path path = root.resolve(PersistenceConstants.METADATA_DIRECTORY).resolve(PersistenceConstants.SERVER_ID_FILE);
         try {
             if (Files.exists(path)) {
                 String persisted = Files.readString(path).trim();
@@ -226,15 +228,16 @@ public final class FileEventStore {
     }
 
     private Path eventPath(String eventKey) {
-        return events.resolve(PersistenceHex.require256(eventKey, EVENT_KEY_FIELD) + JSON_EXTENSION);
+        return events.resolve(HexCodec.normalizeSha256(eventKey, PersistenceConstants.EVENT_KEY_FIELD)
+                + PersistenceConstants.JSON_EXTENSION);
     }
 
     private Path progressPath(String topicId) {
-        return topicLogs.resolve(EventKeys.topicLogKey(topicId) + JSON_EXTENSION);
+        return topicLogs.resolve(EventKeys.topicLogKey(topicId) + PersistenceConstants.JSON_EXTENSION);
     }
 
     private Path topicIndexPath() {
-        return root.resolve(METADATA_DIRECTORY).resolve(TOPIC_INDEX_FILE);
+        return root.resolve(PersistenceConstants.METADATA_DIRECTORY).resolve(PersistenceConstants.TOPIC_INDEX_FILE);
     }
 
     private Map<String, PublisherProgress> readProgress(String topicId) {
@@ -250,7 +253,7 @@ public final class FileEventStore {
     private void writeProgress(String topicId, Map<String, PublisherProgress> values) {
         try {
             Set<String> topics = new TreeSet<>(topicIds());
-            topics.add(PersistenceHex.require256(topicId, TOPIC_ID_FIELD));
+            topics.add(HexCodec.normalizeSha256(topicId, PersistenceConstants.TOPIC_ID_FIELD));
             AtomicFiles.write(topicIndexPath(), JsonSupport.MAPPER.writeValueAsBytes(topics));
             AtomicFiles.write(progressPath(topicId), JsonSupport.MAPPER.writeValueAsBytes(values));
         } catch (IOException ex) {

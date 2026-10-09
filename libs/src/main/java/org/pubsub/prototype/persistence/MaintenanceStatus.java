@@ -1,5 +1,7 @@
 package org.pubsub.prototype.persistence;
 
+import org.pubsub.prototype.util.HexCodec;
+
 import java.util.List;
 
 import static org.pubsub.prototype.util.PersistenceConstants.SERVER_ID_FIELD;
@@ -13,7 +15,7 @@ public record MaintenanceStatus(
         List<String> underReplicatedRecords
 ) {
     public MaintenanceStatus {
-        serverId = PersistenceHex.require256(serverId, SERVER_ID_FIELD);
+        serverId = HexCodec.normalizeSha256(serverId, SERVER_ID_FIELD);
         suspectedPeers = List.copyOf(suspectedPeers);
         confirmedUnavailablePeers = List.copyOf(confirmedUnavailablePeers);
         repairQueue = List.copyOf(repairQueue);

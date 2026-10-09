@@ -1,5 +1,7 @@
 package org.pubsub.prototype.persistence;
 
+import org.pubsub.prototype.util.HexCodec;
+
 import static org.pubsub.prototype.util.PersistenceConstants.EVENT_KEY_FIELD;
 import static org.pubsub.prototype.util.PersistenceConstants.EXPIRES_AFTER_EPOCH_FIELD;
 import static org.pubsub.prototype.util.PersistenceConstants.PUBLISHER_KEY_ID_FIELD;
@@ -19,9 +21,9 @@ public record EventReplicaMetadata(
         long expiresAfterEpoch
 ) {
     public EventReplicaMetadata {
-        eventKey = PersistenceHex.require256(eventKey, EVENT_KEY_FIELD);
-        topicId = PersistenceHex.require256(topicId, TOPIC_ID_FIELD);
-        publisherKeyId = PersistenceHex.require256(publisherKeyId, PUBLISHER_KEY_ID_FIELD);
+        eventKey = HexCodec.normalizeSha256(eventKey, EVENT_KEY_FIELD);
+        topicId = HexCodec.normalizeSha256(topicId, TOPIC_ID_FIELD);
+        publisherKeyId = HexCodec.normalizeSha256(publisherKeyId, PUBLISHER_KEY_ID_FIELD);
         start()
                 .nonNegative(sequenceNumber, SEQUENCE_NUMBER_FIELD)
                 .positive(topicRetentionPeriod, TOPIC_RETENTION_PERIOD_FIELD)

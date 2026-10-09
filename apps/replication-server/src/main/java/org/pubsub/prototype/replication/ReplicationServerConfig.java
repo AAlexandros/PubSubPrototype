@@ -1,7 +1,7 @@
 package org.pubsub.prototype.replication;
 
-import org.pubsub.prototype.persistence.PersistenceHex;
 import org.pubsub.prototype.persistence.ReplicationServer;
+import org.pubsub.prototype.util.HexCodec;
 import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 import org.pubsub.prototype.util.Validation;
 import org.pubsub.prototype.util.YamlFiles;
@@ -45,7 +45,7 @@ record ReplicationServerConfig(String serverId, String listenHost, String advert
                                long cleanupIntervalMs, long epochZeroTimeMs, long epochLengthMs,
                                int failureProbeAttempts, long failureProbeTimeoutMs, long maintenanceIntervalMs) {
     ReplicationServerConfig {
-        serverId = PersistenceHex.require256(serverId, SERVER_ID_FIELD);
+        serverId = HexCodec.normalizeSha256(serverId, SERVER_ID_FIELD);
         Validation.start()
                 .port(port, PORT)
                 .positive(membershipPollMs, POLL_INTERVAL_MS)

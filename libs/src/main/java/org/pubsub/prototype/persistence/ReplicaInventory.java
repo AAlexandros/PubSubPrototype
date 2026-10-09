@@ -1,5 +1,7 @@
 package org.pubsub.prototype.persistence;
 
+import org.pubsub.prototype.util.HexCodec;
+
 import java.util.List;
 
 import static org.pubsub.prototype.util.PersistenceConstants.EVENTS_FIELD;
@@ -16,7 +18,7 @@ public record ReplicaInventory(
         List<TopicLogReplicaMetadata> topicLogs
 ) {
     public ReplicaInventory {
-        serverId = PersistenceHex.require256(serverId, SERVER_ID_FIELD);
+        serverId = HexCodec.normalizeSha256(serverId, SERVER_ID_FIELD);
         membershipVersion = requireNonBlank(membershipVersion, MEMBERSHIP_VERSION_FIELD);
         events = List.copyOf(requireNonNull(events, EVENTS_FIELD));
         topicLogs = List.copyOf(requireNonNull(topicLogs, TOPIC_LOGS_FIELD));

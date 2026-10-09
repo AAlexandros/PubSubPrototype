@@ -8,13 +8,13 @@ import org.pubsub.prototype.http.ApiParameters;
 import org.pubsub.prototype.http.HttpErrorCodes;
 import org.pubsub.prototype.http.HttpMethods;
 import org.pubsub.prototype.http.JsonHttp;
-import org.pubsub.prototype.persistence.PersistenceHex;
 import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.ReplicaRepairRequest;
 import org.pubsub.prototype.persistence.ReplicationServer;
 import org.pubsub.prototype.persistence.StoredEvent;
 import org.pubsub.prototype.persistence.core.ReplicationMembership;
 import org.pubsub.prototype.util.JsonSupport;
+import org.pubsub.prototype.util.HexCodec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,7 +75,7 @@ final class ReplicationHttpServer implements AutoCloseable {
                 StoredEvent event = service.persist(read(exchange, EventEnvelope.class));
                 respond(exchange, 201, event);
             } else if (HttpMethods.GET.equals(exchange.getRequestMethod()) && !suffix.isEmpty()) {
-                String key = PersistenceHex.require256(suffix, EVENT_KEY_FIELD);
+                String key = HexCodec.normalizeSha256(suffix, EVENT_KEY_FIELD);
                 var found = service.lookup(key);
                 if (found.isPresent()) respond(exchange, 200, found.orElseThrow());
                 else respond(exchange, 404, Map.of(HttpErrorCodes.ERROR, "event_not_found", EVENT_KEY, key));
@@ -101,7 +101,7 @@ final class ReplicationHttpServer implements AutoCloseable {
                 service.storeReplica(event);
                 respond(exchange, 201, event);
             } else if (HttpMethods.GET.equals(exchange.getRequestMethod()) && !suffix.isEmpty()) {
-                String key = PersistenceHex.require256(suffix, EVENT_KEY_FIELD);
+                String key = HexCodec.normalizeSha256(suffix, EVENT_KEY_FIELD);
                 var found = service.lookupLocal(key);
                 if (found.isPresent()) respond(exchange, 200, found.orElseThrow());
                 else respond(exchange, 404, Map.of(HttpErrorCodes.ERROR, "event_not_found", EVENT_KEY, key));
@@ -121,7 +121,7 @@ final class ReplicationHttpServer implements AutoCloseable {
             }
             long sinceTimestamp = JsonHttp.queryLong(exchange.getRequestURI(), ApiParameters.SINCE_TIMESTAMP, 0);
             respond(exchange, 200, service.publisherProgress(
-                    PersistenceHex.require256(parts[0], TOPIC_ID_FIELD), sinceTimestamp));
+                    HexCodec.normalizeSha256(parts[0], TOPIC_ID_FIELD), sinceTimestamp));
         } catch (IllegalArgumentException ex) {
             respond(exchange, 400, Map.of(HttpErrorCodes.ERROR, JsonHttp.safeMessage(ex)));
         }
@@ -134,7 +134,7 @@ final class ReplicationHttpServer implements AutoCloseable {
                 respond(exchange, 404, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.NOT_FOUND));
                 return;
             }
-            String topicId = PersistenceHex.require256(parts[0], TOPIC_ID_FIELD);
+            String topicId = HexCodec.normalizeSha256(parts[0], TOPIC_ID_FIELD);
             if (HttpMethods.GET.equals(exchange.getRequestMethod())) {
                 respond(exchange, 200, service.localPublisherProgress(topicId));
             } else if (HttpMethods.POST.equals(exchange.getRequestMethod())) {

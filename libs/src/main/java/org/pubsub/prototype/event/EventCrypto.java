@@ -1,5 +1,7 @@
 package org.pubsub.prototype.event;
 
+import org.pubsub.prototype.util.HexCodec;
+
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -12,6 +14,7 @@ import java.security.Signature;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 
+import static org.pubsub.prototype.util.EventConstants.TOPIC_ID_FIELD;
 import static org.pubsub.prototype.util.CryptoConstants.ED25519_ALGORITHM;
 import static org.pubsub.prototype.util.CryptoConstants.SHA_256_ALGORITHM;
 
@@ -20,7 +23,7 @@ public final class EventCrypto {
     }
 
     public static byte[] canonicalBody(EventEnvelope event) {
-        byte[] topicId = EventHex.decode(event.topicId());
+        byte[] topicId = HexCodec.decodeSha256(event.topicId(), TOPIC_ID_FIELD);
         byte[] publicKey = Base64.getDecoder().decode(event.publisherPublicKey());
         byte[] payload = Base64.getDecoder().decode(event.payload());
         try {
@@ -79,7 +82,7 @@ public final class EventCrypto {
 
     public static String sha256Hex(byte[] bytes) {
         try {
-            return EventHex.encode(MessageDigest.getInstance(SHA_256_ALGORITHM).digest(bytes));
+            return HexCodec.encode(MessageDigest.getInstance(SHA_256_ALGORITHM).digest(bytes));
         } catch (GeneralSecurityException ex) {
             throw new IllegalStateException(SHA_256_ALGORITHM + " is not available", ex);
         }

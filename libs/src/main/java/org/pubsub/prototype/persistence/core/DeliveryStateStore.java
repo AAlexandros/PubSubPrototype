@@ -2,7 +2,8 @@ package org.pubsub.prototype.persistence.core;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.pubsub.prototype.persistence.DeliveryProgress;
-import org.pubsub.prototype.persistence.PersistenceHex;
+import org.pubsub.prototype.util.AtomicFiles;
+import org.pubsub.prototype.util.HexCodec;
 import org.pubsub.prototype.util.JsonSupport;
 
 import java.io.IOException;
@@ -25,8 +26,8 @@ public final class DeliveryStateStore {
     }
 
     public synchronized DeliveryProgress progress(String topicId, String publisherKeyId) {
-        PersistenceHex.require256(topicId, TOPIC_ID_FIELD);
-        PersistenceHex.require256(publisherKeyId, PUBLISHER_KEY_ID_FIELD);
+        HexCodec.normalizeSha256(topicId, TOPIC_ID_FIELD);
+        HexCodec.normalizeSha256(publisherKeyId, PUBLISHER_KEY_ID_FIELD);
         return state.getOrDefault(topicId, Map.of()).getOrDefault(publisherKeyId, DeliveryProgress.empty());
     }
 
@@ -46,7 +47,7 @@ public final class DeliveryStateStore {
     }
 
     public synchronized long latestDeliveredTimestamp(String topicId) {
-        PersistenceHex.require256(topicId, TOPIC_ID_FIELD);
+        HexCodec.normalizeSha256(topicId, TOPIC_ID_FIELD);
         return state.getOrDefault(topicId, Map.of()).values().stream()
                 .mapToLong(DeliveryProgress::lastDeliveredTimestamp)
                 .max().orElse(0);

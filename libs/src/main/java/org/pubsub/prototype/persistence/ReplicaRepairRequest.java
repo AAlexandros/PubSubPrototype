@@ -1,5 +1,7 @@
 package org.pubsub.prototype.persistence;
 
+import org.pubsub.prototype.util.HexCodec;
+
 import java.util.List;
 
 import static org.pubsub.prototype.util.PersistenceConstants.MEMBERSHIP_VERSION_FIELD;
@@ -27,14 +29,14 @@ public record ReplicaRepairRequest(
 ) {
     public ReplicaRepairRequest {
         requireNonNull(recordType, RECORD_TYPE_FIELD);
-        recordKey = PersistenceHex.require256(recordKey, RECORD_KEY_FIELD);
-        topicId = PersistenceHex.require256(topicId, TOPIC_ID_FIELD);
+        recordKey = HexCodec.normalizeSha256(recordKey, RECORD_KEY_FIELD);
+        topicId = HexCodec.normalizeSha256(topicId, TOPIC_ID_FIELD);
         membershipVersion = requireNonBlank(membershipVersion, MEMBERSHIP_VERSION_FIELD);
         survivingReplicas = List.copyOf(requireNonNull(survivingReplicas, SURVIVING_REPLICAS_FIELD));
         responsibleServerIds = requireNonNull(responsibleServerIds, RESPONSIBLE_SERVER_IDS_FIELD).stream()
-                .map(value -> PersistenceHex.require256(value, RESPONSIBLE_SERVER_ID_FIELD)).toList();
+                .map(value -> HexCodec.normalizeSha256(value, RESPONSIBLE_SERVER_ID_FIELD)).toList();
         unavailableServerIds = requireNonNull(unavailableServerIds, UNAVAILABLE_SERVER_IDS_FIELD).stream()
-                .map(value -> PersistenceHex.require256(value, UNAVAILABLE_SERVER_ID_FIELD)).toList();
+                .map(value -> HexCodec.normalizeSha256(value, UNAVAILABLE_SERVER_ID_FIELD)).toList();
         reason = reason == null ? MAINTENANCE_REASON : reason;
     }
 }

@@ -1,7 +1,7 @@
 package org.pubsub.prototype.persistence.core;
 
-import org.pubsub.prototype.persistence.PersistenceHex;
 import org.pubsub.prototype.persistence.ReplicationServer;
+import org.pubsub.prototype.util.HexCodec;
 
 import java.math.BigInteger;
 import java.util.Comparator;
@@ -44,12 +44,15 @@ public final class DhtAssignment {
         return distance(unsigned(key, KEY_FIELD), unsigned(serverId, SERVER_ID_FIELD));
     }
 
+    /**
+     * Find the minimum distance between a key and a server, considering both ways
+     */
     private static BigInteger distance(BigInteger key, BigInteger server) {
         BigInteger direct = server.subtract(key).abs();
         return direct.min(RING_SIZE.subtract(direct));
     }
 
     private static BigInteger unsigned(String value, String field) {
-        return new BigInteger(1, PersistenceHex.decode256(value, field));
+        return new BigInteger(1, HexCodec.decodeSha256(value, field));
     }
 }

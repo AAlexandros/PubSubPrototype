@@ -15,7 +15,7 @@ import static org.pubsub.prototype.util.Validators.requirePositive;
  * @param admins the list of admins of the topic
  * @param publishers the list of publishers of the topic
  * @param replicationFactor the replication factor of the topic. It must be a positive integer
- * @param retentionPeriod the retention period of the topic in milliseconds. It must be a positive value
+ * @param retentionPeriod the retention period of the topic in epochs. It must be a positive value
  * @param active indicates whether the topic is active or tombstoned
  */
 public record TopicState(

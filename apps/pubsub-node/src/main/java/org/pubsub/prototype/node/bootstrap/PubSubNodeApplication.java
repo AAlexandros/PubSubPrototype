@@ -1,7 +1,7 @@
 package org.pubsub.prototype.node.bootstrap;
 
 import org.pubsub.prototype.navigation.SubscriptionStore;
-import org.pubsub.prototype.node.adapter.http.EventControlServer;
+import org.pubsub.prototype.node.adapter.http.NodeControlHttpServer;
 import org.pubsub.prototype.node.adapter.transport.NodeTransportListener;
 import org.pubsub.prototype.node.config.NodeConfig;
 import org.pubsub.prototype.node.runtimes.DisseminationRuntime;
@@ -12,6 +12,8 @@ import org.pubsub.prototype.node.runtimes.RegistrySynchronizer;
 import org.pubsub.prototype.node.service.NodeEventCoordinator;
 import org.pubsub.prototype.protocol.IdentityStore;
 import org.pubsub.prototype.protocol.NodeIdentity;
+import org.pubsub.prototype.event.EventDeduplicator;
+import org.pubsub.prototype.event.EventValidator;
 import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryConfig;
 import org.pubsub.prototype.registry.topic.cardano.CardanoTopicRegistry;
 import org.pubsub.prototype.sampling.NodeEndpoint;
@@ -36,13 +38,13 @@ public final class PubSubNodeApplication implements AutoCloseable {
     private final NavigationRuntime navigation;
     private final DisseminationRuntime dissemination;
     private final PubSubTransport transport;
-    private final EventControlServer controlServer;
+    private final NodeControlHttpServer controlServer;
     private final CountDownLatch stopped = new CountDownLatch(1);
 
     private PubSubNodeApplication(RegistrySynchronizer registry, PersistenceRuntime persistence,
                             PeerSamplingRuntime sampling, NavigationRuntime navigation,
                             DisseminationRuntime dissemination, PubSubTransport transport,
-                            EventControlServer controlServer) {
+                            NodeControlHttpServer controlServer) {
         this.registry = registry;
         this.persistence = persistence;
         this.sampling = sampling;
@@ -59,12 +61,13 @@ public final class PubSubNodeApplication implements AutoCloseable {
         // NavigationRuntime — uses its nodeId.
         // DisseminationRuntime — uses its nodeId.
         // PubSubTransport — uses the identity for authenticated peer communication.
-        // EventControlServer — exposes runtime information using that nodeId.
+        // NodeControlHttpServer — exposes runtime information using that nodeId.
         NodeIdentity identity = IdentityStore.loadOrCreate(config.identityPath());
         // Initialize the topic registry synchronizer
         RegistrySynchronizer registry = createRegistry(config);
         // Initialize the event coordinator
-        NodeEventCoordinator eventService = new NodeEventCoordinator(identity, config.identityPath(), registry);
+        EventValidator eventValidator = new EventValidator(registry, new EventDeduplicator(10_000));
+        NodeEventCoordinator eventService = new NodeEventCoordinator(identity, config.identityPath(), eventValidator);
         // Initialize the persistence runtime
         PersistenceRuntime persistence = createPersistence(config, registry);
         eventService.attachPersistence(persistence);
@@ -81,7 +84,7 @@ public final class PubSubNodeApplication implements AutoCloseable {
 
         // The pub-sub transport used to transmit the various messages between the nodes
         PubSubTransport transport = new PubSubTransport(config.toTransportConfig(), identity, self,
-                new NodeTransportListener(sampling, navigation, dissemination, eventService));
+                new NodeTransportListener(sampling, navigation, dissemination, eventService, eventValidator));
         // Attach the transport to all the runtimes
         sampling.attach(transport);
         navigation.attach(transport);
@@ -89,9 +92,8 @@ public final class PubSubNodeApplication implements AutoCloseable {
         eventService.attachSender(transport);
         eventService.attachDissemination(dissemination);
 
-        // External control server for managing and monitoring the node
-        // ToDo: Conside making each node autonomus, completely removing the HTTP dependency
-        EventControlServer controlServer = new EventControlServer(
+        // Local command and inspection adapter; the testbed publishes its port only on host loopback.
+        NodeControlHttpServer controlServer = new NodeControlHttpServer(
                 config.controlHost(), config.controlPort(), eventService);
         controlServer.addSampling(sampling.sampling(), identity.nodeId().value(),
                 config.sampling().viewSize);

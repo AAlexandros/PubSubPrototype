@@ -14,7 +14,6 @@ import org.pubsub.prototype.node.runtimes.PersistenceRuntime;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.NodeIdentity;
 import org.pubsub.prototype.registry.topic.TopicId;
-import org.pubsub.prototype.transport.TransportListener;
 import org.pubsub.prototype.transport.TransportSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +22,7 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Base64;
 
-public final class NodeEventCoordinator implements TransportListener {
+public final class NodeEventCoordinator {
     private static final Logger LOG = LoggerFactory.getLogger(NodeEventCoordinator.class);
 
     private final EventPublisher publisher;
@@ -33,8 +32,12 @@ public final class NodeEventCoordinator implements TransportListener {
     private PersistenceRuntime persistence;
 
     public NodeEventCoordinator(NodeIdentity identity, Path runtimeDir, TopicStateProvider topics) {
+        this(identity, runtimeDir, new EventValidator(topics, new EventDeduplicator(10_000)));
+    }
+
+    public NodeEventCoordinator(NodeIdentity identity, Path runtimeDir, EventValidator validator) {
         this.publisher = new EventPublisher(identity.keyPair(), Clock.systemUTC(), runtimeDir);
-        this.validator = new EventValidator(topics, new EventDeduplicator(10_000));
+        this.validator = validator;
     }
 
     public void attachSender(TransportSender sender) {
@@ -96,11 +99,10 @@ public final class NodeEventCoordinator implements TransportListener {
         return publisher.publisherKeyId();
     }
 
-    @Override
-    public void eventReceived(NodeId peerNodeId, EventEnvelope event) {
+    /** Handles an event after the P2P adapter has validated it. */
+    public void eventReceived(NodeId peerNodeId, EventEnvelope event, EventValidationResult result) {
         LOG.info("EVENT_RECEIVED eventId={} topicId={} sequenceNumber={} peerNodeId={}",
                 event.eventId(), event.topicId(), event.sequenceNumber(), peerNodeId.value());
-        EventValidationResult result = validator.validate(event);
         String publisherKeyId = result.publisherKeyId();
         if (result.accepted()) {
             LOG.info("EVENT_ACCEPTED eventId={} topicId={} publisherKeyId={} sequenceNumber={} peerNodeId={}",

@@ -9,7 +9,7 @@ echo "Compose processes:"
 compose ps
 count="$(cat "$TESTBED_RUNTIME/node-count.txt" 2>/dev/null || echo 0)"
 for index in 1 2 3; do
-  curl --silent --show-error "http://127.0.0.1:$((8100 + index))/v1/health" || true
+  curl --silent --show-error "http://127.0.0.1:$((8100 + index))/v1/ops/health" || true
   echo
 done
 for index in $(seq 1 "$count"); do

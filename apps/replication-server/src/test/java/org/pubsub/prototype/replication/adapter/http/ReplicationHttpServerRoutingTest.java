@@ -16,23 +16,23 @@ class ReplicationHttpServerRoutingTest {
     @Test
     void bindsPathAndQueryParametersAndRejectsWrongMethods() throws Exception {
         try (ReplicationHttpServer server = new ReplicationHttpServer(
-                "127.0.0.1", 0, null, null, null, null, 1);
+                "127.0.0.1", 0, null, null, null, null, event -> null, request -> null, 1);
              HttpClient client = HttpClient.newHttpClient()) {
             int port = boundPort(server);
             server.start();
 
-            HttpResponse<String> invalidKey = send(client, port, "GET", "/v1/events/invalid");
+            HttpResponse<String> invalidKey = send(client, port, "GET", "/v1/client/events/invalid");
             assertEquals(400, invalidKey.statusCode());
             assertTrue(invalidKey.body().contains("error"));
 
-            HttpResponse<String> missingTopic = send(client, port, "GET", "/v1/events/" + "0".repeat(64));
+            HttpResponse<String> missingTopic = send(client, port, "GET", "/v1/client/events/" + "0".repeat(64));
             assertEquals(400, missingTopic.statusCode());
 
             HttpResponse<String> invalidSince = send(client, port, "GET",
-                    "/v1/topics/" + "0".repeat(64) + "/publishers?sinceTimestamp=-1");
+                    "/v1/client/topics/" + "0".repeat(64) + "/publishers?sinceTimestamp=-1");
             assertEquals(400, invalidSince.statusCode());
 
-            HttpResponse<String> wrongMethod = send(client, port, "POST", "/v1/health");
+            HttpResponse<String> wrongMethod = send(client, port, "POST", "/v1/ops/health");
             assertEquals(405, wrongMethod.statusCode());
             assertTrue(wrongMethod.body().contains("method_not_allowed"));
         }

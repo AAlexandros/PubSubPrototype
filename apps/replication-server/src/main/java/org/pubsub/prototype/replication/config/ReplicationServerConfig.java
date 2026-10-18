@@ -29,8 +29,8 @@ import static org.pubsub.prototype.replication.config.ReplicationConfigConstants
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.REGISTRATION_OPERATOR;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.REPLICATION_REGISTRY_CLI_BACKEND;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.REQUEST_TIMEOUT_MS;
-import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.REPAIR_SIGNING_KEY_PATH;
-import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.REPAIR_VERIFICATION_KEY_PATH;
+import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.REQUEST_SIGNING_KEY_PATH;
+import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.REQUEST_VERIFICATION_KEY_PATH;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.RETRIES;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.SERVER_ID;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.STORAGE_PATH;
@@ -43,7 +43,7 @@ import static org.pubsub.prototype.util.validation.Validators.requireNonNull;
 
 public record ReplicationServerConfig(String serverId, String listenHost, String advertisedHost, int port,
                                int httpWorkerThreads,
-                               Path storagePath, Path repairSigningKeyPath, Path repairVerificationKeyPath,
+                               Path storagePath, Path requestSigningKeyPath, Path requestVerificationKeyPath,
                                Path membershipPath, long membershipPollMs,
                                Registration registration,
                                Path topicRegistryRuntimeDir, String topicRegistrySigner,
@@ -54,8 +54,8 @@ public record ReplicationServerConfig(String serverId, String listenHost, String
                                CardanoNetwork cardanoNetwork) {
     public ReplicationServerConfig {
         serverId = HexUtils.normalizeSha256(serverId, SERVER_ID_FIELD);
-        requireNonNull(repairSigningKeyPath, REPAIR_SIGNING_KEY_PATH);
-        requireNonNull(repairVerificationKeyPath, REPAIR_VERIFICATION_KEY_PATH);
+        requireNonNull(requestSigningKeyPath, REQUEST_SIGNING_KEY_PATH);
+        requireNonNull(requestVerificationKeyPath, REQUEST_VERIFICATION_KEY_PATH);
         cardanoNetwork = requireNonNull(cardanoNetwork, "cardanoNetwork");
         Validation.start()
                 .port(port, PORT)
@@ -119,8 +119,8 @@ public record ReplicationServerConfig(String serverId, String listenHost, String
                     server.httpWorkerThreads == null ? DEFAULT_HTTP_WORKER_THREADS
                             : requireNonNull(server.httpWorkerThreads, HTTP_WORKER_THREADS),
                     Path.of(requireNonBlank(server.storagePath, STORAGE_PATH)),
-                    Path.of(requireNonBlank(server.repairSigningKeyPath, REPAIR_SIGNING_KEY_PATH)),
-                    Path.of(requireNonBlank(server.repairVerificationKeyPath, REPAIR_VERIFICATION_KEY_PATH)),
+                    Path.of(requireNonBlank(server.requestSigningKeyPath, REQUEST_SIGNING_KEY_PATH)),
+                    Path.of(requireNonBlank(server.requestVerificationKeyPath, REQUEST_VERIFICATION_KEY_PATH)),
                     Path.of(requireNonBlank(registry.membershipPath, MEMBERSHIP_PATH)),
                     requireNonNull(registry.pollIntervalMs, POLL_INTERVAL_MS),
                     new Registration(requireNonBlank(registration.operator, REGISTRATION_OPERATOR),
@@ -161,8 +161,8 @@ public record ReplicationServerConfig(String serverId, String listenHost, String
         public Integer port;
         public Integer httpWorkerThreads;
         public String storagePath;
-        public String repairSigningKeyPath;
-        public String repairVerificationKeyPath;
+        public String requestSigningKeyPath;
+        public String requestVerificationKeyPath;
     }
 
     private static final class RegistrationSection {

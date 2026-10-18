@@ -3,14 +3,17 @@ package org.pubsub.prototype.http;
 /** HTTP paths shared by servers, clients, and route-level tests. */
 public final class ApiPaths {
     public static final String PUBLISHERS_SEGMENT = "publishers";
-    public static final String EVENTS = "/v1/events";
-    public static final String TOPICS = "/v1/topics";
-    public static final String REPLICA_EVENTS = "/v1/replicas/events";
-    public static final String REPLICA_TOPICS = "/v1/replicas/topics";
-    public static final String REPLICA_REPAIR = "/v1/replicas/repair";
-    public static final String MAINTENANCE_STATUS = "/v1/maintenance/status";
-    public static final String MAINTENANCE_REPLICAS = "/v1/maintenance/replicas";
-    public static final String HEALTH = "/v1/health";
+    public static final String CLIENT_ROOT = "/v1/client";
+    public static final String REPLICATION_ROOT = "/v1/replication";
+    public static final String OPS_ROOT = "/v1/ops";
+    public static final String CLIENT_EVENTS = CLIENT_ROOT + "/events";
+    public static final String CLIENT_TOPICS = CLIENT_ROOT + "/topics";
+    public static final String REPLICATION_EVENTS = REPLICATION_ROOT + "/events";
+    public static final String REPLICATION_TOPICS = REPLICATION_ROOT + "/topics";
+    public static final String REPLICATION_REPAIR = REPLICATION_ROOT + "/repair";
+    public static final String REPLICATION_INVENTORY = REPLICATION_ROOT + "/inventory";
+    public static final String OPS_MAINTENANCE_STATUS = OPS_ROOT + "/maintenance/status";
+    public static final String OPS_HEALTH = OPS_ROOT + "/health";
 
     public static final String EVENT_PUBLISH = "/v1/events/publish";
     public static final String EVENT_INJECT = "/v1/events/inject";

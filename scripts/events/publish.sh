@@ -37,19 +37,13 @@ for arg in "$@"; do
 done
 
 case "$node" in
-  node-1|pubsub-node-1) port=8001 ;;
-  node-2|pubsub-node-2) port=8002 ;;
-  node-3|pubsub-node-3) port=8003 ;;
+  node-[1-9]|node-[1-4][0-9]|node-50|pubsub-node-[1-9]|pubsub-node-[1-4][0-9]|pubsub-node-50)
+    node_index="${node##*-}" ;;
   *) echo "Unknown node: $node" >&2; exit 2 ;;
 esac
 
-if [[ "$base64_payload" == false ]]; then
-  payload="$(printf '%s' "$payload" | base64 | tr -d '\r\n')"
-fi
-
-query="forceBroadcast=$force_broadcast&tamperSignature=$tamper_signature"
-body="$(node -e 'process.stdout.write(JSON.stringify({topicId: process.argv[1], payload: process.argv[2]}))' "$topic_id" "$payload")"
-curl --fail --silent --show-error \
-  -H 'Content-Type: application/json' \
-  -X POST "http://127.0.0.1:$port/v1/events/publish?$query" \
-  --data "$body"
+args=(publish --node "$node_index" --topic "$topic_id" --payload "$payload")
+[[ "$base64_payload" == true ]] && args+=(--base64)
+[[ "$force_broadcast" == true ]] && args+=(--force-broadcast)
+[[ "$tamper_signature" == true ]] && args+=(--tamper-signature)
+node "$ROOT_DIR/scripts/pubsub-node.mjs" "${args[@]}"

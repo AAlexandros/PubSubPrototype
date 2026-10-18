@@ -1,5 +1,7 @@
 package org.pubsub.prototype.replication.service;
 
+import org.pubsub.prototype.auth.Authenticator;
+import org.pubsub.prototype.auth.PublisherProgressAuthenticator;
 import org.pubsub.prototype.event.EventCrypto;
 import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.event.TopicStateProvider;
@@ -43,6 +45,7 @@ public final class ReplicationService {
     private final ReplicationServer localServer;
     private final ReplicationMembership membership;
     private final PersistenceEventValidator validator;
+    private final Authenticator<PublisherProgressAuthenticator.Request, TopicState> progressAuthenticator;
     private final TopicStateProvider topics;
     private final FileEventStore store;
     private final ReplicationHttpClient httpClient;
@@ -57,6 +60,7 @@ public final class ReplicationService {
         this.membership = membership;
         this.validator = validator;
         this.topics = topics;
+        this.progressAuthenticator = new PublisherProgressAuthenticator(topics);
         this.store = store;
         this.httpClient = httpClient;
         this.failureDetector = failureDetector;
@@ -206,10 +210,7 @@ public final class ReplicationService {
      * The signature and topic are checked before updating the local log.
      */
     public void storeProgressReplica(String topicId, PublisherProgress progress) {
-        require(topicId.equals(progress.topicId()), "publisher progress topic does not match request");
-        TopicState topic = topicState(topicId);
-        require(topic.publishers().isEmpty() || topic.publishers().contains(progress.publisherKeyId()),
-                "unauthorized publisher");
+        progressAuthenticator.authenticate(new PublisherProgressAuthenticator.Request(topicId, progress));
         if (store.updateProgress(topicId, progress)) {
             LOG.info("TOPIC_LOG_UPDATED topicId={} publisherKeyId={} sequenceNumber={} serverId={}",
                     topicId, progress.publisherKeyId(), progress.latestSequenceNumber(), localServer.serverId());

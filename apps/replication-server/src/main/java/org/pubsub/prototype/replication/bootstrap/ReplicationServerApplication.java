@@ -1,11 +1,12 @@
 package org.pubsub.prototype.replication.bootstrap;
 
 import org.pubsub.prototype.cardano.cli.HostCardanoCommandRunner;
+import org.pubsub.prototype.auth.PublisherProgressAuthenticator;
+import org.pubsub.prototype.auth.SignedHttpRequest;
 import org.pubsub.prototype.event.TopicStateProvider;
 import org.pubsub.prototype.persistence.adapter.CardanoCliEpochProvider;
 import org.pubsub.prototype.persistence.adapter.FileEventStore;
 import org.pubsub.prototype.persistence.adapter.ReplicationHttpClient;
-import org.pubsub.prototype.persistence.maintenance.ReplicaRepairAuth;
 import org.pubsub.prototype.persistence.core.EpochProvider;
 import org.pubsub.prototype.persistence.core.PersistenceEventValidator;
 import org.pubsub.prototype.registry.replication.FileReplicationRegistry;
@@ -87,19 +88,22 @@ public final class ReplicationServerApplication implements AutoCloseable {
         store.ensureServerIdentity(config.serverId());
 
         // Shared client for outbound requests to peer replication servers.
-        ReplicaRepairAuth repairAuth = ReplicaRepairAuth.load(config.repairSigningKeyPath(),
-                config.repairVerificationKeyPath(), config.serverId());
+        SignedHttpRequest requestSigner = SignedHttpRequest.load(config.requestSigningKeyPath(),
+                config.requestVerificationKeyPath(), config.serverId());
         ReplicationHttpClient client = new ReplicationHttpClient(Duration.ofMillis(config.connectionTimeoutMs()),
-                Duration.ofMillis(config.requestTimeoutMs()), config.retries(), repairAuth);
+                Duration.ofMillis(config.requestTimeoutMs()), config.retries(), requestSigner);
         TopicStateProvider topicProvider = topicId -> topics.topic(topicId);
         PeerFailureDetector failureDetector = new PeerFailureDetector(config.failureProbeAttempts());
+        PersistenceEventValidator eventAuthenticator = new PersistenceEventValidator(topicProvider);
+        PublisherProgressAuthenticator progressAuthenticator = new PublisherProgressAuthenticator(topicProvider);
         ReplicationService service = new ReplicationService(config.self(), membership,
-                new PersistenceEventValidator(topicProvider), topicProvider, store, client, failureDetector);
+                eventAuthenticator, topicProvider, store, client, failureDetector);
         ReplicaMaintenanceManager replicaMaintenance = new ReplicaMaintenanceManager(config.self(), membership,
                 service, store, client, () -> topics.snapshot().topics(), failureDetector,
                 Duration.ofMillis(config.failureProbeTimeoutMs()));
         ReplicationHttpServer server = new ReplicationHttpServer(config.listenHost(), config.port(),
-                config.self(), service, membership, replicaMaintenance, config.httpWorkerThreads());
+                config.self(), service, membership, replicaMaintenance, eventAuthenticator,
+                progressAuthenticator, config.httpWorkerThreads());
         ScheduledExecutorService maintenance = Executors.newScheduledThreadPool(3, runnable -> {
             Thread thread = new Thread(runnable, "replication-maintenance");
             thread.setDaemon(true);

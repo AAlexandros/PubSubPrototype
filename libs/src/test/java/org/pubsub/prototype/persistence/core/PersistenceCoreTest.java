@@ -124,11 +124,11 @@ class PersistenceCoreTest {
         String publisherId = EventCrypto.publisherKeyId(publisher.getPublic());
         AtomicReference<String> eventLookupQuery = new AtomicReference<>();
         HttpServer fake = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        fake.createContext("/v1/topics/" + TOPIC + "/publishers", exchange -> json(exchange,
+        fake.createContext("/v1/client/topics/" + TOPIC + "/publishers", exchange -> json(exchange,
                 List.of(PublisherProgress.fromEvent(events.get(2)))));
         for (EventEnvelope event : events) {
             StoredEvent stored = new StoredEvent(EventKeys.eventKey(event), event, Instant.EPOCH, 10, 0, 10);
-            fake.createContext("/v1/events/" + stored.eventKey(), exchange -> {
+            fake.createContext("/v1/client/events/" + stored.eventKey(), exchange -> {
                 eventLookupQuery.set(exchange.getRequestURI().getQuery());
                 json(exchange, stored);
             });

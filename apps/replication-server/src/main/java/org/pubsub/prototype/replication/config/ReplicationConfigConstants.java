@@ -9,8 +9,8 @@ public final class ReplicationConfigConstants {
     public static final String STORAGE_PATH = "server.storagePath";
     /** Optional server.httpWorkerThreads YAML setting; defaults to four workers. */
     public static final String HTTP_WORKER_THREADS = "server.httpWorkerThreads";
-    public static final String REPAIR_SIGNING_KEY_PATH = "server.repairSigningKeyPath";
-    public static final String REPAIR_VERIFICATION_KEY_PATH = "server.repairVerificationKeyPath";
+    public static final String REQUEST_SIGNING_KEY_PATH = "server.requestSigningKeyPath";
+    public static final String REQUEST_VERIFICATION_KEY_PATH = "server.requestVerificationKeyPath";
     public static final int DEFAULT_HTTP_WORKER_THREADS = 4;
     public static final String REGISTRATION_OPERATOR = "registration.operator";
     public static final String COMMITMENT_START_EPOCH = "registration.commitmentStartEpoch";

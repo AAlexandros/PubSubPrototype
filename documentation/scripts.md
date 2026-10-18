@@ -2,6 +2,10 @@
 
 This document describes every automation script in the repository: what it does, why it was created, and which project phase introduced or last changed it. Phase specs live under [`specs/`](../specs) and the corresponding write-ups live under [`implementation-reports/`](../implementation-reports). The expanded host and Docker forms of every Cardano command are documented in the [Cardano CLI command reference](cardano-cli.md).
 
+For the replication-server endpoints used by clients and peer servers, see the [Replication Server HTTP API reference](replication-server-api.md).
+
+For direct local Pub/Sub node commands, use the single [`pubsub-node.mjs` CLI](node-cli.md). Testbed and acceptance scripts may call the node's loopback HTTP adapter for polling and measurement.
+
 ## Root build wrappers
 
 | Script | Purpose | Created | Phase |
@@ -13,7 +17,7 @@ This document describes every automation script in the repository: what it does,
 
 These scripts start, stop, and observe the local three-node Pub/Sub topology together with the Cardano devnet.
 
-The Pub/Sub containers all listen on the same internal ports (`7000` for peer transport and `8000` for the control API). Docker Compose maps those to distinct localhost ports (`7001..7003` and `8001..8003`) so all three nodes can be reached from the host at the same time.
+The Pub/Sub containers all listen on the same internal ports (`7000` for peer transport and `8000` for the local command adapter). Docker Compose maps those to distinct host ports (`7001..7003` and `8001..8003`); command ports bind to `127.0.0.1` and are used by the [`pubsub-node` CLI](node-cli.md).
 
 | Script | Purpose | Created | Phase |
 |---|---|---|---|
@@ -79,12 +83,13 @@ Introduced in Phase 0.2 to give operators/tests a CLI surface over the on-chain 
 
 ## Event operations — `scripts/events/`
 
-Introduced in Phase 0.3 to publish and inject signed event envelopes through a node's localhost control API.
+Introduced in Phase 0.3 to publish and inject signed event envelopes through the node command adapter. These wrappers now call the `pubsub-node` CLI.
 
 | Script | Purpose | Created | Phase |
 |---|---|---|---|
-| [`publish.sh`](../scripts/events/publish.sh) | Publishes an event through `POST /v1/events/publish`. Supports plain-text or base64 payloads, plus acceptance-only `--force-broadcast` and `--tamper-signature` flags for receiver-side validation tests. | Written for the Phase 0.3 node control API and negative-path acceptance requirements. | Phase 0.3 |
-| [`inject.sh`](../scripts/events/inject.sh) | Re-broadcasts a previously captured event envelope through `POST /v1/events/inject`, used by acceptance to prove duplicate suppression against the exact same event ID. | Written for the Phase 0.3 duplicate suppression acceptance check. | Phase 0.3 |
+| [`pubsub-node.mjs`](../scripts/pubsub-node.mjs) | The single local user/script interface for publishing, injecting, subscribing, unsubscribing, recovery, status, and overlay inspection. | Added to provide one concrete command surface for local nodes. | Current |
+| [`publish.sh`](../scripts/events/publish.sh) | Compatibility wrapper around `pubsub-node.mjs publish`. Supports plain-text or base64 payloads, plus acceptance-only `--force-broadcast` and `--tamper-signature` flags. | Written for the Phase 0.3 negative-path acceptance requirements. | Phase 0.3 |
+| [`inject.sh`](../scripts/events/inject.sh) | Compatibility wrapper around `pubsub-node.mjs inject`, used by acceptance to prove duplicate suppression against the exact same event ID. | Written for the Phase 0.3 duplicate suppression acceptance check. | Phase 0.3 |
 | [`publisher-key-id.sh`](../scripts/events/publisher-key-id.sh) | Reads a running node's Ed25519 event publisher key ID from `GET /v1/events/publisher-key-id`, used when registering node publishers in the Cardano Topic Registry. | Written for the Phase 0.3 publisher identity decision. | Phase 0.3 |
 
 ## Replication Registry operations — `scripts/replication/`

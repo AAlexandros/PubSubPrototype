@@ -4,6 +4,7 @@ import {spawnSync} from 'node:child_process';
 import {createHash, randomUUID} from 'node:crypto';
 import {API_PATHS, TELEMETRY_DATASETS, TESTBED_PATHS, nodeApiUrl, replicationApiUrl} from '../lib/contracts.mjs';
 import {nativePath as native} from '../lib/paths.mjs';
+import {signedOptions} from '../lib/signed-http.mjs';
 import {loadFlatYaml as yaml} from '../lib/simple-yaml.mjs';
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -17,6 +18,7 @@ if (mode === 'inspect') { console.log(scenario.nodeCount); process.exit(0); }
 if (mode !== 'run') throw Error('mode must be inspect or run');
 
 const root = fs.realpathSync(native(rawRoot || process.cwd()));
+const serverIds = JSON.parse(fs.readFileSync(path.join(root, '.tools', 'phase-0.9', 'topology.json'), 'utf8')).serverIds;
 const startedAt = new Date();
 const runId = `${scenario.scenarioId}-${startedAt.toISOString().replace(/[-:.]/g, '').replace('Z','Z')}-${randomUUID().slice(0,8)}`;
 const runDir = path.join(root, 'results', String(scenario.scenarioId), runId);
@@ -39,7 +41,13 @@ function command(program, args, options = {}) {
 }
 const compose = (...args) => command('docker', ['compose','--env-file',TESTBED_PATHS.DEVNET_ENV_FILE,'-f',TESTBED_PATHS.COMPOSE_FILE,...args]);
 async function request(url, options) {
-  const response = await fetch(url, options);
+  const parsed = new URL(url);
+  const inventoryServer = parsed.pathname === API_PATHS.REPLICATION_INVENTORY
+    ? Number(parsed.port) - 8100 : 0;
+  const signed = inventoryServer >= 1 && inventoryServer <= serverIds.length
+    ? signedOptions(root, url, options, serverIds[inventoryServer - 1])
+    : options;
+  const response = await fetch(url, signed);
   const text = await response.text();
   if (!response.ok) throw Error(`${url} returned ${response.status}: ${text}`);
   return text ? JSON.parse(text) : {};
@@ -123,8 +131,8 @@ async function sample() {
   for (let index = 1; index <= Number(scenario.replicationServerCount); index++) {
     try {
       const [inventory, status] = await Promise.all([
-        request(replicationApiUrl(index, API_PATHS.MAINTENANCE_REPLICAS)),
-        request(replicationApiUrl(index, API_PATHS.MAINTENANCE_STATUS))
+        request(replicationApiUrl(index, API_PATHS.REPLICATION_INVENTORY)),
+        request(replicationApiUrl(index, API_PATHS.OPS_MAINTENANCE_STATUS))
       ]);
       for (const event of inventory.events || []) emit('replica_state', {serverId:inventory.serverId, recordType:'EVENT', eventKey:event.eventKey, topicId:event.topicId || null, present:true, responsible:null, membershipVersion:status.membershipVersion || null});
       for (const log of inventory.topicLogs || []) emit('replica_state', {serverId:inventory.serverId, recordType:'TOPIC_LOG', eventKey:null, topicId:log.topicId, present:true, responsible:null, membershipVersion:status.membershipVersion || null});

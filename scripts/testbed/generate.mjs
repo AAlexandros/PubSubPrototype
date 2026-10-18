@@ -39,8 +39,8 @@ for (let index = 1; index <= 3; index++) {
   advertisedHost: replication-server-${index}
   port: ${settings.replicationPort}
   storagePath: /data
-  repairSigningKeyPath: /repair-keys/payment.skey
-  repairVerificationKeyPath: /repair-keys/payment.vkey
+  requestSigningKeyPath: /request-keys/payment.skey
+  requestVerificationKeyPath: /request-keys/payment.vkey
 registration:
   operator: ${signers[index - 1]}
   cliBackend: DEVNET
@@ -63,7 +63,7 @@ for (let index = 1; index <= 3; index++) compose += `  replication-server-${inde
     environment: {CARDANO_NETWORK_MAGIC: \${CARDANO_NETWORK_MAGIC:-42}, CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock}
     volumes:
       - {type: bind, source: ./config/server-${index}.yaml, target: /config/server-${index}.yaml, read_only: true}
-      - {type: bind, source: ../../ops/infra/devnet/keys/${signers[index - 1]}, target: /repair-keys, read_only: true}
+      - {type: bind, source: ../../ops/infra/devnet/keys/${signers[index - 1]}, target: /request-keys, read_only: true}
       - {type: bind, source: ../../ops/infra/devnet/runtime/registry, target: /registry, read_only: true}
       - {type: bind, source: ../../ops/infra/devnet/runtime/replication-registry, target: /replication-registry, read_only: true}
       - {type: bind, source: ../../ops/infra/devnet/runtime/testnet/socket, target: /node-socket, read_only: true}

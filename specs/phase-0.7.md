@@ -242,11 +242,15 @@ Provide a versioned replication-server API.
 At minimum:
 
 ```text
-POST /v1/events
-GET  /v1/events/{eventKey}?topicId={topicId}
-GET  /v1/topics/{topicId}/publishers
-GET  /v1/health
+POST /v1/client/events
+GET  /v1/client/events/{eventKey}?topicId={topicId}
+GET  /v1/client/topics/{topicId}/publishers
+GET  /v1/ops/health
 ```
+
+These are the current replication-server paths. The phase's original route
+names were later grouped under `/v1/client` and `/v1/ops`; see the
+[Replication Server HTTP API reference](../documentation/replication-server-api.md).
 
 Internal server-to-server replication may use additional endpoints.
 

@@ -39,7 +39,8 @@ public record ProtocolMessage(
         NodeEndpoint endpoint,
         GossipExchange exchange,
         NavigationExchange navigation,
-        DisseminationExchange dissemination
+        DisseminationExchange dissemination,
+        HandshakeProof handshake
 ) {
     public ProtocolMessage {
         requireNonNull(type, TYPE_FIELD);
@@ -49,7 +50,7 @@ public record ProtocolMessage(
                 requireNodeId(nodeId);
                 requireNonBlank(nodeName, "HELLO " + NODE_NAME_FIELD);
             }
-            case HELLO_ACK -> requireNodeId(nodeId);
+            case HELLO_ACK, HELLO_FINISH -> requireNodeId(nodeId);
             case PING, PONG -> require(requestId != null && sentAt != null,
                     type + " requestId and sentAt are required");
             case SECURECYCLON_REQUEST, SECURECYCLON_RESPONSE, SECURECYCLON_PROOF ->
@@ -73,8 +74,22 @@ public record ProtocolMessage(
         this(type, version, nodeId, nodeName, requestId, sentAt, event, null, null, null, null);
     }
 
+    public ProtocolMessage(MessageType type, int version, String nodeId, String nodeName,
+                           UUID requestId, Instant sentAt, EventEnvelope event, NodeEndpoint endpoint,
+                           GossipExchange exchange, NavigationExchange navigation,
+                           DisseminationExchange dissemination) {
+        this(type, version, nodeId, nodeName, requestId, sentAt, event, endpoint, exchange, navigation,
+                dissemination, null);
+    }
+
     public ProtocolMessage withEndpoint(NodeEndpoint endpoint) {
-        return new ProtocolMessage(type, version, nodeId, nodeName, requestId, sentAt, event, endpoint, exchange, navigation, dissemination);
+        return new ProtocolMessage(type, version, nodeId, nodeName, requestId, sentAt, event, endpoint,
+                exchange, navigation, dissemination, handshake);
+    }
+
+    public ProtocolMessage withHandshake(HandshakeProof proof) {
+        return new ProtocolMessage(type, version, nodeId, nodeName, requestId, sentAt, event, endpoint,
+                exchange, navigation, dissemination, proof);
     }
 
     public static ProtocolMessage gossip(MessageType type, UUID id, GossipExchange exchange) {
@@ -120,6 +135,11 @@ public record ProtocolMessage(
         return new ProtocolMessage(MessageType.EVENT,
                 PROTOCOL_VERSION,
                 null, null, null, null, event);
+    }
+
+    public static ProtocolMessage helloFinish(NodeId nodeId) {
+        return new ProtocolMessage(MessageType.HELLO_FINISH, PROTOCOL_VERSION,
+                nodeId.value(), null, null, null, null);
     }
 
     private static void requireNodeId(String value) {

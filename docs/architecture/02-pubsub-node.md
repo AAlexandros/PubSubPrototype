@@ -6,7 +6,7 @@ overlay stack that finds and communicates with peers.
 
 ```mermaid
 flowchart TB
-  API[Local control API]
+  API[Local CLI / HTTP adapter]
   TopicSync[Topic Registry synchronizer] --> TopicState[Current topic policies]
 
   subgraph Events[Event processing]
@@ -74,8 +74,8 @@ fetches stored envelopes, revalidates them, replays them in sequence order, and
 advances the durable delivery cursor.
 
 The event coordinator calls persistence for normal storage, but persistence does
-not retain a reference or callback to the event coordinator. When the control API
-starts recovery, it supplies `eventService::acceptRecovered` only to that
+not retain a reference or callback to the event coordinator. When the local CLI
+starts recovery through its HTTP adapter, it supplies `eventService::acceptRecovered` only to that
 `recover(...)` call. This per-request callback keeps recovery delivery explicit
 and avoids a circular dependency between event processing and persistence.
 

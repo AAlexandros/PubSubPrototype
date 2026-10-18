@@ -291,13 +291,15 @@ Before deleting an old replica, use a membership snapshot at least as recent as 
 
 ## APIs
 
-Keep existing Phase 0.7 public APIs.
+Keep the Phase 0.7 public API behavior. Current client routes use the
+`/v1/client` prefix; see the [Replication Server HTTP API reference](../documentation/replication-server-api.md)
+for their current paths.
 
 Add read-only operational endpoints:
 
 ```text
-GET /v1/maintenance/status
-GET /v1/maintenance/replicas
+GET /v1/ops/maintenance/status
+GET /v1/replication/inventory
 ```
 
 Return at least:

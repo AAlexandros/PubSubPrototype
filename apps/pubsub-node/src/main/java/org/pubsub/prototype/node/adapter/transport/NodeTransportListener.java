@@ -1,6 +1,7 @@
 package org.pubsub.prototype.node.adapter.transport;
 
 import org.pubsub.prototype.event.EventEnvelope;
+import org.pubsub.prototype.event.EventValidator;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.ProtocolMessage;
 import org.pubsub.prototype.sampling.NodeEndpoint;
@@ -17,13 +18,16 @@ public final class NodeTransportListener implements TransportListener {
     private final PeerSamplingRuntime sampling;
     private final NavigationRuntime navigation;
     private final NodeEventCoordinator events;
+    private final EventValidator eventValidator;
     private final DisseminationRuntime dissemination;
 
     public NodeTransportListener(PeerSamplingRuntime sampling, NavigationRuntime navigation,
-                                 DisseminationRuntime dissemination, NodeEventCoordinator events) {
+                                 DisseminationRuntime dissemination, NodeEventCoordinator events,
+                                 EventValidator eventValidator) {
         this.sampling = Objects.requireNonNull(sampling);
         this.navigation = Objects.requireNonNull(navigation);
         this.events = Objects.requireNonNull(events);
+        this.eventValidator = Objects.requireNonNull(eventValidator);
         this.dissemination = Objects.requireNonNull(dissemination);
     }
 
@@ -51,7 +55,7 @@ public final class NodeTransportListener implements TransportListener {
 
     @Override
     public void eventReceived(NodeId peerNodeId, EventEnvelope event) {
-        events.eventReceived(peerNodeId, event);
+        events.eventReceived(peerNodeId, event, eventValidator.validate(event));
     }
 
     @Override

@@ -74,6 +74,8 @@ and observed exactly four publisher-originated persistence requests.
 - Added `GET /v1/topics/{topicId}/publishers?sinceTimestamp=...`; progress
   entries are returned only when `latestTimestamp` is newer than the supplied
   offline timestamp, while omission retains the complete-log behavior.
+  The current replication-server paths are grouped under `/v1/client`; see the
+  [Replication Server HTTP API reference](../documentation/replication-server-api.md).
 - Added all requested structured lifecycle, persistence, lookup, topic-log,
   recovery, and expiration events with contextual identifiers.
 - Added three-node/three-replica config and Compose topology plus acceptance

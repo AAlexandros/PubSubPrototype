@@ -26,8 +26,8 @@ class ReplicationServerConfigTest {
                   advertisedHost: replication-server-1
                   port: 8100
                   storagePath: /data
-                  repairSigningKeyPath: /keys/payment.skey
-                  repairVerificationKeyPath: /keys/payment.vkey
+                  requestSigningKeyPath: /keys/payment.skey
+                  requestVerificationKeyPath: /keys/payment.vkey
                 registration:
                   operator: replication-server-1
                   cliBackend: DEVNET
@@ -67,8 +67,8 @@ class ReplicationServerConfigTest {
                   advertisedHost: replication-server-1
                   port: 8100
                   storagePath: /data
-                  repairSigningKeyPath: /keys/payment.skey
-                  repairVerificationKeyPath: /keys/payment.vkey
+                  requestSigningKeyPath: /keys/payment.skey
+                  requestVerificationKeyPath: /keys/payment.vkey
                   unexpected: true
                 registration:
                   operator: replication-server-1
@@ -103,8 +103,8 @@ class ReplicationServerConfigTest {
                   advertisedHost: replication-server-1
                   port: 8100
                   storagePath: /data
-                  repairSigningKeyPath: /keys/payment.skey
-                  repairVerificationKeyPath: /keys/payment.vkey
+                  requestSigningKeyPath: /keys/payment.skey
+                  requestVerificationKeyPath: /keys/payment.vkey
                 registration:
                   operator: replication-server-1
                   cliBackend: DEVNET
@@ -137,8 +137,8 @@ class ReplicationServerConfigTest {
                   advertisedHost: replication-server-1
                   port: 8100
                   storagePath: /data
-                  repairSigningKeyPath: /keys/payment.skey
-                  repairVerificationKeyPath: /keys/payment.vkey
+                  requestSigningKeyPath: /keys/payment.skey
+                  requestVerificationKeyPath: /keys/payment.vkey
                 registration:
                   operator: replication-server-1
                   cliBackend: DEVNET

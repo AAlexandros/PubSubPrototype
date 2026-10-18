@@ -43,6 +43,7 @@ than part of the production message path.
 | [05-telemetry-pipeline.md](05-telemetry-pipeline.md) | D5 and data relationships | How does a run become reusable analysis data? |
 | [06-time-flows.md](06-time-flows.md) | D6 and event lifecycle | In what order does a run proceed, and what can happen to one event? |
 | [07-sequence-diagrams.md](07-sequence-diagrams.md) | D7, D8, and D9 | Which component calls which during publication, recovery, and repair? |
+| [08-code-layers.md](08-code-layers.md) | Code map | Where do API checks, orchestration, and focused components belong? |
 
 ## Reading conventions
 
@@ -61,11 +62,15 @@ than part of the production message path.
 
 The runtime topology is generated from `ops/config/phase-0.9/testbed.yaml`.
 The generator accepts 3–50 Pub/Sub nodes and currently creates exactly three
-replication servers. Host ports are `7000 + node index` for transport,
-`8000 + node index` for node control APIs, and `8100 + server index` for
-replication APIs. Container-to-container traffic uses ports 7000 and 8100.
+replication servers. Host ports are `7000 + node index` for Netty transport,
+`8000 + node index` for the local CLI adapter, and `8100 + server index` for
+replication APIs. Node and replication ports are published on host loopback;
+container-to-container traffic uses ports 7000 and 8100.
 
 All Mermaid source remains checked in for review and paper reuse. The standalone
 SVG is intentionally larger and less technical, but it now labels each component
 with its implementation module or protocol so it doubles as an onboarding map
 from responsibilities to code. Open it directly for presentations or onboarding.
+
+For the replication server's HTTP routes, caller checks, request shapes, and
+responses, see the [Replication Server API reference](../../documentation/replication-server-api.md).

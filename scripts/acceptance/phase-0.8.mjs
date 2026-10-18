@@ -2,13 +2,22 @@ import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {nativePath as native} from '../lib/paths.mjs';
+import {repositoryRoot, signedOptions} from '../lib/signed-http.mjs';
 
 const [mode, rawEvidence, ...args] = process.argv.slice(2);
 const evidence = native(rawEvidence);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const save = (name, value) => fs.writeFileSync(path.join(evidence, `${name}.json`), JSON.stringify(value, null, 2) + '\n');
 async function json(url, options) {
-  const response = await fetch(url, options);
+  const parsed = new URL(url);
+  let requestOptions = options;
+  if (parsed.pathname === '/v1/replication/inventory') {
+    const healthResponse = await fetch(url.replace('/v1/replication/inventory', '/v1/ops/health'));
+    if (!healthResponse.ok) throw Error(`Health request failed for ${url}`);
+    const {serverId} = await healthResponse.json();
+    requestOptions = signedOptions(repositoryRoot, url, options, serverId);
+  }
+  const response = await fetch(url, requestOptions);
   const text = await response.text();
   if (!response.ok) throw Error(`${url} returned ${response.status}: ${text}`);
   return JSON.parse(text);
@@ -22,9 +31,9 @@ async function wait(check, timeout = 180000) {
   }
   throw Error(`Timed out in ${mode}${last ? `: ${last.message}` : ''}`);
 }
-const health = n => json(`http://127.0.0.1:810${n}/v1/health`);
-const status = n => json(`http://127.0.0.1:810${n}/v1/maintenance/status`);
-const inventory = n => json(`http://127.0.0.1:810${n}/v1/maintenance/replicas`);
+const health = n => json(`http://127.0.0.1:810${n}/v1/ops/health`);
+const status = n => json(`http://127.0.0.1:810${n}/v1/ops/maintenance/status`);
+const inventory = n => json(`http://127.0.0.1:810${n}/v1/replication/inventory`);
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 function eventKey(envelope) {
   const publisher = sha(Buffer.from(envelope.publisherPublicKey, 'base64'));
@@ -73,8 +82,8 @@ if (mode === 'prepare-devnet') {
   advertisedHost: replication-server-${index + 1}
   port: 8100
   storagePath: /data
-  repairSigningKeyPath: /repair-keys/payment.skey
-  repairVerificationKeyPath: /repair-keys/payment.vkey
+  requestSigningKeyPath: /request-keys/payment.skey
+  requestVerificationKeyPath: /request-keys/payment.vkey
 registration:
   operator: ${signers[index]}
   cliBackend: DEVNET
@@ -145,7 +154,7 @@ timing:
 } else if (mode === 'lookup') {
   const [serverIndex, eventFile, label] = args;
   const published = JSON.parse(fs.readFileSync(native(eventFile), 'utf8'));
-  const stored = await json(`http://127.0.0.1:810${serverIndex}/v1/events/${eventKey(published.envelope)}?topicId=${published.envelope.topicId}`);
+  const stored = await json(`http://127.0.0.1:810${serverIndex}/v1/client/events/${eventKey(published.envelope)}?topicId=${published.envelope.topicId}`);
   save(label, stored);
 } else if (mode === 'state') {
   save(args[1], await json(`http://127.0.0.1:800${args[0]}/v1/events/recovery-state`));

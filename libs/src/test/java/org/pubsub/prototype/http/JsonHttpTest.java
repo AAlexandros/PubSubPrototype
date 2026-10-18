@@ -10,9 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class JsonHttpTest {
     @Test
     void extractsOnlyChildrenOfTheRequestedRoute() {
-        assertEquals("", JsonHttp.suffix(URI.create(ApiPaths.EVENTS), ApiPaths.EVENTS));
-        assertEquals("abc", JsonHttp.suffix(URI.create(ApiPaths.EVENTS + "/abc"), ApiPaths.EVENTS));
-        assertEquals("", JsonHttp.suffix(URI.create(ApiPaths.EVENTS + "-archive/abc"), ApiPaths.EVENTS));
+        assertEquals("", JsonHttp.suffix(URI.create(ApiPaths.CLIENT_EVENTS), ApiPaths.CLIENT_EVENTS));
+        assertEquals("abc", JsonHttp.suffix(URI.create(ApiPaths.CLIENT_EVENTS + "/abc"), ApiPaths.CLIENT_EVENTS));
+        assertEquals("", JsonHttp.suffix(URI.create(ApiPaths.CLIENT_EVENTS + "-archive/abc"), ApiPaths.CLIENT_EVENTS));
     }
 
     @Test

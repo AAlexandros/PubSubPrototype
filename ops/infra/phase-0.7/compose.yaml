@@ -17,7 +17,7 @@ services:
       CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock
     volumes:
       - ../devnet/runtime/phase-0.7/server-1.yaml:/config/server-1.yaml:ro
-      - ../devnet/keys/node-1:/repair-keys:ro
+      - ../devnet/keys/node-1:/request-keys:ro
       - ../devnet/runtime/registry:/registry:ro
       - ../devnet/runtime/replication-registry:/replication-registry:ro
       - ../devnet/runtime/testnet/socket:/node-socket:ro
@@ -28,7 +28,7 @@ services:
     command: ["/config/server-2.yaml"]
     volumes:
       - ../devnet/runtime/phase-0.7/server-2.yaml:/config/server-2.yaml:ro
-      - ../devnet/keys/node-2:/repair-keys:ro
+      - ../devnet/keys/node-2:/request-keys:ro
       - ../devnet/runtime/registry:/registry:ro
       - ../devnet/runtime/replication-registry:/replication-registry:ro
       - ../devnet/runtime/testnet/socket:/node-socket:ro
@@ -39,7 +39,7 @@ services:
     command: ["/config/server-3.yaml"]
     volumes:
       - ../devnet/runtime/phase-0.7/server-3.yaml:/config/server-3.yaml:ro
-      - ../devnet/keys/node-3:/repair-keys:ro
+      - ../devnet/keys/node-3:/request-keys:ro
       - ../devnet/runtime/registry:/registry:ro
       - ../devnet/runtime/replication-registry:/replication-registry:ro
       - ../devnet/runtime/testnet/socket:/node-socket:ro

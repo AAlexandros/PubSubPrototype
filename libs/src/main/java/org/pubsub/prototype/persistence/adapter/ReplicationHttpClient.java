@@ -1,6 +1,7 @@
 package org.pubsub.prototype.persistence.adapter;
 
 import org.pubsub.prototype.event.EventEnvelope;
+import org.pubsub.prototype.auth.SignedHttpRequest;
 import org.pubsub.prototype.http.ApiParameters;
 import org.pubsub.prototype.http.ApiPaths;
 import org.pubsub.prototype.http.HttpMethods;
@@ -8,7 +9,6 @@ import org.pubsub.prototype.http.JsonHttp;
 import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.StoredEvent;
 import org.pubsub.prototype.persistence.maintenance.ReplicaInventory;
-import org.pubsub.prototype.persistence.maintenance.ReplicaRepairAuth;
 import org.pubsub.prototype.persistence.maintenance.ReplicaRepairRequest;
 import org.pubsub.prototype.registry.replication.ReplicationServer;
 import org.pubsub.prototype.util.files.JsonSupport;
@@ -30,36 +30,36 @@ public final class ReplicationHttpClient implements AutoCloseable {
     private final HttpClient client;
     private final Duration requestTimeout;
     private final int retries;
-    private final ReplicaRepairAuth repairAuth;
+    private final SignedHttpRequest requestSigner;
 
     public ReplicationHttpClient(Duration connectionTimeout, Duration requestTimeout, int retries) {
         this(connectionTimeout, requestTimeout, retries, null);
     }
 
     public ReplicationHttpClient(Duration connectionTimeout, Duration requestTimeout, int retries,
-                                 ReplicaRepairAuth repairAuth) {
+                                 SignedHttpRequest requestSigner) {
         requireNonNegative(retries, RETRIES_FIELD);
         this.client = HttpClient.newBuilder().connectTimeout(connectionTimeout).build();
         this.requestTimeout = requestTimeout;
         this.retries = retries;
-        this.repairAuth = repairAuth;
+        this.requestSigner = requestSigner;
     }
 
     public StoredEvent store(ReplicationServer server, EventEnvelope envelope) {
-        return sendJson(server, ApiPaths.EVENTS, HttpMethods.POST, envelope, StoredEvent.class);
+        return sendJson(server, ApiPaths.CLIENT_EVENTS, HttpMethods.POST, envelope, StoredEvent.class);
     }
 
     public void storeReplica(ReplicationServer server, StoredEvent event) {
-        sendJson(server, ApiPaths.REPLICA_EVENTS, HttpMethods.POST, event, StoredEvent.class);
+        sendJson(server, ApiPaths.REPLICATION_EVENTS, HttpMethods.POST, event, StoredEvent.class);
     }
 
     public Optional<StoredEvent> lookup(ReplicationServer server, String topicId, String eventKey) {
-        return getOptional(server, ApiPaths.child(ApiPaths.EVENTS, eventKey)
+        return getOptional(server, ApiPaths.child(ApiPaths.CLIENT_EVENTS, eventKey)
                 + "?" + ApiParameters.TOPIC_ID + "=" + topicId, StoredEvent.class);
     }
 
     public Optional<StoredEvent> lookupLocal(ReplicationServer server, String eventKey) {
-        return getOptional(server, ApiPaths.child(ApiPaths.REPLICA_EVENTS, eventKey), StoredEvent.class);
+        return getOptional(server, ApiPaths.child(ApiPaths.REPLICATION_EVENTS, eventKey), StoredEvent.class);
     }
 
     public List<PublisherProgress> publisherProgress(ReplicationServer server, String topicId, boolean direct) {
@@ -69,11 +69,11 @@ public final class ReplicationHttpClient implements AutoCloseable {
     public List<PublisherProgress> publisherProgress(ReplicationServer server, String topicId, boolean direct,
                                                      long sinceTimestamp) {
         requireNonNegative(sinceTimestamp, SINCE_TIMESTAMP_FIELD);
-        String prefix = direct ? ApiPaths.REPLICA_TOPICS : ApiPaths.TOPICS;
+        String prefix = direct ? ApiPaths.REPLICATION_TOPICS : ApiPaths.CLIENT_TOPICS;
         try {
             String suffix = direct ? "" : "?" + ApiParameters.SINCE_TIMESTAMP + "=" + sinceTimestamp;
-            HttpResponse<byte[]> response = send(request(server, ApiPaths.publishers(prefix, topicId) + suffix)
-                    .GET().build());
+            String path = ApiPaths.publishers(prefix, topicId) + suffix;
+            HttpResponse<byte[]> response = send(request(server, path, HttpMethods.GET, new byte[0]).GET().build());
             if (response.statusCode() == 404) return List.of();
             requireSuccess(response);
             return JsonSupport.MAPPER.readValue(response.body(), JsonSupport.MAPPER.getTypeFactory()
@@ -84,13 +84,13 @@ public final class ReplicationHttpClient implements AutoCloseable {
     }
 
     public void storeProgressReplica(ReplicationServer server, String topicId, PublisherProgress progress) {
-        sendJson(server, ApiPaths.publishers(ApiPaths.REPLICA_TOPICS, topicId), HttpMethods.POST, progress,
+        sendJson(server, ApiPaths.publishers(ApiPaths.REPLICATION_TOPICS, topicId), HttpMethods.POST, progress,
                 PublisherProgress.class);
     }
 
     public boolean probe(ReplicationServer server, Duration timeout) {
         try {
-            HttpResponse<byte[]> response = send(HttpRequest.newBuilder(server.uri(ApiPaths.HEALTH))
+            HttpResponse<byte[]> response = send(HttpRequest.newBuilder(server.uri(ApiPaths.OPS_HEALTH))
                     .timeout(timeout).GET().build(), 0);
             return response.statusCode() >= 200 && response.statusCode() < 300;
         } catch (RuntimeException ex) {
@@ -99,31 +99,16 @@ public final class ReplicationHttpClient implements AutoCloseable {
     }
 
     public ReplicaInventory inventory(ReplicationServer server) {
-        return get(server, ApiPaths.MAINTENANCE_REPLICAS, ReplicaInventory.class);
+        return get(server, ApiPaths.REPLICATION_INVENTORY, ReplicaInventory.class);
     }
 
     public void requestRepair(ReplicationServer server, ReplicaRepairRequest request) {
-        if (repairAuth == null) throw new IllegalStateException("repair signing key is not configured");
-        try {
-            byte[] json = JsonSupport.MAPPER.writeValueAsBytes(request);
-            ReplicaRepairAuth.SignedRequest signed = repairAuth.sign(request, server.serverId());
-            HttpRequest httpRequest = request(server, ApiPaths.REPLICA_REPAIR)
-                    .header(JsonHttp.CONTENT_TYPE, JsonHttp.JSON_MEDIA_TYPE)
-                    .header(ReplicaRepairAuth.SERVER_ID_HEADER, signed.serverId())
-                    .header(ReplicaRepairAuth.PUBLIC_KEY_HEADER, signed.verificationKeyHex())
-                    .header(ReplicaRepairAuth.TIMESTAMP_HEADER, Long.toString(signed.timestamp()))
-                    .header(ReplicaRepairAuth.NONCE_HEADER, signed.nonce())
-                    .header(ReplicaRepairAuth.SIGNATURE_HEADER, signed.signature())
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(json)).build();
-            requireSuccess(send(httpRequest, 0));
-        } catch (IOException ex) {
-            throw new IllegalStateException("Replication repair request failed", ex);
-        }
+        sendJson(server, ApiPaths.REPLICATION_REPAIR, HttpMethods.POST, request, ReplicaRepairRequest.class);
     }
 
     private <T> Optional<T> getOptional(ReplicationServer server, String path, Class<T> type) {
         try {
-            HttpResponse<byte[]> response = send(request(server, path).GET().build());
+            HttpResponse<byte[]> response = send(request(server, path, HttpMethods.GET, new byte[0]).GET().build());
             if (response.statusCode() == 404) return Optional.empty();
             requireSuccess(response);
             return Optional.of(JsonSupport.MAPPER.readValue(response.body(), type));
@@ -134,7 +119,7 @@ public final class ReplicationHttpClient implements AutoCloseable {
 
     private <T> T get(ReplicationServer server, String path, Class<T> type) {
         try {
-            HttpResponse<byte[]> response = send(request(server, path).GET().build());
+            HttpResponse<byte[]> response = send(request(server, path, HttpMethods.GET, new byte[0]).GET().build());
             requireSuccess(response);
             return JsonSupport.MAPPER.readValue(response.body(), type);
         } catch (IOException ex) {
@@ -145,7 +130,8 @@ public final class ReplicationHttpClient implements AutoCloseable {
     private <T> T sendJson(ReplicationServer server, String path, String method, Object body, Class<T> type) {
         try {
             byte[] json = JsonSupport.MAPPER.writeValueAsBytes(body);
-            HttpRequest request = request(server, path).header(JsonHttp.CONTENT_TYPE, JsonHttp.JSON_MEDIA_TYPE)
+            HttpRequest request = request(server, path, method, json)
+                    .header(JsonHttp.CONTENT_TYPE, JsonHttp.JSON_MEDIA_TYPE)
                     .method(method, HttpRequest.BodyPublishers.ofByteArray(json)).build();
             HttpResponse<byte[]> response = send(request);
             requireSuccess(response);
@@ -159,8 +145,24 @@ public final class ReplicationHttpClient implements AutoCloseable {
         return HttpRequest.newBuilder(server.uri(path)).timeout(requestTimeout);
     }
 
+    private HttpRequest.Builder request(ReplicationServer server, String path, String method, byte[] body) {
+        HttpRequest.Builder builder = request(server, path);
+        if (!isInternal(path)) return builder;
+        if (requestSigner == null) throw new IllegalStateException("replication signing key is not configured");
+        SignedHttpRequest.Headers signed = requestSigner.sign(method, path, body, server.serverId());
+        return builder.header(SignedHttpRequest.ID_HEADER, signed.signerId())
+                .header(SignedHttpRequest.KEY_HEADER, signed.publicKeyHex())
+                .header(SignedHttpRequest.TIME_HEADER, Long.toString(signed.timestamp()))
+                .header(SignedHttpRequest.NONCE_HEADER, signed.nonce())
+                .header(SignedHttpRequest.SIGNATURE_HEADER, signed.signature());
+    }
+
+    private static boolean isInternal(String path) {
+        return path.startsWith(ApiPaths.REPLICATION_ROOT + "/");
+    }
+
     private HttpResponse<byte[]> send(HttpRequest request) {
-        return send(request, retries);
+        return send(request, request.headers().firstValue(SignedHttpRequest.SIGNATURE_HEADER).isPresent() ? 0 : retries);
     }
 
     private HttpResponse<byte[]> send(HttpRequest request, int retryCount) {

@@ -82,8 +82,23 @@ Default host ports are:
 | Service | Host ports | Purpose |
 | --- | --- | --- |
 | Pub/Sub transport | `7001...` | Node-to-node Netty protocol |
-| Pub/Sub control API | `8001...` | Publish, subscribe, recovery, and overlay views |
+| Local node commands | `8001...` | Host-loopback adapter used by the `pubsub-node` CLI |
 | Replication API | `8101`-`8103` | Storage, lookup, maintenance, and health |
+
+Use one CLI for local node commands and inspection. The testbed publishes its
+node command ports only on `127.0.0.1`; no operator key is needed for these
+local requests.
+
+```bash
+node scripts/pubsub-node.mjs status --node 1
+node scripts/pubsub-node.mjs subscribe --node 2 --topic <topic-id>
+node scripts/pubsub-node.mjs publish --node 1 --topic <topic-id> --payload "hello"
+node scripts/pubsub-node.mjs recover --node 2 --topic <topic-id>
+```
+
+See the [node command reference](documentation/node-cli.md) for all commands
+and options. Node-to-node traffic continues to use the Netty transport on port
+`7000`; the local command adapter is not a peer protocol.
 
 To discard generated runtime state and Docker volumes while retaining
 experiment results:
@@ -142,7 +157,7 @@ local state you need to keep. Historical acceptance entrypoints remain under
 
 | Path | Responsibility |
 | --- | --- |
-| [`apps/pubsub-node`](apps/pubsub-node) | Runnable node: configuration, control API, overlays, event validation/delivery, persistence and recovery integration |
+| [`apps/pubsub-node`](apps/pubsub-node) | Runnable node: configuration, local command adapter, overlays, event validation/delivery, persistence and recovery integration |
 | [`apps/replication-server`](apps/replication-server) | Runnable storage server: HTTP API, replica placement, failure detection, repair, and safe release |
 | [`libs`](libs) | One Gradle library project with separate Java packages for sampling, navigation, dissemination, events, protocol, Netty transport, registry, persistence, HTTP, and shared utilities |
 | [`contracts`](contracts) | Topic and replication registry Aiken contracts |

@@ -61,7 +61,9 @@ the shared membership cache before returning.
   durable topic-log index used to reconstruct maintenance inventory after
   restart.
 - Added `GET /v1/maintenance/status` and `GET /v1/maintenance/replicas`, while
-  preserving all Phase 0.7 public endpoints.
+  preserving all Phase 0.7 public endpoints. These are the original Phase 0.8
+  route names; the current grouped paths are listed in the
+  [Replication Server HTTP API reference](../documentation/replication-server-api.md).
 - Added a four-replication-server Phase 0.8 Compose topology, three matching
   Pub/Sub node configs, complete acceptance/evidence automation, and clean
   archival/stopping of a running Phase 0.7 stack that owns the same host ports.

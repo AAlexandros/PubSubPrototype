@@ -19,8 +19,9 @@ export const API_PATHS = Object.freeze({
   NAVIGATION_VIEW: '/v1/navigation/view',
   DISSEMINATION_VIEW: '/v1/dissemination/view',
   SUBSCRIPTIONS: '/v1/subscriptions',
-  MAINTENANCE_REPLICAS: '/v1/maintenance/replicas',
-  MAINTENANCE_STATUS: '/v1/maintenance/status'
+  REPLICATION_INVENTORY: '/v1/replication/inventory',
+  OPS_HEALTH: '/v1/ops/health',
+  OPS_MAINTENANCE_STATUS: '/v1/ops/maintenance/status'
 });
 
 export const TESTBED_PATHS = Object.freeze({

@@ -23,6 +23,7 @@ import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.http.ApiParameters;
 import org.pubsub.prototype.http.ApiPaths;
 import org.pubsub.prototype.http.HttpErrorCodes;
+import org.pubsub.prototype.http.HttpRequestBodyReader;
 import org.pubsub.prototype.http.JsonHttp;
 import org.pubsub.prototype.node.runtimes.DisseminationRuntime;
 import org.pubsub.prototype.node.runtimes.NavigationRuntime;
@@ -32,6 +33,8 @@ import org.pubsub.prototype.node.util.AsyncUtil;
 import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.sampling.PeerSamplingService;
 import org.pubsub.prototype.util.files.JsonSupport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
@@ -54,10 +57,12 @@ import static org.pubsub.prototype.http.ApiFields.TOPIC_INDEX;
 import static org.pubsub.prototype.http.ApiFields.VIEW;
 import static org.pubsub.prototype.http.ApiFields.VIEWS;
 
-/** HTTP control and inspection routes for one pub-sub node. */
+/** Local HTTP adapter used by the pub-sub node CLI for commands and inspection. */
 @Path("/")
 @Produces(MediaType.APPLICATION_JSON)
-public final class EventControlServer implements AutoCloseable {
+public final class NodeControlHttpServer implements AutoCloseable {
+    private static final Logger LOG = LoggerFactory.getLogger(NodeControlHttpServer.class);
+
     private final HttpServer server;
     private final ExecutorService executor;
     private final NodeEventCoordinator events;
@@ -68,7 +73,7 @@ public final class EventControlServer implements AutoCloseable {
     private String nodeId;
     private int samplingCapacity;
 
-    public EventControlServer(String host, int port, NodeEventCoordinator events) throws IOException {
+    public NodeControlHttpServer(String host, int port, NodeEventCoordinator events) throws IOException {
         this.events = events;
         ResourceConfig routes = new ResourceConfig()
                 .register(this)
@@ -111,28 +116,20 @@ public final class EventControlServer implements AutoCloseable {
     public Response publish(PublishRequest request,
                             @QueryParam(ApiParameters.FORCE_BROADCAST) String forceBroadcast,
                             @QueryParam(ApiParameters.TAMPER_SIGNATURE) String tamperSignature) {
-        try {
-            EventEnvelope event = events.publish(
-                    new TopicId(request.topicId),
-                    Base64.getDecoder().decode(request.payload),
-                    Boolean.parseBoolean(forceBroadcast),
-                    Boolean.parseBoolean(tamperSignature));
-            return json(200, new PublishResponse(event.eventId(), event.sequenceNumber(), event));
-        } catch (RuntimeException ex) {
-            return error(400, JsonHttp.safeMessage(ex));
-        }
+        EventEnvelope event = events.publish(
+                new TopicId(request.topicId),
+                Base64.getDecoder().decode(request.payload),
+                Boolean.parseBoolean(forceBroadcast),
+                Boolean.parseBoolean(tamperSignature));
+        return json(200, new PublishResponse(event.eventId(), event.sequenceNumber(), event));
     }
 
     @POST
     @Path(ApiPaths.EVENT_INJECT)
     @Consumes(MediaType.APPLICATION_JSON)
     public Response inject(EventEnvelope event) {
-        try {
-            EventEnvelope injected = events.inject(event);
-            return json(200, new PublishResponse(injected.eventId(), injected.sequenceNumber(), injected));
-        } catch (RuntimeException ex) {
-            return error(400, JsonHttp.safeMessage(ex));
-        }
+        EventEnvelope injected = events.inject(event);
+        return json(200, new PublishResponse(injected.eventId(), injected.sequenceNumber(), injected));
     }
 
     @GET
@@ -168,25 +165,17 @@ public final class EventControlServer implements AutoCloseable {
     @POST
     @Path(ApiPaths.SUBSCRIPTIONS + "/{topicId}")
     public Response subscribe(@PathParam("topicId") String topicId) {
-        try {
-            navigation.subscribe(new TopicId(topicId).value());
-            dissemination.subscribe(topicId);
-            return json(200, Map.of(TOPIC_ID, topicId, SUBSCRIBED, true));
-        } catch (RuntimeException ex) {
-            return error(400, JsonHttp.safeMessage(ex));
-        }
+        navigation.subscribe(new TopicId(topicId).value());
+        dissemination.subscribe(topicId);
+        return json(200, Map.of(TOPIC_ID, topicId, SUBSCRIBED, true));
     }
 
     @DELETE
     @Path(ApiPaths.SUBSCRIPTIONS + "/{topicId}")
     public Response unsubscribe(@PathParam("topicId") String topicId) {
-        try {
-            navigation.unsubscribe(new TopicId(topicId).value());
-            dissemination.unsubscribe(topicId);
-            return json(200, Map.of(TOPIC_ID, topicId, SUBSCRIBED, false));
-        } catch (RuntimeException ex) {
-            return error(400, JsonHttp.safeMessage(ex));
-        }
+        navigation.unsubscribe(new TopicId(topicId).value());
+        dissemination.unsubscribe(topicId);
+        return json(200, Map.of(TOPIC_ID, topicId, SUBSCRIBED, false));
     }
 
     @GET
@@ -198,33 +187,25 @@ public final class EventControlServer implements AutoCloseable {
     @GET
     @Path(ApiPaths.DISSEMINATION_VIEW + "/{topicId}")
     public Response disseminationView(@PathParam("topicId") String topicId) {
-        try {
-            String validTopicId = new TopicId(topicId).value();
-            var view = dissemination.engine().view(validTopicId);
-            if (view.isEmpty()) {
-                return json(404, Map.of(
-                        HttpErrorCodes.ERROR, "dissemination_view_not_found", TOPIC_ID, validTopicId));
-            }
-            Map<String, Object> response = new LinkedHashMap<>();
-            response.put(NODE_ID, nodeId);
-            response.put(TOPIC_ID, view.get().topicId());
-            response.put(PREDECESSOR, view.get().predecessor());
-            response.put(SUCCESSOR, view.get().successor());
-            response.put(RANDOM_PEERS, view.get().randomPeers());
-            return json(200, response);
-        } catch (RuntimeException ex) {
-            return error(400, JsonHttp.safeMessage(ex));
+        String validTopicId = new TopicId(topicId).value();
+        var view = dissemination.engine().view(validTopicId);
+        if (view.isEmpty()) {
+            return json(404, Map.of(
+                    HttpErrorCodes.ERROR, "dissemination_view_not_found", TOPIC_ID, validTopicId));
         }
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put(NODE_ID, nodeId);
+        response.put(TOPIC_ID, view.get().topicId());
+        response.put(PREDECESSOR, view.get().predecessor());
+        response.put(SUCCESSOR, view.get().successor());
+        response.put(RANDOM_PEERS, view.get().randomPeers());
+        return json(200, response);
     }
 
     @POST
     @Path(ApiPaths.EVENT_RECOVER + "/{topicId}")
     public Response recover(@PathParam("topicId") String topicId) {
-        try {
-            return json(200, persistence.recover(new TopicId(topicId).value(), events::acceptRecovered));
-        } catch (RuntimeException ex) {
-            return error(400, JsonHttp.safeMessage(ex));
-        }
+        return json(200, persistence.recover(new TopicId(topicId).value(), events::acceptRecovered));
     }
 
     @GET
@@ -253,16 +234,25 @@ public final class EventControlServer implements AutoCloseable {
     private static final class JsonErrorMapper implements ExceptionMapper<Exception> {
         @Override
         public Response toResponse(Exception exception) {
+            int status;
+            String message;
             if (exception instanceof WebApplicationException web) {
-                int status = web.getResponse().getStatus();
-                if (status == 404) return error(status, HttpErrorCodes.NOT_FOUND);
-                if (status == 405) return error(status, HttpErrorCodes.METHOD_NOT_ALLOWED);
-                return error(status, JsonHttp.safeMessage(exception));
+                status = web.getResponse().getStatus();
+                message = status == 404 ? HttpErrorCodes.NOT_FOUND
+                        : status == 405 ? HttpErrorCodes.METHOD_NOT_ALLOWED : JsonHttp.safeMessage(exception);
+            } else if (exception instanceof HttpRequestBodyReader.RequestBodyTooLargeException) {
+                status = 413;
+                message = JsonHttp.safeMessage(exception);
+            } else if (exception instanceof IllegalArgumentException || exception instanceof IOException) {
+                status = 400;
+                message = JsonHttp.safeMessage(exception);
+            } else {
+                status = 500;
+                message = JsonHttp.safeMessage(exception);
             }
-            if (exception instanceof IllegalArgumentException || exception instanceof IOException) {
-                return error(400, JsonHttp.safeMessage(exception));
-            }
-            return error(500, JsonHttp.safeMessage(exception));
+            LOG.warn("NODE_CONTROL_HTTP_ERROR status={} type={} message={}", status,
+                    exception.getClass().getSimpleName(), message, exception);
+            return error(status, message);
         }
     }
 

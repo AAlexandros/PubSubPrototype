@@ -82,9 +82,9 @@ flowchart TB
   Host --> Docker[Docker Compose project: phase-0-9]
   Docker --> Nodes[3–50 pubsub-node JVMs<br/>host 7001..7050 and 8001..8050]
   Docker --> Servers[3 replication-server JVMs<br/>host 8101..8103]
-  Host --> Controller[Node.js experiment controller]
+  Host --> Controller[User and local scripts]
   Host --> Results[(results/scenarioId/runId)]
-  Controller -->|control APIs| Nodes
+  Controller -->|pubsub-node CLI over host loopback| Nodes
   Controller -->|maintenance APIs| Servers
   Controller -->|registry CLIs| Cardano
   Controller --> Results
@@ -94,9 +94,10 @@ flowchart TB
 
 Everything runs on one host; Docker provides process and storage isolation, not
 a multi-host network. Each Pub/Sub container exposes peer transport on the 7000
-series and a local control API on the 8000 series. Replication APIs use the 8100
-series. Inside Docker, services use stable container names and the fixed service
-ports 7000 and 8100.
+series and a local command adapter on the 8000 series. The `pubsub-node` CLI
+uses that adapter through host loopback. Replication APIs use the 8100 series.
+Inside Docker, services use stable container names and the fixed service ports
+7000 and 8100.
 
 The node count is selectable per scenario. Three replication servers are fixed
 for Phase 0.9. Generated configuration and Compose files live under `.tools`,

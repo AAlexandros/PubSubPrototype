@@ -12,6 +12,8 @@ public enum MessageType {
     HELLO,
     /** Confirms a {@link #HELLO} and makes the connection usable. */
     HELLO_ACK,
+    /** Proves the initiator owns the key claimed in {@link #HELLO}. */
+    HELLO_FINISH,
     /** Checks that an activated/valid peer connection is still alive. */
     PING,
     /** Replies to a {@link #PING} and supports round-trip-time measurement. */

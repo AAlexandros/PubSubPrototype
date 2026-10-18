@@ -12,10 +12,10 @@ import java.net.http.HttpResponse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class EventControlServerRoutingTest {
+class NodeControlHttpServerRoutingTest {
     @Test
     void bindsTopicPathAndRejectsWrongMethods() throws Exception {
-        try (EventControlServer server = new EventControlServer("127.0.0.1", 0, null);
+        try (NodeControlHttpServer server = new NodeControlHttpServer("127.0.0.1", 0, null);
              HttpClient client = HttpClient.newHttpClient()) {
             int port = boundPort(server);
             server.start();
@@ -30,8 +30,8 @@ class EventControlServerRoutingTest {
         }
     }
 
-    private static int boundPort(EventControlServer server) throws Exception {
-        Field field = EventControlServer.class.getDeclaredField("server");
+    private static int boundPort(NodeControlHttpServer server) throws Exception {
+        Field field = NodeControlHttpServer.class.getDeclaredField("server");
         field.setAccessible(true);
         return ((HttpServer) field.get(server)).getAddress().getPort();
     }

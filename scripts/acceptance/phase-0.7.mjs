@@ -22,7 +22,7 @@ async function wait(check, timeout = 120000) {
   }
   throw Error(`Timed out in ${mode}${last ? `: ${last.message}` : ''}`);
 }
-const health = n => json(`http://127.0.0.1:810${n}/v1/health`);
+const health = n => json(`http://127.0.0.1:810${n}/v1/ops/health`);
 const serverIndex = id => args[0].split(',').indexOf(id) + 1;
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 function eventKey(envelope) {
@@ -65,8 +65,8 @@ if (mode === 'prepare-devnet') {
   advertisedHost: replication-server-${index + 1}
   port: 8100
   storagePath: /data
-  repairSigningKeyPath: /repair-keys/payment.skey
-  repairVerificationKeyPath: /repair-keys/payment.vkey
+  requestSigningKeyPath: /request-keys/payment.skey
+  requestVerificationKeyPath: /request-keys/payment.vkey
 registration:
   operator: node-${index + 1}
   cliBackend: DEVNET
@@ -117,7 +117,7 @@ timing:
   if (label === 'initial') {
     const nonResponsible = membership.find(v => !assigned.some(a => a.serverId === v.serverId));
     const index = ids.split(',').indexOf(nonResponsible.serverId) + 1;
-    const found = await json(`http://127.0.0.1:810${index}/v1/events/${calculated.eventKey}?topicId=${envelope.topicId}`);
+    const found = await json(`http://127.0.0.1:810${index}/v1/client/events/${calculated.eventKey}?topicId=${envelope.topicId}`);
     save('non-responsible-entry-lookup', {entryServer: nonResponsible, storedEvent: found});
   }
   console.log(assigned[0].serverId);
@@ -131,14 +131,14 @@ timing:
   const [topic, minimum] = args;
   const value = await wait(async () => {
     for (let n = 1; n <= 3; n++) {
-      const progress = await json(`http://127.0.0.1:810${n}/v1/topics/${topic}/publishers`);
+      const progress = await json(`http://127.0.0.1:810${n}/v1/client/topics/${topic}/publishers`);
       if (progress.some(item => item.latestSequenceNumber >= Number(minimum))) return progress;
     }
     return false;
   });
   save('topic-publisher-log-after-offline', value);
   const latest = Math.max(...value.map(item => item.latestTimestamp));
-  const filtered = await json(`http://127.0.0.1:8101/v1/topics/${topic}/publishers?sinceTimestamp=${latest}`);
+  const filtered = await json(`http://127.0.0.1:8101/v1/client/topics/${topic}/publishers?sinceTimestamp=${latest}`);
   if (filtered.length !== 0) throw Error('publisher-progress timestamp filter returned stale publishers');
   save('topic-publisher-log-timestamp-filter', {sinceTimestamp: latest, publishers: filtered});
 } else if (mode === 'recover') {

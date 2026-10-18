@@ -10,8 +10,8 @@ import {loadFlatYaml, loadSectionedYaml} from './simple-yaml.mjs';
 
 test('shared API builders preserve the testbed port convention', () => {
   assert.equal(nodeApiUrl(1, API_PATHS.EVENT_PUBLISH), 'http://127.0.0.1:8001/v1/events/publish');
-  assert.equal(replicationApiUrl(3, API_PATHS.MAINTENANCE_STATUS),
-    'http://127.0.0.1:8103/v1/maintenance/status');
+  assert.equal(replicationApiUrl(3, API_PATHS.OPS_MAINTENANCE_STATUS),
+    'http://127.0.0.1:8103/v1/ops/maintenance/status');
   assert.equal(new Set(TELEMETRY_DATASETS).size, TELEMETRY_DATASETS.length);
 });
 

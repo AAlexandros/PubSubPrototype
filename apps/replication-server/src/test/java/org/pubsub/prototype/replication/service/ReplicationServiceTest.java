@@ -45,7 +45,7 @@ class ReplicationServiceTest {
         try {
             for (int i = 1; i <= 4; i++) {
                 HttpServer listener = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-                listener.createContext("/v1/replicas/events", exchange -> {
+                listener.createContext("/v1/replication/events", exchange -> {
                     probes.incrementAndGet();
                     exchange.sendResponseHeaders(404, -1);
                     exchange.close();

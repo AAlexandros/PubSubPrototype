@@ -3,10 +3,12 @@ package org.pubsub.prototype.transport;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.util.concurrent.ScheduledFuture;
+import org.pubsub.prototype.auth.PeerHandshakeAuthenticator;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.NodeIdentity;
 import org.pubsub.prototype.protocol.ProtocolException;
 import org.pubsub.prototype.protocol.ProtocolMessage;
+import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.util.SecureCyclonEvent;
 import org.pubsub.prototype.event.EventEnvelope;
 import org.slf4j.Logger;
@@ -33,8 +35,12 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
     // Does the connection start from this client?
     private final boolean outbound;
     private final Map<UUID, PendingPing> pendingPings = new ConcurrentHashMap<>();
+    private final PeerHandshakeAuthenticator handshake = new PeerHandshakeAuthenticator();
     private ChannelHandlerContext context;
     private NodeId remoteNodeId;
+    private String localChallenge;
+    private String remoteChallenge;
+    private NodeEndpoint remoteAdvertisedEndpoint;
     private ScheduledFuture<?> pingTask;
     private ScheduledFuture<?> handshakeTimeout;
     private boolean active;
@@ -62,8 +68,10 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
 
         // If this is the initiator of a connection, send a HELLO message
         if (outbound) {
+            localChallenge = handshake.freshChallenge();
             ctx.writeAndFlush(ProtocolMessage.hello(identity.nodeId(), config.nodeName())
-                    .withEndpoint(transport.advertisedEndpoint()));
+                    .withEndpoint(transport.advertisedEndpoint())
+                    .withHandshake(handshake.hello(identity, localChallenge)));
         }
     }
 
@@ -80,6 +88,7 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
                 // Transport messages
                 case HELLO -> handleHello(ctx, message);
                 case HELLO_ACK -> handleHelloAck(message);
+                case HELLO_FINISH -> handleHelloFinish(message);
                 case PING -> handlePing(ctx, message);
                 case PONG -> handlePong(message);
                 case EVENT -> handleEvent(message);
@@ -109,14 +118,18 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
 
     private void handleHello(ChannelHandlerContext ctx, ProtocolMessage message) {
         if (outbound) throw new ProtocolException("Unexpected HELLO on outbound connection");
-        if (active) throw new ProtocolException("Repeated handshake");
+        if (active || remoteNodeId != null) throw new ProtocolException("Repeated handshake");
         NodeId nodeId = new NodeId(message.nodeId());
         validateRemoteIdentity(nodeId);
-        transport.resolved(endpoint, nodeId, message.endpoint());
+        handshake.identify(nodeId, message.handshake());
         remoteNodeId = nodeId;
+        remoteChallenge = message.handshake().challenge();
+        remoteAdvertisedEndpoint = message.endpoint();
+        localChallenge = handshake.freshChallenge();
         ctx.writeAndFlush(ProtocolMessage.helloAck(identity.nodeId())
-                .withEndpoint(transport.advertisedEndpoint()));
-        activate();
+                .withEndpoint(transport.advertisedEndpoint())
+                .withHandshake(handshake.signed(identity, PeerHandshakeAuthenticator.Step.RESPONSE,
+                        localChallenge, nodeId, identity.nodeId(), remoteChallenge, localChallenge)));
     }
 
     private void handleHelloAck(ProtocolMessage message) {
@@ -124,8 +137,27 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
         if (active) throw new ProtocolException("Repeated handshake");
         NodeId nodeId = new NodeId(message.nodeId());
         validateRemoteIdentity(nodeId);
+        handshake.authenticate(new PeerHandshakeAuthenticator.Claim(nodeId, message.handshake(),
+                PeerHandshakeAuthenticator.Step.RESPONSE, identity.nodeId(), nodeId,
+                localChallenge, message.handshake() == null ? null : message.handshake().challenge()));
         transport.resolved(endpoint, nodeId, message.endpoint());
         remoteNodeId = nodeId;
+        remoteChallenge = message.handshake().challenge();
+        context.writeAndFlush(ProtocolMessage.helloFinish(identity.nodeId())
+                .withHandshake(handshake.signed(identity, PeerHandshakeAuthenticator.Step.FINISH,
+                        localChallenge, identity.nodeId(), nodeId, localChallenge, remoteChallenge)));
+        activate();
+    }
+
+    private void handleHelloFinish(ProtocolMessage message) {
+        if (outbound || active || remoteNodeId == null)
+            throw new ProtocolException("Unexpected HELLO_FINISH");
+        NodeId nodeId = new NodeId(message.nodeId());
+        if (!remoteNodeId.equals(nodeId)) throw new ProtocolException("Peer identity changed during handshake");
+        handshake.authenticate(new PeerHandshakeAuthenticator.Claim(nodeId, message.handshake(),
+                PeerHandshakeAuthenticator.Step.FINISH, nodeId, identity.nodeId(),
+                remoteChallenge, localChallenge));
+        transport.resolved(endpoint, nodeId, remoteAdvertisedEndpoint);
         activate();
     }
 

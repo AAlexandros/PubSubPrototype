@@ -2,8 +2,10 @@ package org.pubsub.prototype.persistence.core;
 
 import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.persistence.PublisherProgress;
-import org.pubsub.prototype.persistence.ReplicationServer;
 import org.pubsub.prototype.persistence.StoredEvent;
+import org.pubsub.prototype.persistence.adapter.ReplicationHttpClient;
+import org.pubsub.prototype.registry.replication.ReplicationMembership;
+import org.pubsub.prototype.registry.replication.ReplicationServer;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -13,8 +15,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.pubsub.prototype.util.PersistenceConstants.SINCE_TIMESTAMP_FIELD;
-import static org.pubsub.prototype.util.Validators.requireNonNegative;
+import static org.pubsub.prototype.constants.PersistenceConstants.SINCE_TIMESTAMP_FIELD;
+import static org.pubsub.prototype.util.validation.Validators.requireNonNegative;
 
 public final class PersistenceClient {
     private final ReplicationMembership membership;
@@ -41,13 +43,15 @@ public final class PersistenceClient {
         throw new IllegalStateException("all replication entry servers failed", last);
     }
 
-    public Optional<StoredEvent> lookup(String eventKey) {
-        for (ReplicationServer server : membership.activeServers()) {
+    public Optional<StoredEvent> lookup(String topicId, String eventKey) {
+        List<ReplicationServer> servers = membership.activeServers();
+        if (servers.isEmpty()) return Optional.empty();
+        int start = Math.floorMod(next.getAndIncrement(), servers.size());
+        for (int i = 0; i < servers.size(); i++) {
             try {
-                Optional<StoredEvent> result = http.lookup(server, eventKey, false);
-                if (result.isPresent()) return result;
+                return http.lookup(servers.get((start + i) % servers.size()), topicId, eventKey);
             } catch (RuntimeException ignored) {
-                // Try another entry server.
+                // Try another entry server if this one is unavailable.
             }
         }
         return Optional.empty();
@@ -63,6 +67,7 @@ public final class PersistenceClient {
         for (ReplicationServer server : membership.activeServers()) {
             try {
                 for (PublisherProgress progress : http.publisherProgress(server, topicId, false, sinceTimestamp)) {
+                    if (!topicId.equals(progress.topicId())) continue;
                     merged.merge(progress.publisherKeyId(), progress,
                             (left, right) -> left.latestSequenceNumber() > right.latestSequenceNumber()
                                     || (left.latestSequenceNumber() == right.latestSequenceNumber()

@@ -1,6 +1,6 @@
 package org.pubsub.prototype.http;
 
-import org.pubsub.prototype.util.SharedFieldNames;
+import org.pubsub.prototype.constants.SharedFieldNames;
 
 /** JSON field names shared by the node and replication HTTP APIs. */
 public final class ApiFields {

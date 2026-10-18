@@ -2,8 +2,8 @@ package org.pubsub.prototype.event;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.pubsub.prototype.registry.TopicId;
-import org.pubsub.prototype.registry.TopicState;
+import org.pubsub.prototype.registry.topic.TopicId;
+import org.pubsub.prototype.registry.topic.TopicState;
 
 import java.nio.file.Path;
 import java.security.KeyPair;

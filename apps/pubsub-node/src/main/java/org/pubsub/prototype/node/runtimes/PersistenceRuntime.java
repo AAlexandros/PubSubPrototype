@@ -5,13 +5,14 @@ import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.event.TopicStateProvider;
 import org.pubsub.prototype.node.util.AsyncUtil;
 import org.pubsub.prototype.persistence.RecoveryResult;
-import org.pubsub.prototype.persistence.ReplicationRegistryReader;
-import org.pubsub.prototype.persistence.core.DeliveryStateStore;
-import org.pubsub.prototype.persistence.core.FileReplicationRegistry;
+import org.pubsub.prototype.persistence.adapter.DeliveryStateStore;
+import org.pubsub.prototype.persistence.adapter.ReplicationHttpClient;
+import org.pubsub.prototype.persistence.core.EventKeys;
 import org.pubsub.prototype.persistence.core.PersistenceClient;
 import org.pubsub.prototype.persistence.core.PersistenceEventValidator;
 import org.pubsub.prototype.persistence.core.RecoveryService;
-import org.pubsub.prototype.persistence.core.ReplicationHttpClient;
+import org.pubsub.prototype.registry.replication.FileReplicationRegistry;
+import org.pubsub.prototype.registry.replication.ReplicationRegistryReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,7 +46,7 @@ public final class PersistenceRuntime implements AutoCloseable {
             try {
                 client.store(event);
             } catch (RuntimeException ex) {
-                LOG.warn("EVENT_PERSIST_FAILED eventKey={} eventId={} topicId={} publisherKeyId={} sequenceNumber={} reason={}", org.pubsub.prototype.persistence.EventKeys.eventKey(event), event.eventId(), event.topicId(), EventCrypto.publisherKeyId(event), event.sequenceNumber(), ex.getMessage());
+                LOG.warn("EVENT_PERSIST_FAILED eventKey={} eventId={} topicId={} publisherKeyId={} sequenceNumber={} reason={}", org.pubsub.prototype.persistence.core.EventKeys.eventKey(event), event.eventId(), event.topicId(), EventCrypto.publisherKeyId(event), event.sequenceNumber(), ex.getMessage());
             }
         });
     }

@@ -4,14 +4,14 @@ import org.pubsub.prototype.navigation.NavigationPeerDescriptor;
 
 import java.util.List;
 
-import static org.pubsub.prototype.util.DisseminationConstants.INVALID_ADVERTISED_ENDPOINT_MESSAGE;
-import static org.pubsub.prototype.util.DisseminationConstants.INVALID_PEER_NODE_ID_MESSAGE;
-import static org.pubsub.prototype.util.DisseminationConstants.SUBSCRIBED_TOPIC_IDS_FIELD;
-import static org.pubsub.prototype.util.SharedFieldNames.FRESHNESS;
-import static org.pubsub.prototype.util.Validators.isAdvertisedEndpoint;
-import static org.pubsub.prototype.util.Validators.isSha256Hex;
-import static org.pubsub.prototype.util.Validators.requireNonNull;
-import static org.pubsub.prototype.util.Validation.start;
+import static org.pubsub.prototype.constants.DisseminationConstants.INVALID_ADVERTISED_ENDPOINT_MESSAGE;
+import static org.pubsub.prototype.constants.DisseminationConstants.INVALID_PEER_NODE_ID_MESSAGE;
+import static org.pubsub.prototype.constants.DisseminationConstants.SUBSCRIBED_TOPIC_IDS_FIELD;
+import static org.pubsub.prototype.constants.SharedFieldNames.FRESHNESS;
+import static org.pubsub.prototype.util.validation.Validators.isAdvertisedEndpoint;
+import static org.pubsub.prototype.util.validation.Validators.isSha256Hex;
+import static org.pubsub.prototype.util.validation.Validators.requireNonNull;
+import static org.pubsub.prototype.util.validation.Validation.start;
 
 /** A same-topic peer retained independently from Navigation's own view. */
 public record DisseminationPeerDescriptor(

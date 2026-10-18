@@ -4,7 +4,7 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-import static org.pubsub.prototype.util.Validators.require;
+import static org.pubsub.prototype.util.validation.Validators.require;
 
 /**
  * Computes the topic-ring positions for which a node should retain useful peers.

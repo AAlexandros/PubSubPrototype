@@ -7,7 +7,7 @@ import org.pubsub.prototype.util.SecureCyclonEvent;
 import java.util.*;
 import java.util.function.Consumer;
 
-import static org.pubsub.prototype.util.SecureCyclonConstants.MAX_PROOFS_PER_EXCHANGE;
+import static org.pubsub.prototype.constants.SecureCyclonConstants.MAX_PROOFS_PER_EXCHANGE;
 
 /**
  * PeerNet's non-tit-for-tat state machine, serialized independently of any transport.

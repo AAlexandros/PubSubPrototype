@@ -138,6 +138,8 @@ Use:
 effectiveR = min(topic.replicationFactor, activeServerCount)
 ```
 
+The prototype accepts topic replication factors from 1 through 50.
+
 Every server must independently compute the same responsible set.
 
 ## Event storage key
@@ -241,7 +243,7 @@ At minimum:
 
 ```text
 POST /v1/events
-GET  /v1/events/{eventKey}
+GET  /v1/events/{eventKey}?topicId={topicId}
 GET  /v1/topics/{topicId}/publishers
 GET  /v1/health
 ```
@@ -257,14 +259,15 @@ Use bounded:
 
 ## Lookup flow
 
-A client may contact any active replication server with an `eventKey`.
+A client may contact any active replication server with an `eventKey` and its `topicId`.
 
 The contacted server shall:
 
-1. compute the responsible replica set;
+1. read the topic's replication factor and compute the `R` responsible replicas;
 2. query one responsible server;
 3. return the stored event;
-4. try another responsible server if the first is unavailable.
+4. try another responsible server if the first is unavailable; at most one additional
+   nearby candidate may be checked for a brief membership-view difference.
 
 The returned event must be revalidated by the requesting Pub/Sub node before local delivery.
 
@@ -281,10 +284,10 @@ PublisherProgress
   latestTimestamp
 ```
 
-The topic-log key is:
+The topic-log key is the topic's normalized 256-bit identifier itself:
 
 ```text
-topicLogKey = SHA-256(topicId)
+topicLogKey = topicId
 ```
 
 Whenever an event is successfully persisted, update the publisher's topic-log entry if its sequence number is newer.

@@ -37,9 +37,9 @@ public abstract class ProcessCardanoCommandRunner implements CardanoCommandRunne
     }
 
     @Override
-    public final String run(String... arguments) {
-        List<String> command = command(arguments);
-        ProcessBuilder builder = new ProcessBuilder(command);
+    public final String run(CardanoCommand cardanoCommand) {
+        List<String> processCommand = command(cardanoCommand.arguments());
+        ProcessBuilder builder = new ProcessBuilder(processCommand);
         builder.environment().putAll(network.environment());
         try {
             Process process = builder.start();
@@ -47,21 +47,21 @@ public abstract class ProcessCardanoCommandRunner implements CardanoCommandRunne
             CompletableFuture<String> stderr = CompletableFuture.supplyAsync(() -> read(process.getErrorStream()));
             if (!process.waitFor(COMMAND_TIMEOUT.toSeconds(), TimeUnit.SECONDS)) {
                 process.destroyForcibly();
-                throw new IllegalStateException(String.join(" ", command) + " timed out after " + COMMAND_TIMEOUT);
+                throw new IllegalStateException(String.join(" ", processCommand) + " timed out after " + COMMAND_TIMEOUT);
             }
             String output = stdout.get();
             String error = stderr.get();
             if (process.exitValue() != 0) {
-                throw new IllegalStateException(String.join(" ", command) + " failed: " + error);
+                throw new IllegalStateException(String.join(" ", processCommand) + " failed: " + error);
             }
             return output;
         } catch (IOException ex) {
-            throw new IllegalStateException("Unable to run " + String.join(" ", command), ex);
+            throw new IllegalStateException("Unable to run " + String.join(" ", processCommand), ex);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while running " + String.join(" ", command), ex);
+            throw new IllegalStateException("Interrupted while running " + String.join(" ", processCommand), ex);
         } catch (ExecutionException ex) {
-            throw new IllegalStateException("Unable to read command output for " + String.join(" ", command), ex);
+            throw new IllegalStateException("Unable to read command output for " + String.join(" ", processCommand), ex);
         }
     }
 
@@ -71,7 +71,7 @@ public abstract class ProcessCardanoCommandRunner implements CardanoCommandRunne
      * @param arguments arguments following the {@code cardano-cli} executable
      * @return full process command
      */
-    protected abstract List<String> command(String[] arguments);
+    protected abstract List<String> command(List<String> arguments);
 
     private static String read(InputStream stream) {
         try {

@@ -1,19 +1,19 @@
 package org.pubsub.prototype.persistence.core;
 
-import org.pubsub.prototype.persistence.ReplicationServer;
-import org.pubsub.prototype.util.HexCodec;
+import org.pubsub.prototype.registry.replication.ReplicationServer;
+import org.pubsub.prototype.util.HexUtils;
 
 import java.math.BigInteger;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 
-import static org.pubsub.prototype.util.CryptoConstants.SHA_256_BITS;
-import static org.pubsub.prototype.util.PersistenceConstants.KEY_FIELD;
-import static org.pubsub.prototype.util.PersistenceConstants.REPLICATION_FACTOR_FIELD;
-import static org.pubsub.prototype.util.PersistenceConstants.SERVER_ID_FIELD;
-import static org.pubsub.prototype.util.Validators.require;
-import static org.pubsub.prototype.util.Validators.requirePositive;
+import static org.pubsub.prototype.constants.CryptoConstants.SHA_256_BITS;
+import static org.pubsub.prototype.constants.PersistenceConstants.KEY_FIELD;
+import static org.pubsub.prototype.constants.PersistenceConstants.REPLICATION_FACTOR_FIELD;
+import static org.pubsub.prototype.constants.PersistenceConstants.SERVER_ID_FIELD;
+import static org.pubsub.prototype.util.validation.Validators.require;
+import static org.pubsub.prototype.util.validation.Validators.requirePositive;
 
 public final class DhtAssignment {
     private static final BigInteger RING_SIZE = BigInteger.ONE.shiftLeft(SHA_256_BITS);
@@ -53,6 +53,6 @@ public final class DhtAssignment {
     }
 
     private static BigInteger unsigned(String value, String field) {
-        return new BigInteger(1, HexCodec.decodeSha256(value, field));
+        return new BigInteger(1, HexUtils.decodeSha256(value, field));
     }
 }

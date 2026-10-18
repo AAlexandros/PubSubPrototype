@@ -5,14 +5,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.event.EventCrypto;
 import org.pubsub.prototype.event.EventEnvelope;
-import org.pubsub.prototype.persistence.EventKeys;
 import org.pubsub.prototype.persistence.PublisherProgress;
-import org.pubsub.prototype.persistence.ReplicationServer;
-import org.pubsub.prototype.persistence.ReplicationServerState;
 import org.pubsub.prototype.persistence.StoredEvent;
-import org.pubsub.prototype.registry.TopicId;
-import org.pubsub.prototype.registry.TopicState;
-import org.pubsub.prototype.util.JsonSupport;
+import org.pubsub.prototype.persistence.adapter.DeliveryStateStore;
+import org.pubsub.prototype.persistence.adapter.FileEventStore;
+import org.pubsub.prototype.persistence.adapter.ReplicationHttpClient;
+import org.pubsub.prototype.registry.replication.FileReplicationRegistry;
+import org.pubsub.prototype.registry.replication.ReplicationServer;
+import org.pubsub.prototype.registry.replication.ReplicationServerState;
+import org.pubsub.prototype.registry.topic.TopicId;
+import org.pubsub.prototype.registry.topic.TopicState;
+import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -27,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -85,14 +89,14 @@ class PersistenceCoreTest {
         AtomicLong epoch = new AtomicLong(5);
         Clock clock = Clock.fixed(Instant.ofEpochMilli(1234), ZoneOffset.UTC);
         TopicState topic = topic(2, 3, List.of());
-        EventEnvelope event = event(TOPIC, keys(), 0, 1000);
+        KeyPair keyPair = keys();
+        EventEnvelope event = event(TOPIC, keyPair, 0, 1000);
         FileEventStore first = new FileEventStore(temp, clock, epoch::get);
         StoredEvent stored = first.store(event, topic);
         assertEquals(8, stored.expiresAfterEpoch());
         assertTrue(new FileEventStore(temp, clock, epoch::get).get(stored.eventKey()).isPresent());
-        String publisher = EventCrypto.publisherKeyId(event);
-        assertTrue(first.updateProgress(TOPIC, new PublisherProgress(publisher, 2, 20)));
-        assertFalse(first.updateProgress(TOPIC, new PublisherProgress(publisher, 1, 10)));
+        assertTrue(first.updateProgress(TOPIC, PublisherProgress.fromEvent(event(TOPIC, keyPair, 2, 20))));
+        assertFalse(first.updateProgress(TOPIC, PublisherProgress.fromEvent(event(TOPIC, keyPair, 1, 10))));
         assertEquals(2, new FileEventStore(temp, clock, epoch::get).publisherProgress(TOPIC).getFirst().latestSequenceNumber());
         epoch.set(8);
         assertTrue(first.get(stored.eventKey()).isEmpty());
@@ -118,12 +122,16 @@ class PersistenceCoreTest {
         List<EventEnvelope> events = List.of(event(TOPIC, publisher, 0, 10), event(TOPIC, publisher, 1, 11),
                 event(TOPIC, publisher, 2, 12));
         String publisherId = EventCrypto.publisherKeyId(publisher.getPublic());
+        AtomicReference<String> eventLookupQuery = new AtomicReference<>();
         HttpServer fake = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         fake.createContext("/v1/topics/" + TOPIC + "/publishers", exchange -> json(exchange,
-                List.of(new PublisherProgress(publisherId, 2, 12))));
+                List.of(PublisherProgress.fromEvent(events.get(2)))));
         for (EventEnvelope event : events) {
             StoredEvent stored = new StoredEvent(EventKeys.eventKey(event), event, Instant.EPOCH, 10, 0, 10);
-            fake.createContext("/v1/events/" + stored.eventKey(), exchange -> json(exchange, stored));
+            fake.createContext("/v1/events/" + stored.eventKey(), exchange -> {
+                eventLookupQuery.set(exchange.getRequestURI().getQuery());
+                json(exchange, stored);
+            });
         }
         fake.start();
         try (ReplicationHttpClient http = new ReplicationHttpClient(Duration.ofSeconds(1), Duration.ofSeconds(1), 0)) {
@@ -139,6 +147,7 @@ class PersistenceCoreTest {
                     client, new DeliveryStateStore(stateFile), validator, 2)) {
                 assertEquals(2, recovery.recover(
                         TOPIC, event -> delivered.add(event.sequenceNumber())).deliveredCount());
+                assertEquals("topicId=" + TOPIC, eventLookupQuery.get());
                 assertEquals(List.of(1L, 2L), delivered);
             }
             try (RecoveryService restarted = new RecoveryService(
@@ -175,6 +184,7 @@ class PersistenceCoreTest {
         EventEnvelope unsigned = EventEnvelope.unsigned(topicId,
                 Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()), sequence, timestamp,
                 Base64.getEncoder().encodeToString(("payload-" + sequence).getBytes(StandardCharsets.UTF_8)));
-        return unsigned.withSignatureAndEventId(EventCrypto.sign(unsigned, keys.getPrivate()), EventCrypto.eventId(unsigned));
+        return unsigned.withSignatureAndEventId(EventCrypto.sign(unsigned, keys.getPrivate()), EventCrypto.eventId(unsigned))
+                .withProgressSignature(EventCrypto.signProgress(unsigned, keys.getPrivate()));
     }
 }

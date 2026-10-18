@@ -4,6 +4,10 @@ plugins {
 
 dependencies {
     implementation(project(":libs"))
+    implementation(libs.jakarta.ws.rs.api)
+    implementation(libs.jersey.container.jdk.http)
+    implementation(libs.jersey.hk2)
+    implementation(libs.jersey.media.json.jackson)
     implementation(libs.slf4j.api)
     runtimeOnly(libs.logback.classic)
 
@@ -18,5 +22,5 @@ tasks.register<JavaExec>("runReplicationRegistryCli") {
     group = "application"
     description = "Deploys, queries, or updates the Cardano replication registry."
     classpath = sourceSets.main.get().runtimeClasspath
-    mainClass.set("org.pubsub.prototype.replication.ReplicationRegistryCli")
+    mainClass.set("org.pubsub.prototype.replication.registry.cli.ReplicationRegistryCli")
 }

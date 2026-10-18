@@ -2,12 +2,12 @@ package org.pubsub.prototype.transport;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.pubsub.prototype.event.EventEnvelope;
+import org.pubsub.prototype.event.EventPublisher;
 import org.pubsub.prototype.protocol.IdentityStore;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.NodeIdentity;
-import org.pubsub.prototype.event.EventEnvelope;
-import org.pubsub.prototype.event.EventPublisher;
-import org.pubsub.prototype.registry.TopicId;
+import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.sampling.NodeEndpoint;
 
 import java.io.OutputStream;
@@ -16,9 +16,9 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.util.List;
 import java.util.Set;
-import java.time.Clock;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 

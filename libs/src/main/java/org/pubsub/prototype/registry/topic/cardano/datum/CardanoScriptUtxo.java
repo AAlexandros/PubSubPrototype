@@ -1,6 +1,6 @@
 package org.pubsub.prototype.registry.topic.cardano.datum;
 
-import org.pubsub.prototype.registry.TopicState;
+import org.pubsub.prototype.registry.topic.TopicState;
 
 import java.util.Map;
 import java.util.Objects;

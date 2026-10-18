@@ -2,7 +2,7 @@ package org.pubsub.prototype.registry.topic.cardano.mutation;
 
 import org.pubsub.prototype.registry.RegistryAuthorizationException;
 import org.pubsub.prototype.registry.RegistryConflictException;
-import org.pubsub.prototype.registry.TopicState;
+import org.pubsub.prototype.registry.topic.TopicState;
 
 import java.util.LinkedHashSet;
 import java.util.List;

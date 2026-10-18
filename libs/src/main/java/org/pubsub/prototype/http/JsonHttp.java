@@ -8,8 +8,8 @@ import java.net.URI;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import static org.pubsub.prototype.util.Validators.require;
-import static org.pubsub.prototype.util.Validators.requireNonNegative;
+import static org.pubsub.prototype.util.validation.Validators.require;
+import static org.pubsub.prototype.util.validation.Validators.requireNonNegative;
 
 public final class JsonHttp {
     public static final String CONTENT_TYPE = "Content-Type";

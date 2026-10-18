@@ -31,11 +31,11 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.pubsub.prototype.util.TransportConstants.CONFIG_FIELD;
-import static org.pubsub.prototype.util.TransportConstants.CONNECT_TIMEOUT_MS;
-import static org.pubsub.prototype.util.TransportConstants.IDENTITY_FIELD;
-import static org.pubsub.prototype.util.TransportConstants.MAX_FRAME_LENGTH;
-import static org.pubsub.prototype.util.Validators.require;
+import static org.pubsub.prototype.constants.TransportConstants.CONFIG_FIELD;
+import static org.pubsub.prototype.constants.TransportConstants.CONNECT_TIMEOUT_MS;
+import static org.pubsub.prototype.constants.TransportConstants.IDENTITY_FIELD;
+import static org.pubsub.prototype.constants.TransportConstants.MAX_FRAME_LENGTH;
+import static org.pubsub.prototype.util.validation.Validators.require;
 
 public final class PubSubTransport implements TransportSender, AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(PubSubTransport.class);

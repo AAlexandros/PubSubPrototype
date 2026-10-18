@@ -1,8 +1,8 @@
 package org.pubsub.prototype.persistence;
 
-import static org.pubsub.prototype.util.PersistenceConstants.LAST_DELIVERED_SEQUENCE_NUMBER_FIELD;
-import static org.pubsub.prototype.util.PersistenceConstants.LAST_DELIVERED_TIMESTAMP_FIELD;
-import static org.pubsub.prototype.util.Validation.start;
+import static org.pubsub.prototype.constants.PersistenceConstants.LAST_DELIVERED_SEQUENCE_NUMBER_FIELD;
+import static org.pubsub.prototype.constants.PersistenceConstants.LAST_DELIVERED_TIMESTAMP_FIELD;
+import static org.pubsub.prototype.util.validation.Validation.start;
 
 public record DeliveryProgress(long lastDeliveredSequenceNumber, long lastDeliveredTimestamp) {
     public DeliveryProgress {

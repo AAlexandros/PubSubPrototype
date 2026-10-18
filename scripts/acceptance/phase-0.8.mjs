@@ -63,7 +63,7 @@ if (mode === 'prepare-devnet') {
     fs.renameSync(source, path.resolve(backup, name));
   }
 } else if (mode === 'server-configs') {
-  const [rawRuntime, ids, epochZero = '0', epochLength = '432000000'] = args;
+  const [rawRuntime, ids] = args;
   const runtime = native(rawRuntime);
   const signers = ['node-1', 'node-2', 'node-3', 'registry-deployer'];
   fs.mkdirSync(runtime, {recursive: true});
@@ -73,6 +73,8 @@ if (mode === 'prepare-devnet') {
   advertisedHost: replication-server-${index + 1}
   port: 8100
   storagePath: /data
+  repairSigningKeyPath: /repair-keys/payment.skey
+  repairVerificationKeyPath: /repair-keys/payment.vkey
 registration:
   operator: ${signers[index]}
   cliBackend: DEVNET
@@ -92,9 +94,6 @@ timing:
   failureProbeAttempts: 3
   failureProbeTimeoutMs: 500
   maintenanceIntervalMs: 500
-epoch:
-  zeroTimeMs: ${epochZero}
-  lengthMs: ${epochLength}
 `));
 } else if (mode === 'membership') {
   const [expectedIds, activeIndices, label] = args;
@@ -146,7 +145,7 @@ epoch:
 } else if (mode === 'lookup') {
   const [serverIndex, eventFile, label] = args;
   const published = JSON.parse(fs.readFileSync(native(eventFile), 'utf8'));
-  const stored = await json(`http://127.0.0.1:810${serverIndex}/v1/events/${eventKey(published.envelope)}`);
+  const stored = await json(`http://127.0.0.1:810${serverIndex}/v1/events/${eventKey(published.envelope)}?topicId=${published.envelope.topicId}`);
   save(label, stored);
 } else if (mode === 'state') {
   save(args[1], await json(`http://127.0.0.1:800${args[0]}/v1/events/recovery-state`));

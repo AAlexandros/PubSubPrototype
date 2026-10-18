@@ -56,7 +56,7 @@ if (mode === 'prepare-devnet') {
     }
   }
 } else if (mode === 'server-configs') {
-  const [rawRuntime, ids, epochZero = '0', epochLength = '432000000'] = args;
+  const [rawRuntime, ids] = args;
   const runtime = native(rawRuntime);
   fs.mkdirSync(runtime, {recursive: true});
   ids.split(',').forEach((id, index) => fs.writeFileSync(path.join(runtime, `server-${index + 1}.yaml`), `server:
@@ -65,6 +65,8 @@ if (mode === 'prepare-devnet') {
   advertisedHost: replication-server-${index + 1}
   port: 8100
   storagePath: /data
+  repairSigningKeyPath: /repair-keys/payment.skey
+  repairVerificationKeyPath: /repair-keys/payment.vkey
 registration:
   operator: node-${index + 1}
   cliBackend: DEVNET
@@ -84,9 +86,6 @@ timing:
   failureProbeAttempts: 3
   failureProbeTimeoutMs: 5000
   maintenanceIntervalMs: 1000
-epoch:
-  zeroTimeMs: ${epochZero}
-  lengthMs: ${epochLength}
 `));
 } else if (mode === 'membership') {
   const expected = args[0].split(',').sort();
@@ -118,7 +117,7 @@ epoch:
   if (label === 'initial') {
     const nonResponsible = membership.find(v => !assigned.some(a => a.serverId === v.serverId));
     const index = ids.split(',').indexOf(nonResponsible.serverId) + 1;
-    const found = await json(`http://127.0.0.1:810${index}/v1/events/${calculated.eventKey}`);
+    const found = await json(`http://127.0.0.1:810${index}/v1/events/${calculated.eventKey}?topicId=${envelope.topicId}`);
     save('non-responsible-entry-lookup', {entryServer: nonResponsible, storedEvent: found});
   }
   console.log(assigned[0].serverId);

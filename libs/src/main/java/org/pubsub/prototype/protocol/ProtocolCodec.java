@@ -3,7 +3,7 @@ package org.pubsub.prototype.protocol;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.pubsub.prototype.util.JsonSupport;
+import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

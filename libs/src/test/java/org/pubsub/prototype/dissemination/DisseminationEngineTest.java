@@ -2,7 +2,7 @@ package org.pubsub.prototype.dissemination;
 
 import org.junit.jupiter.api.Test;
 import org.pubsub.prototype.navigation.NavigationPeerDescriptor;
-import org.pubsub.prototype.util.DisseminationConstants;
+import org.pubsub.prototype.constants.DisseminationConstants;
 
 import java.util.List;
 import java.util.Random;

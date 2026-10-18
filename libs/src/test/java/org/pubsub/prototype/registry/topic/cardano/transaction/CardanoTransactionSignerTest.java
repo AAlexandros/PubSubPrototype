@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.cardano.cli.CacheOnlyCardanoCommandRunner;
 import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
+import org.pubsub.prototype.cardano.cli.transaction.CardanoPaymentIdentity;
 import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryConfig;
 
 import java.io.IOException;
@@ -28,7 +29,7 @@ class CardanoTransactionSignerTest {
         CardanoTransactionSigner signer = signer(config);
         Path addressFile = createIdentity(runtimeDir, config.signer(), "address-1");
 
-        CardanoIdentity first = signer.identity();
+        CardanoPaymentIdentity first = signer.identity();
         Files.writeString(addressFile, "address-2");
 
         assertSame(first, signer.identity());

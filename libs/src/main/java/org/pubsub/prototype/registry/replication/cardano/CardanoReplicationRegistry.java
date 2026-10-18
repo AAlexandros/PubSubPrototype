@@ -1,19 +1,19 @@
 package org.pubsub.prototype.registry.replication.cardano;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunnerFactory;
-import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
-import org.pubsub.prototype.persistence.ReplicationRegistryClient;
-import org.pubsub.prototype.persistence.ReplicationRegistryReader;
-import org.pubsub.prototype.persistence.ReplicationServerState;
+import org.pubsub.prototype.registry.replication.ReplicationRegistryClient;
+import org.pubsub.prototype.registry.replication.ReplicationRegistryReader;
+import org.pubsub.prototype.registry.replication.ReplicationServerState;
 import org.pubsub.prototype.registry.replication.cardano.datum.ReplicationRegistryScriptUtxo;
 import org.pubsub.prototype.registry.replication.cardano.datum.ReplicationRegistryUtxoParser;
 import org.pubsub.prototype.registry.replication.cardano.mutation.ReplicationServerMutation;
 import org.pubsub.prototype.registry.replication.cardano.mutation.ReplicationServerOperation;
 import org.pubsub.prototype.registry.replication.cardano.transaction.ReplicationRegistryTransactionBuilder;
-import org.pubsub.prototype.util.JsonSupport;
-import org.pubsub.prototype.util.TextFiles;
+import org.pubsub.prototype.util.files.JsonSupport;
+import org.pubsub.prototype.util.files.TextFiles;
 
 import java.io.IOException;
 import java.nio.file.Files;

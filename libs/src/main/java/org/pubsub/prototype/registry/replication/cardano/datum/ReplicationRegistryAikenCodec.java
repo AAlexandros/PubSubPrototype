@@ -4,10 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.pubsub.prototype.persistence.ReplicationServerState;
+import org.pubsub.prototype.registry.replication.ReplicationServerState;
 import org.pubsub.prototype.registry.replication.cardano.mutation.ReplicationServerMutation;
 import org.pubsub.prototype.registry.replication.cardano.mutation.ReplicationServerOperation;
-import org.pubsub.prototype.util.JsonSupport;
+import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;

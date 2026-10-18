@@ -6,17 +6,17 @@ import org.pubsub.prototype.navigation.NavigationExchange;
 import org.pubsub.prototype.dissemination.DisseminationExchange;
 import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.securecyclon.GossipExchange;
-import org.pubsub.prototype.util.DisseminationConstants;
+import org.pubsub.prototype.constants.DisseminationConstants;
 
 import java.time.Instant;
 import java.util.UUID;
 
-import static org.pubsub.prototype.util.ProtocolConstants.NODE_NAME_FIELD;
-import static org.pubsub.prototype.util.ProtocolConstants.PROTOCOL_VERSION;
-import static org.pubsub.prototype.util.ProtocolConstants.TYPE_FIELD;
-import static org.pubsub.prototype.util.Validators.require;
-import static org.pubsub.prototype.util.Validators.requireNonBlank;
-import static org.pubsub.prototype.util.Validators.requireNonNull;
+import static org.pubsub.prototype.constants.ProtocolConstants.NODE_NAME_FIELD;
+import static org.pubsub.prototype.constants.ProtocolConstants.PROTOCOL_VERSION;
+import static org.pubsub.prototype.constants.ProtocolConstants.TYPE_FIELD;
+import static org.pubsub.prototype.util.validation.Validators.require;
+import static org.pubsub.prototype.util.validation.Validators.requireNonBlank;
+import static org.pubsub.prototype.util.validation.Validators.requireNonNull;
 
 /**
  * Versioned wire envelope for all node-to-node protocol messages.

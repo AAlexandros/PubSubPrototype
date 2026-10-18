@@ -3,7 +3,7 @@ package org.pubsub.prototype.protocol;
 import org.junit.jupiter.api.Test;
 import org.pubsub.prototype.dissemination.DisseminationExchange;
 import org.pubsub.prototype.dissemination.DisseminationPeerDescriptor;
-import org.pubsub.prototype.util.DisseminationConstants;
+import org.pubsub.prototype.constants.DisseminationConstants;
 
 import java.util.List;
 import java.util.UUID;

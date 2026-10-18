@@ -3,16 +3,16 @@ package org.pubsub.prototype.node.config;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.pubsub.prototype.transport.PeerEndpoint;
 import org.pubsub.prototype.transport.TransportConfig;
-import org.pubsub.prototype.util.Validation;
-import org.pubsub.prototype.util.YamlFiles;
+import org.pubsub.prototype.util.validation.Validation;
+import org.pubsub.prototype.util.files.YamlFiles;
 import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 
 import java.nio.file.Path;
 import java.util.List;
 
 import static org.pubsub.prototype.node.config.NodeConfigConstants.*;
-import static org.pubsub.prototype.util.Validators.require;
-import static org.pubsub.prototype.util.Validators.requireNonNull;
+import static org.pubsub.prototype.util.validation.Validators.require;
+import static org.pubsub.prototype.util.validation.Validators.requireNonNull;
 
 public record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSection transport,
                          RegistrySection registry, ControlSection control,

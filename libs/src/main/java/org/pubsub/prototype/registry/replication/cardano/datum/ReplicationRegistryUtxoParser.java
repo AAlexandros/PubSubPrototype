@@ -2,7 +2,8 @@ package org.pubsub.prototype.registry.replication.cardano.datum;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.pubsub.prototype.util.JsonSupport;
+import org.pubsub.prototype.registry.replication.ReplicationServerState;
+import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -23,7 +24,7 @@ public final class ReplicationRegistryUtxoParser {
                 long lovelace = value.path("lovelace").asLong(0);
                 JsonNode datum = entry.getValue().path("inlineDatum");
                 if (datum.isMissingNode() || datum.isNull()) datum = entry.getValue().path("inlineDatumJson");
-                java.util.Optional<org.pubsub.prototype.persistence.ReplicationServerState> state =
+                java.util.Optional<org.pubsub.prototype.registry.replication.ReplicationServerState> state =
                         java.util.Optional.empty();
                 if (!datum.isMissingNode() && !datum.isNull()) {
                     try {

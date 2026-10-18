@@ -3,8 +3,10 @@ package org.pubsub.prototype.cardano.cli.transaction;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
+import org.pubsub.prototype.cardano.cli.command.PaymentKeyHashCommand;
+import org.pubsub.prototype.cardano.cli.command.QueryUtxosCommand;
 import org.pubsub.prototype.event.EventCrypto;
-import org.pubsub.prototype.util.JsonSupport;
+import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -37,7 +39,7 @@ public record CardanoPaymentIdentity(String name, String address, Path signingKe
     }
 
     public String paymentKeyHash(CardanoCommandRunner runner) {
-        return runner.run("address", "key-hash", "--payment-verification-key-file", verificationKey.toString()).trim();
+        return runner.run(new PaymentKeyHashCommand(verificationKey)).trim();
     }
 
     /** SHA-256 over the encoded verification-key bytes, rendered as lowercase hexadecimal. */
@@ -69,8 +71,7 @@ public record CardanoPaymentIdentity(String name, String address, Path signingKe
     }
 
     private Map<String, Long> eligibleUtxos(CardanoCommandRunner runner) {
-        String json = runner.run("query", "utxo", "--address", address,
-                "--testnet-magic", runner.networkMagic(), "--output-json");
+        String json = runner.run(new QueryUtxosCommand(address, runner.networkMagic()));
         try {
             JsonNode root = MAPPER.readTree(json);
             java.util.LinkedHashMap<String, Long> result = new java.util.LinkedHashMap<>();

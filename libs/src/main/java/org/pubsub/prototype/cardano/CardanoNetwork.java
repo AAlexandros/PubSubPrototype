@@ -2,8 +2,8 @@ package org.pubsub.prototype.cardano;
 
 import java.util.Map;
 
-import static org.pubsub.prototype.util.Validators.requireNonBlank;
-import static org.pubsub.prototype.util.Validators.requireNonNull;
+import static org.pubsub.prototype.util.validation.Validators.requireNonBlank;
+import static org.pubsub.prototype.util.validation.Validators.requireNonNull;
 
 /**
  * Validated network values supplied to a Cardano command runner.

@@ -1,7 +1,7 @@
 package org.pubsub.prototype.registry.topic.cardano.transaction;
 
 import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryConfig;
-import org.pubsub.prototype.util.TextFiles;
+import org.pubsub.prototype.util.files.TextFiles;
 
 import java.nio.file.Path;
 

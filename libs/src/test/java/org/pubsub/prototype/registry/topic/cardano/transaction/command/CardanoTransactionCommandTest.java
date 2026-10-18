@@ -1,6 +1,9 @@
 package org.pubsub.prototype.registry.topic.cardano.transaction.command;
 
 import org.junit.jupiter.api.Test;
+import org.pubsub.prototype.cardano.cli.transaction.CardanoTransactionCommand;
+import org.pubsub.prototype.cardano.cli.transaction.SignTransactionCommand;
+import org.pubsub.prototype.cardano.cli.transaction.SubmitTransactionCommand;
 
 import java.nio.file.Path;
 

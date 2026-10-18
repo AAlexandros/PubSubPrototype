@@ -1,5 +1,8 @@
 package org.pubsub.prototype.replication;
 
+import org.pubsub.prototype.replication.bootstrap.ReplicationServerApplication;
+import org.pubsub.prototype.replication.config.ReplicationServerConfig;
+
 import java.nio.file.Path;
 
 /** Command-line entry point for a replication server. */

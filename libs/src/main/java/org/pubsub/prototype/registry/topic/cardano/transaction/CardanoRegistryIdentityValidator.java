@@ -1,8 +1,8 @@
 package org.pubsub.prototype.registry.topic.cardano.transaction;
 
+import org.pubsub.prototype.constants.CryptoConstants;
 import org.pubsub.prototype.registry.RegistryConflictException;
 import org.pubsub.prototype.registry.topic.cardano.mutation.TopicMutation;
-import org.pubsub.prototype.util.CryptoConstants;
 
 import java.util.ArrayList;
 import java.util.List;

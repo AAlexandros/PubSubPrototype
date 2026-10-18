@@ -3,7 +3,7 @@ package org.pubsub.prototype.event;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import org.pubsub.prototype.util.JsonSupport;
+import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -11,8 +11,8 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.pubsub.prototype.util.EventConstants.EVENTS_DIRECTORY;
-import static org.pubsub.prototype.util.EventConstants.EVENT_SEQUENCES_FILE;
+import static org.pubsub.prototype.constants.EventConstants.EVENTS_DIRECTORY;
+import static org.pubsub.prototype.constants.EventConstants.EVENT_SEQUENCES_FILE;
 
 public final class EventSequenceStore {
     private static final ObjectMapper MAPPER = JsonSupport.MAPPER.copy()

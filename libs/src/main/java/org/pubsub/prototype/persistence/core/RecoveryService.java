@@ -3,10 +3,10 @@ package org.pubsub.prototype.persistence.core;
 import org.pubsub.prototype.event.EventCrypto;
 import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.persistence.DeliveryProgress;
-import org.pubsub.prototype.persistence.EventKeys;
 import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.RecoveryResult;
 import org.pubsub.prototype.persistence.StoredEvent;
+import org.pubsub.prototype.persistence.adapter.DeliveryStateStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,8 +21,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
-import static org.pubsub.prototype.util.PersistenceConstants.CONCURRENCY_FIELD;
-import static org.pubsub.prototype.util.Validators.requirePositive;
+import static org.pubsub.prototype.constants.PersistenceConstants.CONCURRENCY_FIELD;
+import static org.pubsub.prototype.util.validation.Validators.requirePositive;
 
 public final class RecoveryService implements AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(RecoveryService.class);
@@ -61,7 +61,8 @@ public final class RecoveryService implements AutoCloseable {
 
         Map<String, CompletableFuture<Optional<StoredEvent>>> fetches = new LinkedHashMap<>();
         for (Missing item : missing) {
-            fetches.put(item.eventKey, CompletableFuture.supplyAsync(() -> client.lookup(item.eventKey), fetchers));
+            fetches.put(item.eventKey, CompletableFuture.supplyAsync(
+                    () -> client.lookup(topicId, item.eventKey), fetchers));
         }
         Map<String, List<Missing>> publishers = new LinkedHashMap<>();
         missing.forEach(item -> publishers.computeIfAbsent(item.publisherKeyId, ignored -> new ArrayList<>()).add(item));

@@ -6,7 +6,7 @@ import org.pubsub.prototype.cardano.cli.transaction.CardanoTransactionCommand;
 import org.pubsub.prototype.cardano.cli.transaction.CardanoTransactionLog;
 import org.pubsub.prototype.cardano.cli.transaction.SignTransactionCommand;
 import org.pubsub.prototype.cardano.cli.transaction.SubmitTransactionCommand;
-import org.pubsub.prototype.persistence.ReplicationServerState;
+import org.pubsub.prototype.registry.replication.ReplicationServerState;
 import org.pubsub.prototype.registry.replication.cardano.CardanoReplicationRegistryConfig;
 import org.pubsub.prototype.registry.replication.cardano.CardanoReplicationRegistryDeploymentManager;
 import org.pubsub.prototype.registry.replication.cardano.datum.ReplicationRegistryAikenCodec;
@@ -15,7 +15,7 @@ import org.pubsub.prototype.registry.replication.cardano.mutation.ReplicationSer
 import org.pubsub.prototype.registry.replication.cardano.mutation.ReplicationServerOperation;
 import org.pubsub.prototype.registry.replication.cardano.transaction.command.CreateReplicationServerCommand;
 import org.pubsub.prototype.registry.replication.cardano.transaction.command.SpendReplicationServerCommand;
-import org.pubsub.prototype.util.TextFiles;
+import org.pubsub.prototype.util.files.TextFiles;
 
 import java.nio.file.Path;
 import java.util.Set;
@@ -106,7 +106,7 @@ public final class ReplicationRegistryTransactionBuilder {
     }
 
     private String run(CardanoTransactionCommand command) {
-        return runner.run(command.argumentArray());
+        return runner.run(command);
     }
 
     private void signAndSubmit(Path body, Path signed, String success, String failure) {

@@ -4,6 +4,8 @@ hadoop = "3.4.1"
 jackson = "2.17.2"
 junit = "5.10.3"
 junit-platform = "1.10.3"
+jersey = "3.1.11"
+jakarta-ws-rs = "3.1.0"
 logback = "1.5.6"
 netty = "4.1.112.Final"
 parquet = "1.15.2"
@@ -16,6 +18,10 @@ jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", ver
 jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
+jersey-container-jdk-http = { module = "org.glassfish.jersey.containers:jersey-container-jdk-http", version.ref = "jersey" }
+jersey-hk2 = { module = "org.glassfish.jersey.inject:jersey-hk2", version.ref = "jersey" }
+jersey-media-json-jackson = { module = "org.glassfish.jersey.media:jersey-media-json-jackson", version.ref = "jersey" }
+jakarta-ws-rs-api = { module = "jakarta.ws.rs:jakarta.ws.rs-api", version.ref = "jakarta-ws-rs" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 netty-all = { module = "io.netty:netty-all", version.ref = "netty" }
 parquet-avro = { module = "org.apache.parquet:parquet-avro", version.ref = "parquet" }

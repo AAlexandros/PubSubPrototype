@@ -1,6 +1,6 @@
 package org.pubsub.prototype.cardano;
 
-import org.pubsub.prototype.util.TextFiles;
+import org.pubsub.prototype.util.files.TextFiles;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -9,8 +9,8 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.pubsub.prototype.util.Validators.requireNonBlank;
-import static org.pubsub.prototype.util.Validators.requireNonNull;
+import static org.pubsub.prototype.util.validation.Validators.requireNonBlank;
+import static org.pubsub.prototype.util.validation.Validators.requireNonNull;
 
 /** Reads and writes the {@code KEY=value} files shared with Cardano scripts and processes. */
 public final class CardanoEnvironmentFile {

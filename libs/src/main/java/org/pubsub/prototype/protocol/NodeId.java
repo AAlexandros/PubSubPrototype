@@ -5,9 +5,9 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.util.HexFormat;
 
-import static org.pubsub.prototype.util.CryptoConstants.SHA_256_ALGORITHM;
-import static org.pubsub.prototype.util.ProtocolConstants.VALUE_FIELD;
-import static org.pubsub.prototype.util.Validators.requireSha256Hex;
+import static org.pubsub.prototype.constants.CryptoConstants.SHA_256_ALGORITHM;
+import static org.pubsub.prototype.constants.ProtocolConstants.VALUE_FIELD;
+import static org.pubsub.prototype.util.validation.Validators.requireSha256Hex;
 
 // Used to check that the id follows the sha-256 pattern.
 // It is used for checking the node id value validity, similarly to DTOs

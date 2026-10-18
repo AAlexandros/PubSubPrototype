@@ -2,7 +2,7 @@ package org.pubsub.prototype.transport;
 
 import java.util.OptionalLong;
 
-import static org.pubsub.prototype.util.Validators.require;
+import static org.pubsub.prototype.util.validation.Validators.require;
 
 /**
  * Supplies exponentially increasing delays for a limited reconnect sequence.

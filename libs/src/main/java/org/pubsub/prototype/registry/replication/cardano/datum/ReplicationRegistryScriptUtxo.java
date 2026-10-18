@@ -1,6 +1,6 @@
 package org.pubsub.prototype.registry.replication.cardano.datum;
 
-import org.pubsub.prototype.persistence.ReplicationServerState;
+import org.pubsub.prototype.registry.replication.ReplicationServerState;
 
 import java.util.Optional;
 

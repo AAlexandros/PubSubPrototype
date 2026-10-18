@@ -1,5 +1,7 @@
 package org.pubsub.prototype.cardano.cli;
 
+import org.pubsub.prototype.cardano.cli.command.QueryUtxosCommand;
+
 import java.util.Optional;
 
 /** Executes Cardano CLI operations through the configured backend. */
@@ -12,13 +14,12 @@ public interface CardanoCommandRunner {
     String networkMagic();
 
     /**
-     * Executes a Cardano CLI command and returns its standard output.
-     * Arguments start after the {@code cardano-cli} executable name.
+     * Executes a typed Cardano CLI command and returns its standard output.
      *
      * @throws CardanoCliUnavailableException when command execution is disabled
      * @throws IllegalStateException when the command cannot be executed or fails
      */
-    String run(String... arguments);
+    String run(CardanoCommand command);
 
     /**
      * Queries UTxOs at a script address.
@@ -27,15 +28,7 @@ public interface CardanoCommandRunner {
      * @throws IllegalStateException when an enabled live query cannot be executed or fails
      */
     default Optional<String> queryScriptUtxosJson(String validatorAddress) {
-        return Optional.of(run(
-                "query",
-                "utxo",
-                "--address",
-                validatorAddress,
-                "--testnet-magic",
-                networkMagic(),
-                "--output-json"
-        ));
+        return Optional.of(run(new QueryUtxosCommand(validatorAddress, networkMagic())));
     }
 
     /**

@@ -2,6 +2,7 @@ package org.pubsub.prototype.registry.replication.cardano;
 
 import org.pubsub.prototype.cardano.CardanoEnvironmentFile;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
+import org.pubsub.prototype.cardano.cli.command.BuildScriptAddressCommand;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -31,8 +32,8 @@ public final class CardanoReplicationRegistryDeploymentManager {
     public synchronized ReplicationRegistryDeployment initialize() {
         commandRunner.requireCommandExecution();
         Path script = stageScript();
-        String address = commandRunner.run("address", "build", "--payment-script-file", script.toString(),
-                "--testnet-magic", commandRunner.networkMagic()).trim();
+        String address = commandRunner.run(
+                new BuildScriptAddressCommand(script, commandRunner.networkMagic())).trim();
         cached = new ReplicationRegistryDeployment(address);
         Map<String, String> values = new LinkedHashMap<>();
         values.put(ReplicationRegistryEnvironment.VALIDATOR_ADDRESS, address);

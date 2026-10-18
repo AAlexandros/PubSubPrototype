@@ -1,9 +1,20 @@
 package org.pubsub.prototype.registry.topic.cardano.mutation;
 
-import org.pubsub.prototype.registry.TopicId;
-import org.pubsub.prototype.registry.TopicRegistry;
+import org.pubsub.prototype.registry.topic.RegistryField;
+import org.pubsub.prototype.registry.topic.TopicId;
+import org.pubsub.prototype.registry.topic.TopicRegistry;
+import org.pubsub.prototype.registry.topic.TopicState;
+
+import static org.pubsub.prototype.util.validation.Validators.requireRange;
 
 public record TopicMutation(TopicOperation operation, String value) {
+    public TopicMutation {
+        if (operation == TopicOperation.SET_REPLICATION_FACTOR) {
+            requireRange(Integer.parseInt(value), 1, TopicState.MAX_REPLICATION_FACTOR,
+                    RegistryField.REPLICATION_FACTOR.jsonName());
+        }
+    }
+
     public TopicMutation(String operation, String value) {
         this(TopicOperation.fromValue(operation), value);
     }

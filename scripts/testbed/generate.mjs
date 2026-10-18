@@ -39,6 +39,8 @@ for (let index = 1; index <= 3; index++) {
   advertisedHost: replication-server-${index}
   port: ${settings.replicationPort}
   storagePath: /data
+  repairSigningKeyPath: /repair-keys/payment.skey
+  repairVerificationKeyPath: /repair-keys/payment.vkey
 registration:
   operator: ${signers[index - 1]}
   cliBackend: DEVNET
@@ -51,18 +53,20 @@ registry:
   topicRegistrySigner: ${signers[index - 1]}
   topicRegistryCliBackend: CACHE_ONLY
 timing: {connectionTimeoutMs: 500, requestTimeoutMs: 1500, retries: 0, cleanupIntervalMs: 1000, failureProbeAttempts: 3, failureProbeTimeoutMs: 500, maintenanceIntervalMs: 500}
-epoch: {zeroTimeMs: 0, lengthMs: 432000000}
 `);
 }
 
 let compose = `name: phase-0-9\nservices:\n`;
 for (let index = 1; index <= 3; index++) compose += `  replication-server-${index}:
-    build: {context: ../.., dockerfile: apps/replication-server/Dockerfile}
+    build: {context: ../.., dockerfile: apps/replication-server/Dockerfile, args: {CARDANO_TESTNET_VERSION: \${CARDANO_TESTNET_VERSION:-11.0.1}}}
     command: [/config/server-${index}.yaml]
+    environment: {CARDANO_NETWORK_MAGIC: \${CARDANO_NETWORK_MAGIC:-42}, CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock}
     volumes:
       - {type: bind, source: ./config/server-${index}.yaml, target: /config/server-${index}.yaml, read_only: true}
+      - {type: bind, source: ../../ops/infra/devnet/keys/${signers[index - 1]}, target: /repair-keys, read_only: true}
       - {type: bind, source: ../../ops/infra/devnet/runtime/registry, target: /registry, read_only: true}
       - {type: bind, source: ../../ops/infra/devnet/runtime/replication-registry, target: /replication-registry, read_only: true}
+      - {type: bind, source: ../../ops/infra/devnet/runtime/testnet/socket, target: /node-socket, read_only: true}
       - replication-server-${index}-data:/data
     ports: [\"127.0.0.1:${settings.hostReplicationPortBase + index}:${settings.replicationPort}\"]
 `;

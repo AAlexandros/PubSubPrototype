@@ -4,8 +4,8 @@ import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 
 import java.nio.file.Path;
 
-import static org.pubsub.prototype.util.Validators.requireNonBlank;
-import static org.pubsub.prototype.util.Validators.requireNonNull;
+import static org.pubsub.prototype.util.validation.Validators.requireNonBlank;
+import static org.pubsub.prototype.util.validation.Validators.requireNonNull;
 
 /** Runtime paths, signer, and Cardano CLI backend for the replication registry client. */
 public record CardanoReplicationRegistryConfig(Path runtimeDir, String signer, CardanoCliBackend cliBackend) {

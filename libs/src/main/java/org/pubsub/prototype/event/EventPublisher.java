@@ -2,8 +2,8 @@ package org.pubsub.prototype.event;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import org.pubsub.prototype.registry.TopicId;
-import org.pubsub.prototype.util.JsonSupport;
+import org.pubsub.prototype.registry.topic.TopicId;
+import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -12,7 +12,7 @@ import java.security.KeyPair;
 import java.time.Clock;
 import java.util.Base64;
 
-import static org.pubsub.prototype.util.EventConstants.EVENTS_DIRECTORY;
+import static org.pubsub.prototype.constants.EventConstants.EVENTS_DIRECTORY;
 
 public final class EventPublisher {
     private static final ObjectMapper MAPPER = JsonSupport.MAPPER.copy()
@@ -47,7 +47,8 @@ public final class EventPublisher {
                 Base64.getEncoder().encodeToString(payload)
         );
         String eventId = EventCrypto.eventId(unsigned);
-        EventEnvelope signed = unsigned.withSignatureAndEventId(EventCrypto.sign(unsigned, keyPair.getPrivate()), eventId);
+        EventEnvelope signed = unsigned.withSignatureAndEventId(EventCrypto.sign(unsigned, keyPair.getPrivate()), eventId)
+                .withProgressSignature(EventCrypto.signProgress(unsigned, keyPair.getPrivate()));
         persist(signed, publisherKeyId);
         sequenceStore.commit(topicId.value(), publisherKeyId, sequenceNumber);
         return signed;

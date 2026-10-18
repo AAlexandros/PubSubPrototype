@@ -1,7 +1,7 @@
 package org.pubsub.prototype.protocol;
 
 import org.junit.jupiter.api.Test;
-import org.pubsub.prototype.util.ProtocolConstants;
+import org.pubsub.prototype.constants.ProtocolConstants;
 
 import java.time.Instant;
 import java.util.UUID;

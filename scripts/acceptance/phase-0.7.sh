@@ -67,10 +67,7 @@ for n in 1 2 3; do
   ids+=("$id")
 done
 IFS=,; ids_csv="${ids[*]}"; unset IFS
-current_epoch="$(ops/infra/devnet/scripts/status.sh | node -e 'let x=""; process.stdin.on("data",d=>x+=d).on("end",()=>console.log(JSON.parse(x).epoch))')"
-epoch_length_ms="$(node -p "Number(process.env.CARDANO_TESTNET_SLOT_LENGTH || 2) * Number(process.env.CARDANO_TESTNET_EPOCH_LENGTH || 500) * 1000")"
-epoch_zero_ms="$(node -p "Date.now() - Number('$current_epoch') * Number('$epoch_length_ms')")"
-acceptance server-configs "$ROOT_DIR/ops/infra/devnet/runtime/phase-0.7" "$ids_csv" "$epoch_zero_ms" "$epoch_length_ms"
+acceptance server-configs "$ROOT_DIR/ops/infra/devnet/runtime/phase-0.7" "$ids_csv"
 for n in 1 2 3; do
   ./scripts/replication/register-server.sh "$ROOT_DIR/ops/infra/devnet/runtime/phase-0.7/server-$n.yaml" \
     > "$EVIDENCE_DIR/registration-$n.txt"

@@ -2,11 +2,11 @@ package org.pubsub.prototype.registry.topic.cardano;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.pubsub.prototype.registry.CreateTopicRequest;
-import org.pubsub.prototype.registry.TopicId;
-import org.pubsub.prototype.registry.TopicState;
 import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
-import org.pubsub.prototype.util.JsonSupport;
+import org.pubsub.prototype.registry.topic.CreateTopicRequest;
+import org.pubsub.prototype.registry.topic.TopicId;
+import org.pubsub.prototype.registry.topic.TopicState;
+import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.nio.file.Path;
 import java.util.Arrays;

@@ -10,7 +10,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.pubsub.prototype.util.NavigationConstants.PROTOCOL_VERSION;
+import static org.pubsub.prototype.constants.NavigationConstants.PROTOCOL_VERSION;
 
 class NavigationEngineTest {
     private static final List<String> TOPICS = List.of(

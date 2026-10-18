@@ -1,9 +1,17 @@
 package org.pubsub.prototype.registry.topic.cardano.transaction;
 
-import org.pubsub.prototype.registry.CreateTopicRequest;
+import org.pubsub.prototype.cardano.cli.CardanoCliUnavailableException;
+import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
+import org.pubsub.prototype.cardano.cli.transaction.CardanoPaymentIdentity;
+import org.pubsub.prototype.cardano.cli.transaction.CardanoTransactionCommand;
+import org.pubsub.prototype.cardano.cli.transaction.CardanoTransactionLog;
+import org.pubsub.prototype.cardano.cli.transaction.SignTransactionCommand;
+import org.pubsub.prototype.cardano.cli.transaction.SubmitTransactionCommand;
+import org.pubsub.prototype.constants.CryptoConstants;
 import org.pubsub.prototype.registry.RegistryConflictException;
-import org.pubsub.prototype.registry.TopicId;
-import org.pubsub.prototype.registry.TopicState;
+import org.pubsub.prototype.registry.topic.CreateTopicRequest;
+import org.pubsub.prototype.registry.topic.TopicId;
+import org.pubsub.prototype.registry.topic.TopicState;
 import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryConfig;
 import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryDeploymentManager;
 import org.pubsub.prototype.registry.topic.cardano.RegistryDeployment;
@@ -14,14 +22,6 @@ import org.pubsub.prototype.registry.topic.cardano.mutation.TopicOperation;
 import org.pubsub.prototype.registry.topic.cardano.mutation.TopicStateTransitions;
 import org.pubsub.prototype.registry.topic.cardano.transaction.command.CreateTopicCommand;
 import org.pubsub.prototype.registry.topic.cardano.transaction.command.SpendTopicCommand;
-import org.pubsub.prototype.cardano.cli.CardanoCliUnavailableException;
-import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
-import org.pubsub.prototype.cardano.cli.transaction.CardanoPaymentIdentity;
-import org.pubsub.prototype.cardano.cli.transaction.CardanoTransactionLog;
-import org.pubsub.prototype.cardano.cli.transaction.CardanoTransactionCommand;
-import org.pubsub.prototype.cardano.cli.transaction.SignTransactionCommand;
-import org.pubsub.prototype.cardano.cli.transaction.SubmitTransactionCommand;
-import org.pubsub.prototype.util.CryptoConstants;
 
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
@@ -218,7 +218,7 @@ public final class CardanoTransactionBuilder {
     // Private helpers
 
     private String runTransaction(CardanoTransactionCommand command) {
-        return commandRunner.run(command.argumentArray());
+        return commandRunner.run(command);
     }
 
     private static String topicOutput(RegistryDeployment deployment, String tokenName) {

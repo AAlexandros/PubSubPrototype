@@ -5,12 +5,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.pubsub.prototype.constants.CryptoConstants;
 import org.pubsub.prototype.registry.RegistryConflictException;
-import org.pubsub.prototype.registry.TopicId;
-import org.pubsub.prototype.registry.TopicState;
+import org.pubsub.prototype.registry.topic.TopicId;
+import org.pubsub.prototype.registry.topic.TopicState;
 import org.pubsub.prototype.registry.topic.cardano.mutation.TopicMutation;
-import org.pubsub.prototype.util.CryptoConstants;
-import org.pubsub.prototype.util.JsonSupport;
+import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;

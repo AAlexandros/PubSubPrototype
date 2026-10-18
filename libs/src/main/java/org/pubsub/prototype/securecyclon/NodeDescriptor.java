@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 
-import static org.pubsub.prototype.util.CryptoConstants.SHA_256_ALGORITHM;
+import static org.pubsub.prototype.constants.CryptoConstants.SHA_256_ALGORITHM;
 
 /** Immutable SecureCyclon node descriptor: creation time, unique ID, ownership chain, and swap permission. */
 public record NodeDescriptor(NodeEndpoint creator, long timestamp, String uniqueId,

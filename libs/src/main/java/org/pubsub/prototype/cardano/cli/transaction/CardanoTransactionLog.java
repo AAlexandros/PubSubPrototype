@@ -1,6 +1,6 @@
 package org.pubsub.prototype.cardano.cli.transaction;
 
-import org.pubsub.prototype.util.TextFiles;
+import org.pubsub.prototype.util.files.TextFiles;
 
 import java.nio.file.Path;
 import java.time.Instant;

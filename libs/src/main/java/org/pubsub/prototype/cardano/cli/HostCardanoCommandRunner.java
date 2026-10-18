@@ -3,7 +3,6 @@ package org.pubsub.prototype.cardano.cli;
 import org.pubsub.prototype.cardano.CardanoNetwork;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /** Runs the host-installed {@code cardano-cli}. */
@@ -20,10 +19,10 @@ public final class HostCardanoCommandRunner extends ProcessCardanoCommandRunner 
     }
 
     @Override
-    protected List<String> command(String[] arguments) {
-        List<String> command = new ArrayList<>(arguments.length + 1);
+    protected List<String> command(List<String> arguments) {
+        List<String> command = new ArrayList<>(arguments.size() + 1);
         command.add(EXECUTABLE);
-        command.addAll(Arrays.asList(arguments));
+        command.addAll(arguments);
         return command;
     }
 }

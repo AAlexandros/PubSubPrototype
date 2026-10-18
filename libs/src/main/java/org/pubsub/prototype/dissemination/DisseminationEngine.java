@@ -1,6 +1,7 @@
 package org.pubsub.prototype.dissemination;
 
 import org.pubsub.prototype.navigation.NavigationPeerDescriptor;
+import org.pubsub.prototype.registry.topic.TopicState;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -18,15 +19,15 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static org.pubsub.prototype.util.CryptoConstants.SHA_256_BITS;
-import static org.pubsub.prototype.util.DisseminationConstants.HOST_FIELD;
-import static org.pubsub.prototype.util.DisseminationConstants.INVALID_TOPIC_ID_MESSAGE;
-import static org.pubsub.prototype.util.DisseminationConstants.LOG_FIELD;
-import static org.pubsub.prototype.util.DisseminationConstants.MAX_RANDOM_LINK_COUNT;
-import static org.pubsub.prototype.util.DisseminationConstants.PROTOCOL_VERSION;
-import static org.pubsub.prototype.util.DisseminationConstants.RANDOM_FIELD;
-import static org.pubsub.prototype.util.Validators.isSha256Hex;
-import static org.pubsub.prototype.util.Validators.require;
+import static org.pubsub.prototype.constants.CryptoConstants.SHA_256_BITS;
+import static org.pubsub.prototype.constants.DisseminationConstants.HOST_FIELD;
+import static org.pubsub.prototype.constants.DisseminationConstants.INVALID_TOPIC_ID_MESSAGE;
+import static org.pubsub.prototype.constants.DisseminationConstants.LOG_FIELD;
+import static org.pubsub.prototype.constants.DisseminationConstants.MAX_RANDOM_LINK_COUNT;
+import static org.pubsub.prototype.constants.DisseminationConstants.PROTOCOL_VERSION;
+import static org.pubsub.prototype.constants.DisseminationConstants.RANDOM_FIELD;
+import static org.pubsub.prototype.util.validation.Validators.isSha256Hex;
+import static org.pubsub.prototype.util.validation.Validators.require;
 
 /** Transport-independent per-topic ring and random-link state machine. */
 public final class DisseminationEngine {

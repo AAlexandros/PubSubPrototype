@@ -1,18 +1,18 @@
 package org.pubsub.prototype.registry.topic.cardano;
 
-import org.pubsub.prototype.registry.CreateTopicRequest;
-import org.pubsub.prototype.registry.RegistryConflictException;
-import org.pubsub.prototype.registry.RegistrySnapshot;
-import org.pubsub.prototype.registry.TopicId;
-import org.pubsub.prototype.registry.TopicRegistry;
-import org.pubsub.prototype.registry.TopicState;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunnerFactory;
+import org.pubsub.prototype.registry.RegistryConflictException;
+import org.pubsub.prototype.registry.topic.CreateTopicRequest;
+import org.pubsub.prototype.registry.topic.RegistrySnapshot;
+import org.pubsub.prototype.registry.topic.TopicId;
+import org.pubsub.prototype.registry.topic.TopicRegistry;
+import org.pubsub.prototype.registry.topic.TopicState;
 import org.pubsub.prototype.registry.topic.cardano.datum.CardanoCliUtxoParser;
 import org.pubsub.prototype.registry.topic.cardano.datum.CardanoScriptUtxo;
 import org.pubsub.prototype.registry.topic.cardano.mutation.TopicMutation;
 import org.pubsub.prototype.registry.topic.cardano.transaction.CardanoTransactionBuilder;
-import org.pubsub.prototype.util.TextFiles;
+import org.pubsub.prototype.util.files.TextFiles;
 
 import java.nio.file.Files;
 import java.time.Instant;

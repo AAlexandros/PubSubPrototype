@@ -1,8 +1,9 @@
 package org.pubsub.prototype.registry.topic.cardano.transaction.command;
 
+import org.pubsub.prototype.cardano.cli.transaction.CardanoTransactionCommand;
+
 import java.nio.file.Path;
 import java.util.List;
-import org.pubsub.prototype.cardano.cli.transaction.CardanoTransactionCommand;
 
 /** Builds the transaction that spends a topic UTxO and produces its next state. */
 public record SpendTopicCommand(

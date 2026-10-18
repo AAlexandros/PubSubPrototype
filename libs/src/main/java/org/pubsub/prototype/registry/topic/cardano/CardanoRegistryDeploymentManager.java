@@ -3,15 +3,17 @@ package org.pubsub.prototype.registry.topic.cardano;
 import org.pubsub.prototype.cardano.CardanoEnvironmentFile;
 import org.pubsub.prototype.cardano.cli.CardanoCliUnavailableException;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
+import org.pubsub.prototype.cardano.cli.command.BuildScriptAddressCommand;
+import org.pubsub.prototype.cardano.cli.command.PolicyIdCommand;
 import org.pubsub.prototype.registry.RegistryConflictException;
-import org.pubsub.prototype.util.TextFiles;
+import org.pubsub.prototype.util.files.TextFiles;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.nio.file.StandardCopyOption;
 
 /** Manages Cardano registry scripts and persisted deployment metadata. */
 public final class CardanoRegistryDeploymentManager {
@@ -83,18 +85,9 @@ public final class CardanoRegistryDeploymentManager {
         // The validator address is derived from the topic state script hash
         // cardano-cli address build: derive the testnet address whose payment credential is this validator script.
         String validatorAddress = commandRunner.run(
-                "address", // Top-level, era-independent address command group.
-                "build", // Build an address from the supplied credential.
-                "--payment-script-file", validator.toString(), // Use the topic-state validator as the payment credential.
-                "--testnet-magic", commandRunner.networkMagic() // Encode the address for the configured test network.
-        ).trim();
+                new BuildScriptAddressCommand(validator, commandRunner.networkMagic())).trim();
         // cardano-cli latest transaction policyid: derive the topic minting policy's script hash.
-        String policyId = commandRunner.run(
-                "latest", // Use the transaction commands for the newest ledger era supported by cardano-cli.
-                "transaction", // Select the transaction command group.
-                "policyid", // Calculate a minting-policy ID from a script.
-                "--script-file", policy.toString() // The compiled topic-policy Plutus script.
-        ).trim();
+        String policyId = commandRunner.run(new PolicyIdCommand(policy)).trim();
         return new RegistryDeployment(validatorAddress, policyId);
     }
 

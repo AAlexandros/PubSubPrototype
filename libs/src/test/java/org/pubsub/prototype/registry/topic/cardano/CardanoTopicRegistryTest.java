@@ -2,13 +2,14 @@ package org.pubsub.prototype.registry.topic.cardano;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.pubsub.prototype.registry.RegistryAuthorizationException;
-import org.pubsub.prototype.registry.RegistryConflictException;
-import org.pubsub.prototype.registry.TopicId;
-import org.pubsub.prototype.registry.TopicState;
 import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 import org.pubsub.prototype.cardano.cli.CardanoCliUnavailableException;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
+import org.pubsub.prototype.cardano.cli.CardanoCommandRunnerFactory;
+import org.pubsub.prototype.registry.RegistryAuthorizationException;
+import org.pubsub.prototype.registry.RegistryConflictException;
+import org.pubsub.prototype.registry.topic.TopicId;
+import org.pubsub.prototype.registry.topic.TopicState;
 import org.pubsub.prototype.registry.topic.cardano.datum.AikenScriptDataCodec;
 import org.pubsub.prototype.registry.topic.cardano.datum.CardanoCliUtxoParser;
 import org.pubsub.prototype.registry.topic.cardano.datum.CardanoScriptUtxo;
@@ -96,8 +97,8 @@ class CardanoTopicRegistryTest {
 
     @Test
     void cacheOnlyBackendDoesNotAllowTransactionSubmission() {
-        CardanoCommandRunner runner = CardanoCommandRunners.create(new CardanoRegistryConfig(
-                Path.of("/registry"), "node-1", CardanoCliBackend.CACHE_ONLY));
+        CardanoCommandRunner runner = CardanoCommandRunnerFactory.create(
+                CardanoCliBackend.CACHE_ONLY, Path.of("/registry"));
 
         assertTrue(runner.queryScriptUtxosJson("address").isEmpty());
         assertThrows(CardanoCliUnavailableException.class, runner::requireCommandExecution);
@@ -112,7 +113,8 @@ class CardanoTopicRegistryTest {
         CardanoRegistryConfig config = new CardanoRegistryConfig(
                 runtimeDir, "node-1", CardanoCliBackend.HOST);
 
-        assertThrows(IllegalArgumentException.class, () -> CardanoCommandRunners.create(config));
+        assertThrows(IllegalArgumentException.class,
+                () -> CardanoCommandRunnerFactory.create(config.cliBackend(), config.runtimeDir()));
     }
 
     @Test
@@ -124,8 +126,7 @@ class CardanoTopicRegistryTest {
         Files.writeString(devnetDir.resolve("versions.env"), "CARDANO_NETWORK_MAGIC=42\n");
         Files.writeString(runtimeDir.getParent().resolve("network.env"), "CARDANO_NETWORK_MAGIC=42\n");
 
-        CardanoCommandRunner runner = CardanoCommandRunners.create(new CardanoRegistryConfig(
-                runtimeDir, "node-1", CardanoCliBackend.DEVNET));
+        CardanoCommandRunner runner = CardanoCommandRunnerFactory.create(CardanoCliBackend.DEVNET, runtimeDir);
 
         assertEquals("42", runner.networkMagic());
     }

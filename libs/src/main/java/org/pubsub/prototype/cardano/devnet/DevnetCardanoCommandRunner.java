@@ -4,7 +4,6 @@ import org.pubsub.prototype.cardano.CardanoNetwork;
 import org.pubsub.prototype.cardano.cli.ProcessCardanoCommandRunner;
 
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -17,7 +16,7 @@ public final class DevnetCardanoCommandRunner extends ProcessCardanoCommandRunne
     }
 
     @Override
-    protected List<String> command(String[] arguments) {
+    protected List<String> command(List<String> arguments) {
         List<String> prefix = List.of(
                 "docker", "compose",                              // Run through Docker Compose.
                 "--env-file", layout.versionsFile().toString(),    // Load the pinned image versions.
@@ -28,7 +27,7 @@ public final class DevnetCardanoCommandRunner extends ProcessCardanoCommandRunne
         );
         return Stream.concat(
                 prefix.stream(),
-                Arrays.stream(arguments).map(layout::containerPath)
+                arguments.stream().map(layout::containerPath)
         ).toList();
     }
 }

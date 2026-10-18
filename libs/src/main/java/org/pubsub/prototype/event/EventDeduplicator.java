@@ -3,8 +3,8 @@ package org.pubsub.prototype.event;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import static org.pubsub.prototype.util.EventConstants.MAX_ENTRIES_FIELD;
-import static org.pubsub.prototype.util.Validators.requirePositive;
+import static org.pubsub.prototype.constants.EventConstants.MAX_ENTRIES_FIELD;
+import static org.pubsub.prototype.util.validation.Validators.requirePositive;
 
 public final class EventDeduplicator {
     private final int maxEntries;

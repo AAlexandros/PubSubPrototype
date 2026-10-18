@@ -2,12 +2,12 @@ package org.pubsub.prototype.dissemination;
 
 import java.util.List;
 
-import static org.pubsub.prototype.util.DisseminationConstants.CANDIDATES_FIELD;
-import static org.pubsub.prototype.util.DisseminationConstants.INVALID_TOPIC_ID_MESSAGE;
-import static org.pubsub.prototype.util.DisseminationConstants.SENDER_DESCRIPTOR_FIELD;
-import static org.pubsub.prototype.util.Validators.isSha256Hex;
-import static org.pubsub.prototype.util.Validators.require;
-import static org.pubsub.prototype.util.Validators.requireNonNull;
+import static org.pubsub.prototype.constants.DisseminationConstants.CANDIDATES_FIELD;
+import static org.pubsub.prototype.constants.DisseminationConstants.INVALID_TOPIC_ID_MESSAGE;
+import static org.pubsub.prototype.constants.DisseminationConstants.SENDER_DESCRIPTOR_FIELD;
+import static org.pubsub.prototype.util.validation.Validators.isSha256Hex;
+import static org.pubsub.prototype.util.validation.Validators.require;
+import static org.pubsub.prototype.util.validation.Validators.requireNonNull;
 
 /** Wire payload for a single-topic dissemination gossip exchange. */
 public record DisseminationExchange(

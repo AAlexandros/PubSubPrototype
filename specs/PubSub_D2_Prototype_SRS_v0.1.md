@@ -131,7 +131,7 @@ FR-NET-007	Message handlers shall be non-blocking with respect to network I/O; l
 D2 defines administrative methods using conventional smart-contract method notation. On Cardano, the same behavior shall be represented as validated eUTxO state transitions rather than assumed mutable contract methods.
 ID	Requirement (SHALL)	Priority	Verification
 FR-REG-001	Creating a topic shall produce a globally unique 256-bit topicId that cannot be reassigned to a future topic.	Must	Create/delete/recreate test
-FR-REG-002	A topic datum/state shall contain topicId, name/description, owners, administrators, publishers, replication factor R, retention period T, and active/deleted status.	Must	Datum decode test
+FR-REG-002	A topic datum/state shall contain topicId, name/description, owners, administrators, publishers, replication factor R (1 through 50 in the prototype), retention period T, and active/deleted status.	Must	Datum decode test
 FR-REG-003	The transaction that creates a topic shall establish at least one owner, with the creator included as an owner.	Must	Validator test
 FR-REG-004	Only an owner shall be able to delete/deactivate a topic, add/remove owners, or add/remove administrators.	Must	Positive/negative validator tests
 FR-REG-005	Removing an owner shall be rejected if it would leave the topic without an owner.	Must	Negative validator test
@@ -192,9 +192,9 @@ FR-PER-003	Every active replication server shall maintain the complete active se
 FR-PER-004	The event storage key shall be hash(topicId || publisherPublicKey || sequenceNumber), preserving D2's indexing scheme.	Must	Known-vector unit test
 FR-PER-005	Given an event key and replication factor R, all servers shall deterministically select the same R responsible servers by circular ID distance.	Must	Known-vector unit test
 FR-PER-006	A PUT submitted to any replication server shall be forwarded/stored on the R responsible servers without requiring multi-hop DHT routing.	Must	Integration test
-FR-PER-007	A GET submitted to any replication server shall identify the responsible replica set and retrieve the record from one available responsible server.	Must	Integration test
+FR-PER-007	A GET submitted to any replication server with an event key and topic ID shall use the topic's replication factor to identify the responsible replica set and retrieve the record from one available responsible server. A small bounded lookup margin may cover brief membership-view differences.	Must	Integration test
 FR-PER-008	Stored event records shall include expiry information derived from the topic retention period T and shall become unavailable after expiry.	Must	Accelerated-retention test
-FR-PER-009	The persistence layer shall store a lightweight per-topic publisher log addressable by hash(topicId), containing each relevant publisher's latest sequence number and timestamp.	Must	Storage test
+FR-PER-009	The persistence layer shall store a lightweight per-topic publisher log addressable by the topicId itself (the unique 256-bit topic identifier), containing each relevant publisher's latest sequence number and timestamp.	Must	Storage test
 FR-PER-010	A recovered subscriber shall query the topic publisher log for its offline interval, determine missing sequence ranges, construct event keys locally, and retrieve missing events concurrently.	Must	M8 acceptance test
 FR-PER-011	Failure detection shall require a configurable number of consecutive unsuccessful probes before a replication server is considered unavailable. Defaults should initially match D2's recommendation of three attempts with five-second timeouts, but shall be tunable.	Should	Fault-injection test
 FR-PER-012	After a confirmed replication-server failure, active servers shall recompute responsibility and restore required replicas from surviving copies when possible.	Should	M9 acceptance test

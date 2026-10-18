@@ -4,9 +4,9 @@ import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.util.HexUtils;
 
 import java.time.Instant;
-import org.pubsub.prototype.util.PersistenceConstants;
-import static org.pubsub.prototype.util.Validators.requireNonNull;
-import static org.pubsub.prototype.util.Validation.start;
+import org.pubsub.prototype.constants.PersistenceConstants;
+import static org.pubsub.prototype.util.validation.Validators.requireNonNull;
+import static org.pubsub.prototype.util.validation.Validation.start;
 
 /**
  * An event replica with its lookup key and retention metadata.

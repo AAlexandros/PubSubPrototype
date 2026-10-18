@@ -12,12 +12,12 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
-import static org.pubsub.prototype.util.NavigationConstants.HOST_ARGUMENT;
-import static org.pubsub.prototype.util.NavigationConstants.INITIAL_SUBSCRIPTIONS_ARGUMENT;
-import static org.pubsub.prototype.util.NavigationConstants.LOG_ARGUMENT;
-import static org.pubsub.prototype.util.NavigationConstants.NODE_ID_ARGUMENT;
-import static org.pubsub.prototype.util.NavigationConstants.PROTOCOL_VERSION;
-import static org.pubsub.prototype.util.NavigationConstants.RANDOM_ARGUMENT;
+import static org.pubsub.prototype.constants.NavigationConstants.HOST_ARGUMENT;
+import static org.pubsub.prototype.constants.NavigationConstants.INITIAL_SUBSCRIPTIONS_ARGUMENT;
+import static org.pubsub.prototype.constants.NavigationConstants.LOG_ARGUMENT;
+import static org.pubsub.prototype.constants.NavigationConstants.NODE_ID_ARGUMENT;
+import static org.pubsub.prototype.constants.NavigationConstants.PROTOCOL_VERSION;
+import static org.pubsub.prototype.constants.NavigationConstants.RANDOM_ARGUMENT;
 
 /** Vicinity gossip state machine, serialized independently of any transport (mirrors SecureCyclon's shape). */
 public final class NavigationLayer {

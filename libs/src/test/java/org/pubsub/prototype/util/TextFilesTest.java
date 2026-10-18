@@ -2,6 +2,7 @@ package org.pubsub.prototype.util;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.pubsub.prototype.util.files.TextFiles;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

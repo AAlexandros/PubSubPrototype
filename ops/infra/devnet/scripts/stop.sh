@@ -2,6 +2,14 @@
 set -euo pipefail
 . "$(dirname "$0")/common.sh"
 
+if [ -f "$RUNTIME_DIR/epoch-publisher.pid" ]; then
+  publisher_pid="$(cat "$RUNTIME_DIR/epoch-publisher.pid")"
+  if kill -0 "$publisher_pid" 2>/dev/null; then
+    kill "$publisher_pid"
+  fi
+  rm -f "$RUNTIME_DIR/epoch-publisher.pid"
+fi
+
 if [ -f "$RUNTIME_DIR/cardano-testnet.pid" ]; then
   pid="$(cat "$RUNTIME_DIR/cardano-testnet.pid")"
   if kill -0 "$pid" 2>/dev/null; then

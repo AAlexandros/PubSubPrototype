@@ -9,11 +9,18 @@ services:
     build:
       context: ../../..
       dockerfile: apps/replication-server/Dockerfile
+      args:
+        CARDANO_TESTNET_VERSION: ${CARDANO_TESTNET_VERSION:-11.0.1}
     command: ["/config/server-1.yaml"]
+    environment:
+      CARDANO_NETWORK_MAGIC: ${CARDANO_NETWORK_MAGIC:-42}
+      CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock
     volumes:
       - ../devnet/runtime/phase-0.7/server-1.yaml:/config/server-1.yaml:ro
+      - ../devnet/keys/node-1:/repair-keys:ro
       - ../devnet/runtime/registry:/registry:ro
       - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - ../devnet/runtime/testnet/socket:/node-socket:ro
       - replication-server-1-data:/data
     ports: ["127.0.0.1:8101:8100"]
   replication-server-2:
@@ -21,8 +28,10 @@ services:
     command: ["/config/server-2.yaml"]
     volumes:
       - ../devnet/runtime/phase-0.7/server-2.yaml:/config/server-2.yaml:ro
+      - ../devnet/keys/node-2:/repair-keys:ro
       - ../devnet/runtime/registry:/registry:ro
       - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - ../devnet/runtime/testnet/socket:/node-socket:ro
       - replication-server-2-data:/data
     ports: ["127.0.0.1:8102:8100"]
   replication-server-3:
@@ -30,8 +39,10 @@ services:
     command: ["/config/server-3.yaml"]
     volumes:
       - ../devnet/runtime/phase-0.7/server-3.yaml:/config/server-3.yaml:ro
+      - ../devnet/keys/node-3:/repair-keys:ro
       - ../devnet/runtime/registry:/registry:ro
       - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - ../devnet/runtime/testnet/socket:/node-socket:ro
       - replication-server-3-data:/data
     ports: ["127.0.0.1:8103:8100"]
 

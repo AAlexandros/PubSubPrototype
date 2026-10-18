@@ -1,7 +1,7 @@
 package org.pubsub.prototype.event;
 
-import org.pubsub.prototype.registry.TopicId;
-import org.pubsub.prototype.registry.TopicState;
+import org.pubsub.prototype.registry.topic.TopicId;
+import org.pubsub.prototype.registry.topic.TopicState;
 
 import java.util.Optional;
 
@@ -32,7 +32,9 @@ public final class EventValidator {
         if (!eventIdMatches(event)) {
             return EventValidationResult.rejected(EventRejectReason.INVALID_EVENT_ID, null, null);
         }
-        if (!EventCrypto.verify(event)) {
+        if (!EventCrypto.verify(event)
+                || !EventCrypto.verifyProgress(event.topicId(), event.publisherPublicKey(),
+                        event.sequenceNumber(), event.timestamp(), event.progressSignature())) {
             return EventValidationResult.rejected(EventRejectReason.INVALID_SIGNATURE, null, null);
         }
         String publisherKeyId;

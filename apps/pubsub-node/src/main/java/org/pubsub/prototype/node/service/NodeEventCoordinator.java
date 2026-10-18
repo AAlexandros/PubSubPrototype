@@ -9,13 +9,13 @@ import org.pubsub.prototype.event.EventSequenceStatus;
 import org.pubsub.prototype.event.EventValidationResult;
 import org.pubsub.prototype.event.EventValidator;
 import org.pubsub.prototype.event.TopicStateProvider;
-import org.pubsub.prototype.protocol.NodeId;
-import org.pubsub.prototype.protocol.NodeIdentity;
-import org.pubsub.prototype.registry.TopicId;
 import org.pubsub.prototype.node.runtimes.DisseminationRuntime;
 import org.pubsub.prototype.node.runtimes.PersistenceRuntime;
-import org.pubsub.prototype.transport.TransportSender;
+import org.pubsub.prototype.protocol.NodeId;
+import org.pubsub.prototype.protocol.NodeIdentity;
+import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.transport.TransportListener;
+import org.pubsub.prototype.transport.TransportSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

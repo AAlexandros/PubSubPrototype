@@ -10,7 +10,7 @@ public final class CacheOnlyCardanoCommandRunner implements CardanoCommandRunner
     }
 
     @Override
-    public String run(String... arguments) {
+    public String run(CardanoCommand command) {
         throw commandsDisabled();
     }
 

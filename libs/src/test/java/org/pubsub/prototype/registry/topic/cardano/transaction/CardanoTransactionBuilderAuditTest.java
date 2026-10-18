@@ -3,10 +3,12 @@ package org.pubsub.prototype.registry.topic.cardano.transaction;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
+import org.pubsub.prototype.cardano.cli.CardanoCommand;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
+import org.pubsub.prototype.cardano.cli.transaction.CardanoPaymentIdentity;
 import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryConfig;
 import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryDeploymentManager;
-import org.pubsub.prototype.util.TextFiles;
+import org.pubsub.prototype.util.files.TextFiles;
 
 import java.nio.file.Path;
 
@@ -39,7 +41,7 @@ class CardanoTransactionBuilderAuditTest {
                 commandRunner,
                 new CardanoRegistryDeploymentManager(config, commandRunner)
         );
-        CardanoIdentity signer = new CardanoIdentity(
+        CardanoPaymentIdentity signer = new CardanoPaymentIdentity(
                 config.signer(),
                 "addr_test1",
                 tempDir.resolve("payment.skey"),
@@ -74,8 +76,8 @@ class CardanoTransactionBuilderAuditTest {
         }
 
         @Override
-        public String run(String... arguments) {
-            String stage = arguments[2];
+        public String run(CardanoCommand command) {
+            String stage = command.arguments().get(2);
             if (failingStage.equals(stage)) {
                 throw new IllegalStateException(stage + " rejected");
             }

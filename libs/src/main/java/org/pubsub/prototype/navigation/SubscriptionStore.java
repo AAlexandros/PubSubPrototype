@@ -1,6 +1,6 @@
 package org.pubsub.prototype.navigation;
 
-import org.pubsub.prototype.util.JsonFiles;
+import org.pubsub.prototype.util.files.JsonFiles;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -12,9 +12,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-import static org.pubsub.prototype.util.NavigationConstants.JSON_EXTENSION;
-import static org.pubsub.prototype.util.NavigationConstants.LEGACY_TEXT_EXTENSION;
-import static org.pubsub.prototype.util.NavigationConstants.SUBSCRIPTIONS_FIELD;
+import static org.pubsub.prototype.constants.NavigationConstants.JSON_EXTENSION;
+import static org.pubsub.prototype.constants.NavigationConstants.LEGACY_TEXT_EXTENSION;
+import static org.pubsub.prototype.constants.NavigationConstants.SUBSCRIPTIONS_FIELD;
 
 /** Persistent JSON set of subscribed topic ids. Subscriptions are local node state. */
 public final class SubscriptionStore {

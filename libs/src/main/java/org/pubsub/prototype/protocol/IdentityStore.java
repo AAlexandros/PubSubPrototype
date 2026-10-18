@@ -2,7 +2,7 @@ package org.pubsub.prototype.protocol;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import org.pubsub.prototype.util.JsonSupport;
+import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -17,11 +17,11 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 
-import static org.pubsub.prototype.util.CryptoConstants.ED25519_ALGORITHM;
-import static org.pubsub.prototype.util.ProtocolConstants.IDENTITY_FILE;
-import static org.pubsub.prototype.util.ProtocolConstants.PRIVATE_KEY_FIELD;
-import static org.pubsub.prototype.util.ProtocolConstants.PUBLIC_KEY_FIELD;
-import static org.pubsub.prototype.util.Validators.requireNonNull;
+import static org.pubsub.prototype.constants.CryptoConstants.ED25519_ALGORITHM;
+import static org.pubsub.prototype.constants.ProtocolConstants.IDENTITY_FILE;
+import static org.pubsub.prototype.constants.ProtocolConstants.PRIVATE_KEY_FIELD;
+import static org.pubsub.prototype.constants.ProtocolConstants.PUBLIC_KEY_FIELD;
+import static org.pubsub.prototype.util.validation.Validators.requireNonNull;
 
 /**
  * Persists a node's Ed25519 identity as {@code identity.json} in its configured directory.

@@ -1,10 +1,48 @@
 <configuration>
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{ISO8601} %-5level [%thread] %logger{36} - %msg%n</pattern>
+            <pattern>%d{ISO8601} %-5level [thread=%thread] %logger{80} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <appender name="NODE_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>${NODE_LOG_FILE:-logs/pubsub-node.log}</file>
+        <append>false</append>
+        <encoder>
+            <pattern>%d{ISO8601} %-5level [thread=%thread] %logger{80} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <appender name="NODE_INIT_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>${NODE_INIT_LOG_FILE:-logs/pubsub-node-init.log}</file>
+        <append>false</append>
+        <filter class="ch.qos.logback.core.filter.EvaluatorFilter">
+            <evaluator class="ch.qos.logback.classic.boolex.OnMarkerEvaluator">
+                <marker>INITIALIZATION</marker>
+            </evaluator>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+        <encoder>
+            <pattern>%d{ISO8601} %-5level %logger{0} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <appender name="NODE_NETWORK_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>${NODE_NETWORK_LOG_FILE:-logs/pubsub-node-network.log}</file>
+        <append>false</append>
+        <filter class="ch.qos.logback.core.filter.EvaluatorFilter">
+            <evaluator class="ch.qos.logback.classic.boolex.OnMarkerEvaluator">
+                <marker>NETWORK</marker>
+            </evaluator>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+        <encoder>
+            <pattern>%d{ISO8601} %-5level %logger{0} - %msg%n</pattern>
         </encoder>
     </appender>
     <root level="INFO">
         <appender-ref ref="STDOUT"/>
+        <appender-ref ref="NODE_FILE"/>
+        <appender-ref ref="NODE_INIT_FILE"/>
+        <appender-ref ref="NODE_NETWORK_FILE"/>
     </root>
 </configuration>

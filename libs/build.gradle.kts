@@ -12,10 +12,3 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.logback.classic)
 }
-
-tasks.register<JavaExec>("runRegistryCli") {
-    group = "application"
-    description = "Runs the Cardano topic registry CLI."
-    classpath = sourceSets.main.get().runtimeClasspath
-    mainClass.set("org.pubsub.prototype.registry.topic.cardano.RegistryCli")
-}

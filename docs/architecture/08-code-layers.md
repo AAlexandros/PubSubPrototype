@@ -5,9 +5,20 @@ related work; they do not require a separate package for every class.
 
 | Layer | Main packages and classes | Responsibility |
 | --- | --- | --- |
-| Incoming adapters | `node.adapter.http`, `node.adapter.transport`, `replication.adapter.http` | Decode requests and peer messages, authenticate and validate incoming data, translate failures to protocol responses. |
-| Application services | `node.service`, `node.runtimes`, `replication.service`, `persistence.core.RecoveryService` | Coordinate publishing, forwarding, storage, lookup, recovery, and repair. Apply checks that depend on state read or changed during the operation. |
-| Focused components | `event`, `auth`, `persistence.adapter`, `registry`, `transport` | Verify signatures, track sequences, store records, query registries, and exchange bytes with peers. |
+| Adapters | `node.adapter.http`, `node.adapter.transport`, `replication.adapter.http` | Decode requests and peer messages, authenticate and validate incoming data, translate failures to protocol responses. |
+| Services | `node.service`, `replication.service` | Sit between entry points and components. They coordinate each application's publishing, forwarding, storage, lookup, recovery, and repair workflows. Services may own periodic work and lifecycle methods. |
+| Components | `event`, `auth`, `persistence.core`, `persistence.adapter`, `replication.health`, `registry`, `transport`, and protocol engines | Perform focused work such as signature checks, sequence tracking, failure tracking, file and HTTP access, registry access, placement, and protocol-state updates. |
+| Tools | `tools:registry-cli`, `tools:telemetry`, and the replication registry CLI in `apps:replication-server` | Provide command entry points and operational utilities. |
+
+An application owns the workflow it runs: `node.service.EventStorageService` handles
+the Pub/Sub node's storage and recovery requests, while `replication.service`
+handles replica placement and repair. `libs` holds data types, protocol code, and components
+that those workflows use. A component can live in `libs` even when only one
+application currently uses it; `ReplicationServerClient`, `DeliveryStateStore`,
+`LocalEventCreator`, and `FileEventStore` are examples. Their callers decide
+when to make requests or update local state.
+The topic registry CLI runs from `tools:registry-cli`; its Cardano registry
+implementation remains in `libs`.
 
 ## Authentication pattern
 
@@ -18,9 +29,9 @@ details stay in the implementation.
 
 | Input | Boundary check | Result |
 | --- | --- | --- |
-| Event from a peer | `NodeTransportListener` calls `EventValidator` before `NodeEventCoordinator` handles it. The validator uses `PublisherEventAuthenticator` for publisher signatures and tracks duplicates. | Event acceptance or a rejection reason. |
-| Event or replica submitted by HTTP | `ReplicationHttpServer` calls `PersistenceEventValidator`, which uses `PublisherEventAuthenticator` and checks the topic's publisher list. | Active topic state. |
-| Publisher progress submitted by HTTP | `PublisherProgress` verifies its signature when decoded; `ReplicationHttpServer` calls `PublisherProgressAuthenticator` to check topic and publisher eligibility. | Active topic state. |
+| Event from a peer | `NodeTransportListener` calls `EventValidator` before `EventProcessingService` handles it. The validator uses `PublisherEventAuthenticator` for publisher signatures and tracks duplicates. | Event acceptance or a rejection reason. |
+| Event or replica submitted by HTTP | `ReplicationHttpAdapter` calls `PersistenceEventValidator`, which uses `PublisherEventAuthenticator` and checks the topic's publisher list. | Active topic state. |
+| Publisher progress submitted by HTTP | `PublisherProgress` verifies its signature when decoded; `ReplicationHttpAdapter` calls `PublisherProgressAuthenticator` to check topic and publisher eligibility. | Active topic state. |
 | Internal replica or repair HTTP request | `ReplicaRequestFilter` calls `HttpRequestAuthenticator`, which verifies the server signature, active membership, intended receiver, body hash, freshness, and nonce. | Authenticated server ID. |
 | P2P connection | `PeerSessionHandler` calls `PeerHandshakeAuthenticator` during a two-challenge Ed25519 handshake. | Authenticated node IDs at connection establishment. |
 
@@ -43,7 +54,7 @@ The replication-server HTTP API uses three path groups:
 - `/v1/replication/*` requires a signed request from a currently registered replication server.
 - `/v1/ops/*` exposes unauthenticated health and maintenance status.
 
-The local node command adapter does not authenticate callers; the testbed only
+The local node HTTP adapter does not authenticate callers; the testbed only
 publishes it on host loopback. The P2P handshake proves key ownership before a
 connection is activated. The transport does not encrypt or sign every later
 frame, so an active intermediary on that connection is outside this prototype's
@@ -51,7 +62,7 @@ protection. See the [Replication Server HTTP API reference](../../documentation/
 for the route list and request details.
 
 The local node CLI (`scripts/pubsub-node.mjs`) sends commands to
-`NodeControlHttpServer`. In the testbed, these ports are published on host
+`NodeControlHttpAdapter`. In the testbed, these ports are published on host
 loopback only, so this local prototype interface does not authenticate callers.
 Replication servers continue to sign internal HTTP requests with their
 registered Cardano payment keys; receivers check current membership before

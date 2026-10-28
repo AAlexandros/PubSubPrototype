@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunnerFactory;
+import org.pubsub.prototype.cardano.CardanoConfirmationWaiter;
 import org.pubsub.prototype.registry.replication.ReplicationRegistryClient;
 import org.pubsub.prototype.registry.replication.ReplicationRegistryReader;
 import org.pubsub.prototype.registry.replication.ReplicationServerState;
@@ -119,12 +120,10 @@ public final class CardanoReplicationRegistry implements ReplicationRegistryClie
     }
 
     private void awaitState(ReplicationServerState expected) {
-        for (int attempt = 0; attempt < 60; attempt++) {
-            if (queryServers(true).stream().anyMatch(expected::equals)) return;
-            pause();
-        }
-        throw new IllegalStateException("replication registry transaction did not become observable: "
-                + expected.serverId());
+        CardanoConfirmationWaiter.await(
+                () -> queryServers(true).stream().anyMatch(expected::equals),
+                new IllegalStateException("replication registry transaction did not become observable: "
+                        + expected.serverId()));
     }
 
     private List<ReplicationServerState> observedStates() {
@@ -158,15 +157,6 @@ public final class CardanoReplicationRegistry implements ReplicationRegistryClie
                     .writeValueAsString(states) + System.lineSeparator());
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to write replication-registry snapshot " + config.stateFile(), ex);
-        }
-    }
-
-    private static void pause() {
-        try {
-            Thread.sleep(2_000);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while waiting for replication-registry transaction", ex);
         }
     }
 

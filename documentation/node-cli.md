@@ -30,10 +30,37 @@ Publishing options:
 
 - `--base64` treats `--payload` as already Base64 encoded; otherwise the CLI
   encodes the text as UTF-8 before sending it.
-- `--force-broadcast` and `--tamper-signature` are test controls for publish
-  behavior.
+- `--force-broadcast` and `--tamper-signature` are acceptance-test controls.
 - `--url <base-url>` overrides the default local address, which is useful when
   the node uses a custom control port.
+
+## Publication paths
+
+Normal `publish` creates and stores a signed event, then validates it. If
+accepted, the node records delivery locally, queues persistence, and sends
+the event to peers selected for the topic. If no topic peers are known, the
+dissemination target count is zero and no peer message is sent. If rejected,
+the request fails.
+The response contains the event envelope; it does not confirm peer receipt.
+
+`--force-broadcast` sends the event to every currently connected peer, regardless
+of topic selection. It also sends events rejected by local validation so acceptance
+tests can check receiver rejection. A rejected event is not recorded as delivered
+or queued for persistence locally. Broadcast does not connect to additional peers.
+`--tamper-signature` corrupts the outgoing signature after the signed local copy
+is stored; use it with `--force-broadcast` to test receiver validation.
+
+`inject` resends a supplied envelope through normal topic dissemination without
+local validation, delivery recording, or persistence. It is used to test replay
+and duplicate handling.
+
+In the logs, `EVENT_PUBLISH_IN` marks the request and records both test flags.
+`EVENT_PUBLISHED` marks the decision to propagate, before peer transmission.
+For a rejected forced broadcast, `EVENT_VALIDATED accepted=false` shows the
+local result; the receiving node logs its own rejection.
+Normal dissemination logs `EVENT_SENT` per selected peer; forced broadcast
+does not pass through that service. Check `EVENT_RECEIVED` on another node to
+confirm arrival. `EVENT_PUBLISH_OUT route=broadcast` identifies the forced path.
 
 Examples:
 

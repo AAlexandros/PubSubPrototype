@@ -16,6 +16,7 @@ import org.pubsub.prototype.registry.replication.ReplicationMembership;
 import org.pubsub.prototype.registry.replication.ReplicationServer;
 import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.registry.topic.TopicState;
+import org.pubsub.prototype.replication.health.PeerFailureDetector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,14 +28,15 @@ import static org.pubsub.prototype.util.validation.Validators.require;
 import static org.pubsub.prototype.util.validation.Validators.requireNonNegative;
 
 /**
- * Routes event and publisher-progress operations across replication servers.
+ * Validates and routes event writes, event lookups, and publisher-progress
+ * operations across replication servers. It also validates records stored or
+ * fetched through the internal replica APIs.
  *
  * <p>An event is assigned by its event key; a topic's publisher-progress log is
- * assigned by its topic ID. Consequently, the two records can have different
- * responsible servers. Each assignment uses the topic's replication factor and
- * the active membership, excluding peers confirmed down by the shared failure
- * detector. This server can accept a request even when it is not one of the
- * responsible servers.
+ * assigned by its topic ID, so the two records can have different responsible
+ * servers. Placement uses the topic's replication factor and active membership,
+ * excluding peers confirmed down by the shared failure detector. Any server
+ * can act as the entry point for a request.
  */
 public final class ReplicationService {
 
@@ -219,7 +221,7 @@ public final class ReplicationService {
 
     /** Gets the current topic state and rejects unknown or inactive topics. */
     TopicState topicState(String topicId) {
-        TopicState topic = topics.topic(new TopicId(topicId))
+        TopicState topic = topics.findTopicState(new TopicId(topicId))
                 .orElseThrow(() -> new IllegalArgumentException("unknown topic"));
         require(topic.active(), "inactive topic");
         return topic;

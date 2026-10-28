@@ -16,6 +16,7 @@ import org.pubsub.prototype.registry.replication.ReplicationMembership;
 import org.pubsub.prototype.registry.replication.ReplicationServer;
 import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.registry.topic.TopicState;
+import org.pubsub.prototype.replication.health.PeerFailureDetector;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -112,7 +113,7 @@ class ReplicationServiceTest {
             TopicStateProvider topics = id -> Optional.of(topic);
             ReplicationService service = new ReplicationService(self, membership,
                     new PersistenceEventValidator(topics), topics, store, http, failures);
-            ReplicaMaintenanceManager maintenance = new ReplicaMaintenanceManager(self, membership, service, store,
+            ReplicaMaintenanceService maintenance = new ReplicaMaintenanceService(self, membership, service, store,
                     http, () -> List.of(topic), failures, Duration.ofMillis(10));
             ReplicaRepairRequest request = new ReplicaRepairRequest(ReplicaRecordType.TOPIC_LOG,
                     EventKeys.topicLogKey(topicId), topicId, List.of(self.serverId()), List.of());

@@ -39,11 +39,12 @@ than part of the production message path.
 | [01-overall-system.md](01-overall-system.md) | D1 and local deployment | What runs, and how do the major planes connect? |
 | [02-pubsub-node.md](02-pubsub-node.md) | D2 | What happens inside one Pub/Sub node? |
 | [03-replication-server.md](03-replication-server.md) | D3 | How are durable copies placed, repaired, and released? |
-| [04-cardano-registries.md](04-cardano-registries.md) | D4 and D10 | Who changes registry state, and how do runtimes observe it? |
+| [04-cardano-registries.md](04-cardano-registries.md) | D4 and D10 | Who changes registry state, and how do services observe it? |
 | [05-telemetry-pipeline.md](05-telemetry-pipeline.md) | D5 and data relationships | How does a run become reusable analysis data? |
 | [06-time-flows.md](06-time-flows.md) | D6 and event lifecycle | In what order does a run proceed, and what can happen to one event? |
 | [07-sequence-diagrams.md](07-sequence-diagrams.md) | D7, D8, and D9 | Which component calls which during publication, recovery, and repair? |
 | [08-code-layers.md](08-code-layers.md) | Code map | Where do API checks, orchestration, and focused components belong? |
+| [09-service-component-map.md](09-service-component-map.md) | D11 | Which services and components run inside each application, and how do they connect to Cardano registries? |
 
 ## Reading conventions
 

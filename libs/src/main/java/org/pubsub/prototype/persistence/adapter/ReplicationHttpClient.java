@@ -25,6 +25,11 @@ import static org.pubsub.prototype.constants.PersistenceConstants.RETRIES_FIELD;
 import static org.pubsub.prototype.constants.PersistenceConstants.SINCE_TIMESTAMP_FIELD;
 import static org.pubsub.prototype.util.validation.Validators.requireNonNegative;
 
+/**
+ * Sends HTTP requests to replication servers at their registered host and port.
+ * Pub/Sub nodes use {@code /v1/client/*}; replication servers use
+ * {@code /v1/replication/*} to exchange copies and repair requests.
+ */
 public final class ReplicationHttpClient implements AutoCloseable {
     private static final int MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
     private final HttpClient client;
@@ -45,6 +50,7 @@ public final class ReplicationHttpClient implements AutoCloseable {
         this.requestSigner = requestSigner;
     }
 
+    /** Sends an event as JSON to POST /v1/client/events and reads the stored record returned by the server. */
     public StoredEvent store(ReplicationServer server, EventEnvelope envelope) {
         return sendJson(server, ApiPaths.CLIENT_EVENTS, HttpMethods.POST, envelope, StoredEvent.class);
     }
@@ -190,8 +196,9 @@ public final class ReplicationHttpClient implements AutoCloseable {
         }
     }
 
+    /** Closes the JDK HTTP client and waits for its in-flight requests to finish. */
     @Override
     public void close() {
-        // JDK HttpClient owns no user-visible resource.
+        client.close();
     }
 }

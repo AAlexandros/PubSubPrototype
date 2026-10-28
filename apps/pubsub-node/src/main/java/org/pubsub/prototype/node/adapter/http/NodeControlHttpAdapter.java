@@ -13,6 +13,10 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.container.ContainerRequestContext;
+import jakarta.ws.rs.container.ContainerRequestFilter;
+import jakarta.ws.rs.container.ContainerResponseContext;
+import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.ext.ContextResolver;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
@@ -25,11 +29,12 @@ import org.pubsub.prototype.http.ApiPaths;
 import org.pubsub.prototype.http.HttpErrorCodes;
 import org.pubsub.prototype.http.HttpRequestBodyReader;
 import org.pubsub.prototype.http.JsonHttp;
-import org.pubsub.prototype.node.runtimes.DisseminationRuntime;
-import org.pubsub.prototype.node.runtimes.NavigationRuntime;
-import org.pubsub.prototype.node.runtimes.PersistenceRuntime;
-import org.pubsub.prototype.node.service.NodeEventCoordinator;
+import org.pubsub.prototype.node.service.DisseminationService;
+import org.pubsub.prototype.node.service.NavigationService;
+import org.pubsub.prototype.node.service.EventStorageService;
+import org.pubsub.prototype.node.service.EventProcessingService;
 import org.pubsub.prototype.node.util.AsyncUtil;
+import org.pubsub.prototype.node.util.NodeLog;
 import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.sampling.PeerSamplingService;
 import org.pubsub.prototype.util.files.JsonSupport;
@@ -41,6 +46,7 @@ import java.net.URI;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ExecutorService;
 
 import static org.pubsub.prototype.http.ApiFields.CAPACITY;
@@ -60,63 +66,62 @@ import static org.pubsub.prototype.http.ApiFields.VIEWS;
 /** Local HTTP adapter used by the pub-sub node CLI for commands and inspection. */
 @Path("/")
 @Produces(MediaType.APPLICATION_JSON)
-public final class NodeControlHttpServer implements AutoCloseable {
-    private static final Logger LOG = LoggerFactory.getLogger(NodeControlHttpServer.class);
+public final class NodeControlHttpAdapter implements AutoCloseable {
+
+    // Standard logger for the class
+    private static final Logger LOG = LoggerFactory.getLogger(NodeControlHttpAdapter.class);
 
     private final HttpServer server;
+    private final String bindHost;
     private final ExecutorService executor;
-    private final NodeEventCoordinator events;
-    private PeerSamplingService sampling;
-    private NavigationRuntime navigation;
-    private DisseminationRuntime dissemination;
-    private PersistenceRuntime persistence;
-    private String nodeId;
-    private int samplingCapacity;
+    private final EventProcessingService events;
+    private final PeerSamplingService sampling;
+    private final NavigationService navigation;
+    private final DisseminationService dissemination;
+    private final EventStorageService eventStorage;
+    private final String nodeId;
+    private final int samplingCapacity;
 
-    public NodeControlHttpServer(String host, int port, NodeEventCoordinator events) throws IOException {
+    public NodeControlHttpAdapter(String host, int port, EventProcessingService events,
+                                  PeerSamplingService sampling, NavigationService navigation,
+                                  DisseminationService dissemination,
+                                  EventStorageService eventStorage,
+                                  String nodeId, int samplingCapacity) throws IOException {
+        this.bindHost = host;
         this.events = events;
+        this.sampling = sampling;
+        this.navigation = navigation;
+        this.dissemination = dissemination;
+        this.eventStorage = eventStorage;
+        this.nodeId = nodeId;
+        this.samplingCapacity = samplingCapacity;
         ResourceConfig routes = new ResourceConfig()
                 .register(this)
                 .register(JacksonFeature.class)
                 .register(new JsonMapperProvider())
+                .register(new ApiCallLogger())
                 .register(new JsonErrorMapper());
         this.server = JdkHttpServerFactory.createHttpServer(
                 URI.create("http://" + host + ":" + port + "/"), routes, false);
         this.executor = AsyncUtil.singleThread("event-control");
         server.setExecutor(executor);
-    }
-
-    public void addSampling(PeerSamplingService sampling, String nodeId, int capacity) {
-        this.sampling = sampling;
-        this.nodeId = nodeId;
-        this.samplingCapacity = capacity;
-    }
-
-    public void addNavigation(NavigationRuntime navigation, String nodeId) {
-        this.navigation = navigation;
-        this.nodeId = nodeId;
-    }
-
-    public void addDissemination(DisseminationRuntime dissemination, String nodeId) {
-        this.dissemination = dissemination;
-        this.nodeId = nodeId;
-    }
-
-    public void addPersistence(PersistenceRuntime persistence) {
-        this.persistence = persistence;
+        NodeLog.init(LOG, "HTTP_CONTROL_CONFIGURED bind={} port={} samplingCapacity={}",
+                bindHost, port, samplingCapacity);
     }
 
     public void start() {
         server.start();
+        NodeLog.init(LOG, "HTTP_CONTROL_LISTENING bind={} port={}", bindHost, server.getAddress().getPort());
     }
 
+    /** Accepts a local publication; query flags are acceptance-test controls. */
     @POST
     @Path(ApiPaths.EVENT_PUBLISH)
     @Consumes(MediaType.APPLICATION_JSON)
     public Response publish(PublishRequest request,
                             @QueryParam(ApiParameters.FORCE_BROADCAST) String forceBroadcast,
                             @QueryParam(ApiParameters.TAMPER_SIGNATURE) String tamperSignature) {
-        EventEnvelope event = events.publish(
+        EventEnvelope event = events.publishEvent(
                 new TopicId(request.topicId),
                 Base64.getDecoder().decode(request.payload),
                 Boolean.parseBoolean(forceBroadcast),
@@ -124,18 +129,22 @@ public final class NodeControlHttpServer implements AutoCloseable {
         return json(200, new PublishResponse(event.eventId(), event.sequenceNumber(), event));
     }
 
+    /** Replays a supplied envelope for acceptance testing without local validation. */
     @POST
     @Path(ApiPaths.EVENT_INJECT)
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response inject(EventEnvelope event) {
-        EventEnvelope injected = events.inject(event);
-        return json(200, new PublishResponse(injected.eventId(), injected.sequenceNumber(), injected));
+    public Response replayEventForAcceptance(EventEnvelope event) {
+        LOG.info("EVENT_INJECT_IN eventId={} topicId={} sequenceNumber={}",
+                event.eventId(), event.topicId(), event.sequenceNumber());
+        dissemination.sendEventToTopicPeers(event, null);
+        LOG.info("EVENT_INJECT_OUT eventId={}", event.eventId());
+        return json(200, new PublishResponse(event.eventId(), event.sequenceNumber(), event));
     }
 
     @GET
     @Path(ApiPaths.PUBLISHER_KEY_ID)
     public Response publisherKeyId() {
-        return json(200, Map.of(PUBLISHER_KEY_ID, events.publisherKeyId()));
+        return json(200, Map.of(PUBLISHER_KEY_ID, events.getLocalPublisherKeyId()));
     }
 
     @GET
@@ -205,13 +214,13 @@ public final class NodeControlHttpServer implements AutoCloseable {
     @POST
     @Path(ApiPaths.EVENT_RECOVER + "/{topicId}")
     public Response recover(@PathParam("topicId") String topicId) {
-        return json(200, persistence.recover(new TopicId(topicId).value(), events::acceptRecovered));
+        return json(200, eventStorage.recover(new TopicId(topicId).value(), events::validateRecoveredEvent));
     }
 
     @GET
     @Path(ApiPaths.EVENT_RECOVERY_STATE)
     public Response recoveryState() {
-        return json(200, persistence.deliveryState());
+        return json(200, eventStorage.deliveryState());
     }
 
     private static Response json(int status, Object body) {
@@ -220,6 +229,53 @@ public final class NodeControlHttpServer implements AutoCloseable {
 
     private static Response error(int status, String message) {
         return json(status, Map.of(HttpErrorCodes.ERROR, message));
+    }
+
+    /** Logs every local API call, including requests rejected before a resource method runs. */
+    private static final class ApiCallLogger implements ContainerRequestFilter, ContainerResponseFilter {
+        private static final AtomicLong NEXT_ID = new AtomicLong();
+        private static final String CALL_ID = "apiCallId";
+        private static final String START_NANOS = "apiStartNanos";
+
+        @Override
+        public void filter(ContainerRequestContext request) {
+            long callId = NEXT_ID.incrementAndGet();
+            request.setProperty(CALL_ID, callId);
+            request.setProperty(START_NANOS, System.nanoTime());
+            NodeLog.network(LOG, "API_IN callId={} method={} path={} query={}", callId, request.getMethod(),
+                    request.getUriInfo().getPath(), request.getUriInfo().getRequestUri().getRawQuery());
+        }
+
+        @Override
+        public void filter(ContainerRequestContext request, ContainerResponseContext response) {
+            if (request.getProperty(CALL_ID) == null) {
+                // Jersey can skip request filters when routing fails (for example, HTTP 405).
+                request.setProperty(CALL_ID, NEXT_ID.incrementAndGet());
+                NodeLog.network(LOG, "API_IN callId={} method={} path={} query={}", request.getProperty(CALL_ID),
+                        request.getMethod(), request.getUriInfo().getPath(),
+                        request.getUriInfo().getRequestUri().getRawQuery());
+            }
+            Long start = (Long) request.getProperty(START_NANOS);
+            long elapsedMs = start == null ? -1 : (System.nanoTime() - start) / 1_000_000;
+            Object entity = response.getEntity();
+            NodeLog.network(LOG, "API_OUT callId={} method={} path={} status={} resultType={} result={} elapsedMs={}",
+                    request.getProperty(CALL_ID), request.getMethod(), request.getUriInfo().getPath(),
+                    response.getStatus(), entity == null ? "none" : entity.getClass().getSimpleName(),
+                    summarize(entity), elapsedMs);
+        }
+
+        private static String summarize(Object entity) {
+            String value;
+            if (entity instanceof PublishResponse published) {
+                value = "eventId=" + published.eventId() + " sequenceNumber=" + published.sequenceNumber();
+            } else if (entity instanceof Map<?, ?> || entity instanceof org.pubsub.prototype.persistence.RecoveryResult) {
+                value = String.valueOf(entity);
+            } else {
+                value = "omitted";
+            }
+            value = value.replace('\n', ' ').replace('\r', ' ');
+            return value.length() <= 1000 ? value : value.substring(0, 1000) + "...";
+        }
     }
 
     @Provider

@@ -6,7 +6,7 @@ import org.pubsub.prototype.util.files.TextFiles;
 import java.nio.file.Path;
 
 /** Owns the names, locations, and persistence of generated Cardano transaction files. */
-final class CardanoTransactionArtifacts {
+public final class CardanoTransactionArtifacts {
     private static final String DATUM_SUFFIX = ".datum.json";
     private static final String REDEEMER_SUFFIX = ".redeemer.json";
     private static final String TRANSACTION_BODY_SUFFIX = ".txbody";
@@ -15,27 +15,27 @@ final class CardanoTransactionArtifacts {
 
     private final CardanoRegistryConfig config;
 
-    CardanoTransactionArtifacts(CardanoRegistryConfig config) {
+    public CardanoTransactionArtifacts(CardanoRegistryConfig config) {
         this.config = config;
     }
 
-    Path writeDatum(String artifactName, String content) {
+    public Path writeDatum(String artifactName, String content) {
         return write(artifactName + DATUM_SUFFIX, content);
     }
 
-    Path writeMintRedeemer(String content) {
+    public Path writeMintRedeemer(String content) {
         return write(MINT_REDEEMER_NAME + REDEEMER_SUFFIX, content);
     }
 
-    Path writeTopicRedeemer(String operation, String content) {
+    public Path writeTopicRedeemer(String operation, String content) {
         return write(operation + REDEEMER_SUFFIX, content);
     }
 
-    Path transactionBody(String artifactName) {
+    public Path transactionBody(String artifactName) {
         return prepare(artifactName + TRANSACTION_BODY_SUFFIX);
     }
 
-    Path signedTransaction(String artifactName) {
+    public Path signedTransaction(String artifactName) {
         return prepare(artifactName + SIGNED_TRANSACTION_SUFFIX);
     }
 

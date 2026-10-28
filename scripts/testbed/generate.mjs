@@ -13,6 +13,9 @@ if (serverIds.length !== 3 || serverIds.some(id => !/^[0-9a-f]{64}$/.test(id))) 
 const runtime = path.join(root, '.tools', 'phase-0.9');
 const configs = path.join(runtime, 'config');
 fs.mkdirSync(configs, {recursive: true});
+for (let index = 1; index <= nodeCount; index++) {
+  fs.mkdirSync(path.join(runtime, 'logs', `node-${index}`), {recursive: true});
+}
 
 for (let index = 1; index <= nodeCount; index++) {
   const seed = index === 1 ? '[]' : `[{host: pubsub-node-1, port: ${settings.transportPort}}]`;
@@ -58,9 +61,9 @@ timing: {connectionTimeoutMs: 500, requestTimeoutMs: 1500, retries: 0, cleanupIn
 
 let compose = `name: phase-0-9\nservices:\n`;
 for (let index = 1; index <= 3; index++) compose += `  replication-server-${index}:
-    build: {context: ../.., dockerfile: apps/replication-server/Dockerfile, args: {CARDANO_TESTNET_VERSION: \${CARDANO_TESTNET_VERSION:-11.0.1}}}
+    build: {context: ../.., dockerfile: apps/replication-server/Dockerfile, args: {CARDANO_TESTNET_VERSION: "\${CARDANO_TESTNET_VERSION:-11.0.1}"}}
     command: [/config/server-${index}.yaml]
-    environment: {CARDANO_NETWORK_MAGIC: \${CARDANO_NETWORK_MAGIC:-42}, CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock}
+    environment: {CARDANO_NETWORK_MAGIC: "\${CARDANO_NETWORK_MAGIC:-42}", CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock}
     volumes:
       - {type: bind, source: ./config/server-${index}.yaml, target: /config/server-${index}.yaml, read_only: true}
       - {type: bind, source: ../../ops/infra/devnet/keys/${signers[index - 1]}, target: /request-keys, read_only: true}
@@ -68,17 +71,19 @@ for (let index = 1; index <= 3; index++) compose += `  replication-server-${inde
       - {type: bind, source: ../../ops/infra/devnet/runtime/replication-registry, target: /replication-registry, read_only: true}
       - {type: bind, source: ../../ops/infra/devnet/runtime/testnet/socket, target: /node-socket, read_only: true}
       - replication-server-${index}-data:/data
-    ports: [\"127.0.0.1:${settings.hostReplicationPortBase + index}:${settings.replicationPort}\"]
+    ports: ["127.0.0.1:${settings.hostReplicationPortBase + index}:${settings.replicationPort}"]
 `;
 for (let index = 1; index <= nodeCount; index++) compose += `  pubsub-node-${index}:
     build: {context: ../.., dockerfile: apps/pubsub-node/Dockerfile}
     command: [/config/node-${index}.yaml]
+    environment: {NODE_LOG_FILE: /logs/node.log, NODE_INIT_LOG_FILE: /logs/initialization.log, NODE_NETWORK_LOG_FILE: /logs/network.log}
     volumes:
       - {type: bind, source: ./config/node-${index}.yaml, target: /config/node-${index}.yaml, read_only: true}
+      - {type: bind, source: ./logs/node-${index}, target: /logs}
       - {type: bind, source: ../../ops/infra/devnet/runtime/registry, target: /registry, read_only: true}
       - {type: bind, source: ../../ops/infra/devnet/runtime/replication-registry, target: /replication-registry, read_only: true}
       - pubsub-node-${index}-identity:/data/identity
-    ports: [\"127.0.0.1:${settings.hostTransportPortBase + index}:${settings.transportPort}\", \"127.0.0.1:${settings.hostControlPortBase + index}:${settings.controlPort}\"]
+    ports: ["127.0.0.1:${settings.hostTransportPortBase + index}:${settings.transportPort}", "127.0.0.1:${settings.hostControlPortBase + index}:${settings.controlPort}"]
 `;
 compose += 'volumes:\n';
 for (let index = 1; index <= 3; index++) compose += `  replication-server-${index}-data:\n`;

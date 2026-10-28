@@ -2,6 +2,13 @@ package org.pubsub.prototype.registry.topic.cardano;
 
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunnerFactory;
+import org.pubsub.prototype.cardano.cli.CardanoCliUnavailableException;
+import org.pubsub.prototype.cardano.CardanoConfirmationWaiter;
+import org.pubsub.prototype.cardano.cli.transaction.CardanoPaymentIdentity;
+import org.pubsub.prototype.cardano.cli.transaction.CardanoTransactionLog;
+import org.pubsub.prototype.cardano.cli.transaction.SignTransactionCommand;
+import org.pubsub.prototype.cardano.cli.transaction.SubmitTransactionCommand;
+import org.pubsub.prototype.constants.CryptoConstants;
 import org.pubsub.prototype.registry.RegistryConflictException;
 import org.pubsub.prototype.registry.topic.CreateTopicRequest;
 import org.pubsub.prototype.registry.topic.RegistrySnapshot;
@@ -10,44 +17,99 @@ import org.pubsub.prototype.registry.topic.TopicRegistry;
 import org.pubsub.prototype.registry.topic.TopicState;
 import org.pubsub.prototype.registry.topic.cardano.datum.CardanoCliUtxoParser;
 import org.pubsub.prototype.registry.topic.cardano.datum.CardanoScriptUtxo;
+import org.pubsub.prototype.registry.topic.cardano.datum.AikenScriptDataCodec;
 import org.pubsub.prototype.registry.topic.cardano.mutation.TopicMutation;
-import org.pubsub.prototype.registry.topic.cardano.transaction.CardanoTransactionBuilder;
+import org.pubsub.prototype.registry.topic.cardano.mutation.TopicOperation;
+import org.pubsub.prototype.registry.topic.cardano.mutation.TopicStateTransitions;
+import org.pubsub.prototype.registry.topic.cardano.transaction.CardanoRegistryIdentityValidator;
+import org.pubsub.prototype.registry.topic.cardano.transaction.CardanoTransactionArtifacts;
+import org.pubsub.prototype.registry.topic.cardano.transaction.CardanoTransactionSigner;
+import org.pubsub.prototype.registry.topic.cardano.transaction.command.CreateTopicCommand;
+import org.pubsub.prototype.registry.topic.cardano.transaction.command.SpendTopicCommand;
 import org.pubsub.prototype.util.files.TextFiles;
 
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public final class CardanoTopicRegistry implements TopicRegistry {
+    private static final HexFormat HEX = HexFormat.of();
+    private static final long SCRIPT_OUTPUT_LOVELACE = 2_000_000L;
+    private static final int TOPIC_TOKEN_QUANTITY = 1;
+
     private final CardanoRegistryConfig config;
     private final CardanoCommandRunner commandRunner;
     private final CardanoCliUtxoParser utxoParser;
     private final CardanoRegistryDeploymentManager deployments;
-    private final CardanoTransactionBuilder transactions;
+    private final AikenScriptDataCodec scriptDataCodec;
+    private final CardanoRegistryIdentityValidator identityValidator;
+    private final CardanoTransactionArtifacts artifacts;
+    private final CardanoTransactionSigner transactionSigner;
+    private final CardanoTransactionLog transactionLog;
 
     public CardanoTopicRegistry(CardanoRegistryConfig config) {
+        this(config, CardanoCommandRunnerFactory.create(config.cliBackend(), config.runtimeDir()));
+    }
+
+    CardanoTopicRegistry(CardanoRegistryConfig config, CardanoCommandRunner commandRunner) {
         this.config = config;
-        this.commandRunner = CardanoCommandRunnerFactory.create(config.cliBackend(), config.runtimeDir());
+        this.commandRunner = commandRunner;
         this.utxoParser = new CardanoCliUtxoParser();
         this.deployments = new CardanoRegistryDeploymentManager(config, commandRunner);
-        this.transactions = new CardanoTransactionBuilder(config, commandRunner, deployments);
+        this.scriptDataCodec = new AikenScriptDataCodec();
+        this.identityValidator = new CardanoRegistryIdentityValidator();
+        this.artifacts = new CardanoTransactionArtifacts(config);
+        this.transactionSigner = new CardanoTransactionSigner(config, commandRunner);
+        this.transactionLog = new CardanoTransactionLog(config.transactionLogFile());
     }
 
     @Override
-    public RegistrySnapshot snapshot() {
+    public RegistrySnapshot activeTopicsSnapshot() {
         return new RegistrySnapshot(readOnChainTopics().stream().filter(TopicState::active).toList(), Instant.now());
     }
 
     @Override
-    public Optional<TopicState> topic(TopicId topicId) {
+    public Optional<TopicState> findTopicState(TopicId topicId) {
         return readOnChainTopics().stream().filter(topic -> topic.topicId().equals(topicId)).findFirst();
     }
 
     @Override
     public TopicId createTopic(CreateTopicRequest request) {
-        TopicId topicId = transactions.createTopic(request);
-        waitUntilChanged(topicId, Optional.empty());
+        requireCommandExecution();
+        RegistryDeployment deployment = deployments.read();
+        CardanoPaymentIdentity signer = transactionSigner.identity();
+        String creationSeed = signer.paymentUtxo(commandRunner, Set.of());
+        String collateral = signer.collateralUtxo(commandRunner, Set.of(creationSeed));
+        String tokenName = creationTokenName(creationSeed);
+        TopicId topicId = new TopicId(tokenName);
+        String owner = identityValidator.requirePaymentKeyHash(transactionSigner.paymentKeyHash());
+        TopicState topic = new TopicState(topicId, request.name(), List.of(owner),
+                identityValidator.requirePaymentKeyHashes(request.admins()),
+                identityValidator.normalizePublisherKeyIds(request.publishers()),
+                request.replicationFactor(), request.retentionPeriod(), true);
+
+        String artifactName = "create-" + topicId;
+        Path datum = writeDatum(topic, artifactName);
+        Path body = artifacts.transactionBody(artifactName);
+        Path signed = artifacts.signedTransaction(artifactName);
+        Path mintRedeemer = artifacts.writeMintRedeemer(
+                scriptDataCodec.encodeMintRedeemer(creationSeed, tokenName, topicId));
+        commandRunner.run(new CreateTopicCommand(commandRunner.networkMagic(), signer.address(),
+                creationSeed, collateral, topicOutput(deployment, tokenName), datum,
+                topicAsset(deployment, tokenName), deployments.mintingPolicyScript(),
+                mintRedeemer, owner, body));
+
+        String logDetails = "topicId=" + topicId + " token=" + deployment.policyId() + "." + tokenName;
+        signAndSubmit(body, signed, signer,
+                "TOPIC_CREATED " + logDetails, "TOPIC_CREATE_FAILED " + logDetails);
+        waitUntilCreated(topicId);
         return topicId;
     }
 
@@ -100,8 +162,8 @@ public final class CardanoTopicRegistry implements TopicRegistry {
         deployments.initialize();
     }
 
-    /** Returns active and tombstoned topics visible to the registry. */
-    public RegistrySnapshot snapshotIncludingTombstones() {
+    @Override
+    public RegistrySnapshot allTopicsSnapshot() {
         return new RegistrySnapshot(readOnChainTopics(), Instant.now());
     }
 
@@ -115,45 +177,112 @@ public final class CardanoTopicRegistry implements TopicRegistry {
     }
 
     public void buildInvalidLastOwnerRemoval(TopicId topicId, String owner) {
-        TopicState current = topic(topicId).orElseThrow(() -> new RegistryConflictException("unknown on-chain topicId: " + topicId));
-        transactions.buildInvalidLastOwnerRemoval(current, owner);
+        requireCommandExecution();
+        TopicState current = findTopicState(topicId).orElseThrow(() -> new RegistryConflictException("unknown on-chain topicId: " + topicId));
+        RegistryDeployment deployment = deployments.read();
+        CardanoPaymentIdentity signer = transactionSigner.identity();
+        String ownerHash = identityValidator.requirePaymentKeyHash(owner);
+        String artifactName = "direct-last-owner-removal-" + topicId;
+        Path datum = artifacts.writeDatum(artifactName, scriptDataCodec.encodeDatum(
+                current.topicId(), current.name(), List.of(), current.admins(), current.publishers(),
+                current.replicationFactor(), current.retentionPeriod(), current.active(),
+                identityValidator::requirePaymentKeyHash));
+        Path body = artifacts.transactionBody(artifactName);
+        buildTopicSpend(current, new TopicMutation(TopicOperation.REMOVE_OWNER, ownerHash),
+                deployment, signer, datum, body);
     }
 
     private void mutate(TopicId topicId, TopicMutation mutation) {
-        TopicState current = topic(topicId).orElseThrow(() -> new RegistryConflictException("unknown on-chain topicId: " + topicId));
-        String spentTopicUtxo = transactions.updateTopic(current, mutation);
-        waitUntilMoved(topicId, spentTopicUtxo);
+        requireCommandExecution();
+        TopicState current = findTopicState(topicId).orElseThrow(() -> new RegistryConflictException("unknown on-chain topicId: " + topicId));
+        RegistryDeployment deployment = deployments.read();
+        CardanoPaymentIdentity signer = transactionSigner.identity();
+        TopicMutation onChainMutation = identityValidator.normalizeMutation(mutation);
+        TopicState next = TopicStateTransitions.apply(current, onChainMutation);
+        String artifactName = mutation.operationValue() + "-" + topicId;
+        Path datum = writeDatum(next, artifactName);
+        Path body = artifacts.transactionBody(artifactName);
+        Path signed = artifacts.signedTransaction(artifactName);
+
+        String spentUtxo = buildTopicSpend(current, onChainMutation, deployment, signer, datum, body);
+        boolean delete = mutation.operation() == TopicOperation.DELETE_TOPIC;
+        String logDetails = "operation=" + mutation.operationValue() + " topicId=" + topicId;
+        signAndSubmit(body, signed, signer,
+                (delete ? "TOPIC_DELETED " : "TOPIC_UPDATED ") + logDetails,
+                (delete ? "TOPIC_DELETE_FAILED " : "TOPIC_UPDATE_FAILED ") + logDetails);
+        waitUntilMoved(topicId, spentUtxo);
     }
 
-    private void waitUntilChanged(TopicId topicId, Optional<TopicState> previous) {
-        for (int attempt = 0; attempt < 60; attempt++) {
-            Optional<TopicState> observed = topic(topicId);
-            if (observed.isPresent() && !observed.equals(previous)) {
-                return;
-            }
-            sleep();
+    private String buildTopicSpend(TopicState current, TopicMutation mutation,
+                                   RegistryDeployment deployment, CardanoPaymentIdentity signer,
+                                   Path datum, Path body) {
+        String topicUtxo = topicUtxo(current.topicId())
+                .orElseThrow(() -> new RegistryConflictException(
+                        "topic UTxO not found on-chain: " + current.topicId()))
+                .ref();
+        String payment = signer.paymentUtxo(commandRunner, Set.of());
+        String collateral = signer.collateralUtxo(commandRunner, Set.of(payment));
+        Path redeemer = artifacts.writeTopicRedeemer(mutation.operationValue(),
+                scriptDataCodec.encodeTopicRedeemer(mutation, identityValidator::requirePaymentKeyHash));
+        commandRunner.run(new SpendTopicCommand(commandRunner.networkMagic(), signer.address(),
+                topicUtxo, deployments.validatorScript(), redeemer, payment, collateral,
+                topicOutput(deployment, current.topicId().value()), datum,
+                transactionSigner.paymentKeyHash(), body));
+        return topicUtxo;
+    }
+
+    /** Signs and submits a transaction, recording either its success or the stage at which it failed. */
+    void signAndSubmit(Path body, Path signed, CardanoPaymentIdentity signer,
+                       String successLog, String failureLog) {
+        try {
+            commandRunner.run(new SignTransactionCommand(body, signer.signingKey(),
+                    commandRunner.networkMagic(), signed));
+        } catch (RuntimeException ex) {
+            appendFailureLog(failureLog, "sign", ex);
+            throw ex;
         }
-        throw new RegistryConflictException("submitted Cardano registry transaction did not become observable: " + topicId);
+        String submitOutput;
+        try {
+            submitOutput = commandRunner.run(new SubmitTransactionCommand(signed,
+                    commandRunner.networkMagic()));
+        } catch (RuntimeException ex) {
+            appendFailureLog(failureLog, "submit", ex);
+            throw ex;
+        }
+        transactionLog.append(successLog + " tx=" + normalizedLogValue(submitOutput));
+    }
+
+    private void appendFailureLog(String failureLog, String stage, RuntimeException failure) {
+        try {
+            String message = failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage();
+            transactionLog.append(failureLog + " stage=" + stage + " error=" + normalizedLogValue(message));
+        } catch (RuntimeException logFailure) {
+            failure.addSuppressed(logFailure);
+        }
+    }
+
+    private static String normalizedLogValue(String value) {
+        return value.replace(System.lineSeparator(), " ").replace('\n', ' ').replace('\r', ' ').trim();
+    }
+
+    private void requireCommandExecution() {
+        try {
+            commandRunner.requireCommandExecution();
+        } catch (CardanoCliUnavailableException ex) {
+            throw new RegistryConflictException(ex.getMessage());
+        }
+    }
+
+    private void waitUntilCreated(TopicId topicId) {
+        CardanoConfirmationWaiter.await(
+                () -> findTopicState(topicId).isPresent(),
+                new RegistryConflictException("submitted Cardano registry transaction did not become observable: " + topicId));
     }
 
     private void waitUntilMoved(TopicId topicId, String spentUtxo) {
-        for (int attempt = 0; attempt < 60; attempt++) {
-            Optional<CardanoScriptUtxo> observed = topicUtxo(topicId);
-            if (observed.isPresent() && !observed.orElseThrow().ref().equals(spentUtxo)) {
-                return;
-            }
-            sleep();
-        }
-        throw new RegistryConflictException("submitted Cardano registry transaction did not move topic UTxO: " + topicId);
-    }
-
-    private static void sleep() {
-        try {
-            Thread.sleep(2_000);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while waiting for Cardano registry transaction", ex);
-        }
+        CardanoConfirmationWaiter.await(
+                () -> topicUtxo(topicId).filter(observed -> !observed.ref().equals(spentUtxo)).isPresent(),
+                new RegistryConflictException("submitted Cardano registry transaction did not move topic UTxO: " + topicId));
     }
 
     private List<TopicState> readOnChainTopics() {
@@ -192,6 +321,39 @@ public final class CardanoTopicRegistry implements TopicRegistry {
                 .filter(utxo -> utxo.containsPolicy(deployment.policyId()))
                 .filter(utxo -> utxo.topicState().map(state -> state.topicId().equals(topicId)).orElse(false))
                 .findFirst();
+    }
+
+    private Path writeDatum(TopicState topic, String artifactName) {
+        return artifacts.writeDatum(artifactName,
+                scriptDataCodec.encodeDatum(topic, identityValidator::requirePaymentKeyHash));
+    }
+
+    private static String topicOutput(RegistryDeployment deployment, String tokenName) {
+        return deployment.validatorAddress() + "+" + SCRIPT_OUTPUT_LOVELACE + "+"
+                + topicAsset(deployment, tokenName);
+    }
+
+    private static String topicAsset(RegistryDeployment deployment, String tokenName) {
+        return TOPIC_TOKEN_QUANTITY + " " + deployment.policyId() + "." + tokenName;
+    }
+
+    /** Derives the token name from the creation UTxO using the Aiken policy's byte layout. */
+    private static String creationTokenName(String creationSeed) {
+        String[] parts = creationSeed.split("#", 2);
+        if (parts.length != 2) {
+            throw new RegistryConflictException("Invalid UTxO reference: " + creationSeed);
+        }
+        byte[] txHash = HEX.parseHex(parts[0]);
+        long outputIndex = Long.parseLong(parts[1]);
+        ByteBuffer bytes = ByteBuffer.allocate(txHash.length + Long.BYTES);
+        bytes.put(txHash);
+        bytes.putLong(outputIndex);
+        try {
+            return HEX.formatHex(MessageDigest.getInstance(CryptoConstants.SHA_256_ALGORITHM)
+                    .digest(bytes.array()));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     private void writeScriptUtxoCache(String json) {

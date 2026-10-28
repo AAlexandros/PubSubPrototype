@@ -16,6 +16,15 @@ public final class PubSubNodeMain {
         }
 
         NodeConfig config = NodeConfig.load(Path.of(args[0]));
+        if (System.getProperty("NODE_LOG_FILE") == null && System.getenv("NODE_LOG_FILE") == null) {
+            System.setProperty("NODE_LOG_FILE", config.identityPath().resolve("node.log").toString());
+        }
+        if (System.getProperty("NODE_INIT_LOG_FILE") == null && System.getenv("NODE_INIT_LOG_FILE") == null) {
+            System.setProperty("NODE_INIT_LOG_FILE", config.identityPath().resolve("initialization.log").toString());
+        }
+        if (System.getProperty("NODE_NETWORK_LOG_FILE") == null && System.getenv("NODE_NETWORK_LOG_FILE") == null) {
+            System.setProperty("NODE_NETWORK_LOG_FILE", config.identityPath().resolve("network.log").toString());
+        }
         PubSubNodeApplication.create(config).runUntilShutdown();
     }
 }

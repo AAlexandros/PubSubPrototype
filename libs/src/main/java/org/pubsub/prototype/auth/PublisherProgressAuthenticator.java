@@ -20,7 +20,7 @@ public final class PublisherProgressAuthenticator
     public TopicState authenticate(Request request) {
         PublisherProgress progress = request.progress();
         require(request.topicId().equals(progress.topicId()), "publisher progress topic does not match request");
-        TopicState topic = topics.topic(new TopicId(request.topicId()))
+        TopicState topic = topics.findTopicState(new TopicId(request.topicId()))
                 .orElseThrow(() -> new IllegalArgumentException("unknown topic"));
         require(topic.active(), "inactive topic");
         require(topic.publishers().isEmpty() || topic.publishers().contains(progress.publisherKeyId()),

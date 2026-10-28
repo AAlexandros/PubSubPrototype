@@ -1,6 +1,6 @@
 # Replication server HTTP API
 
-`ReplicationHttpServer` exposes the HTTP API for one replication server. Its
+`ReplicationHttpAdapter` exposes the HTTP API for one replication server. Its
 route prefixes identify the caller and purpose:
 
 - `/v1/client/*` accepts publisher events and serves routed event and progress lookups.
@@ -101,6 +101,6 @@ route. Sequence and placement decisions remain with the services because they
 depend on current state.
 
 The local node CLI (`scripts/pubsub-node.mjs`) sends commands to
-`NodeControlHttpServer`. Its loopback HTTP adapter is a separate API and keeps
+`NodeControlHttpAdapter`. Its loopback HTTP adapter is a separate API and keeps
 its own `/v1/events/*` and related paths; the prefixes above apply to the
 replication server.

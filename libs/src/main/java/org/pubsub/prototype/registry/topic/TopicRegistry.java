@@ -16,10 +16,13 @@ import java.util.Optional;
  */
 public interface TopicRegistry {
     /** Returns the currently active topics visible to the registry. */
-    RegistrySnapshot snapshot();
+    RegistrySnapshot activeTopicsSnapshot();
+
+    /** Returns active and inactive topic records, including deletion tombstones. */
+    RegistrySnapshot allTopicsSnapshot();
 
     /** Returns the state for a topic, given its ID. */
-    Optional<TopicState> topic(TopicId topicId);
+    Optional<TopicState> findTopicState(TopicId topicId);
 
     /** Creates a topic from its initial metadata and returns its stable ID. */
     TopicId createTopic(CreateTopicRequest request);

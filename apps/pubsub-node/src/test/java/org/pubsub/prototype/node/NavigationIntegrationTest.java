@@ -3,8 +3,9 @@ package org.pubsub.prototype.node;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.navigation.SubscriptionStore;
-import org.pubsub.prototype.node.runtimes.NavigationRuntime;
-import org.pubsub.prototype.node.service.NodeEventCoordinator;
+import org.pubsub.prototype.node.config.NodeConfig;
+import org.pubsub.prototype.node.service.NavigationService;
+import org.pubsub.prototype.node.service.EventProcessingService;
 import org.pubsub.prototype.protocol.IdentityStore;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.NodeIdentity;
@@ -43,7 +44,7 @@ class NavigationIntegrationTest {
             a.start();
             b.start();
 
-            await(() -> !a.runtime.navigation().view().isEmpty() && !b.runtime.navigation().view().isEmpty());
+            await(() -> !a.service.navigation().view().isEmpty() && !b.service.navigation().view().isEmpty());
             await(() -> a.transport.activePeerCount() == 1 && b.transport.activePeerCount() == 1);
 
             assertTrue(knows(a, peerB));
@@ -57,49 +58,54 @@ class NavigationIntegrationTest {
         NodeIdentity identity = IdentityStore.loadOrCreate(dir.resolve("solo"));
         try (Node node = new Node("solo", port, identity, List.of(), List.of())) {
             node.start();
-            node.runtime.subscribe(TOPICS.get(0));
+            node.service.subscribe(TOPICS.get(0));
 
-            assertTrue(node.runtime.navigation().subscriptions().contains(TOPICS.get(0)));
+            assertTrue(node.service.navigation().subscriptions().contains(TOPICS.get(0)));
             assertTrue(SubscriptionStore.loadOrCreate(dir.resolve("solo-subscriptions.json")).snapshot().contains(TOPICS.get(0)));
         }
     }
 
     private static boolean knows(Node node, NodeEndpoint peer) {
-        return node.runtime.navigation().view().values().stream()
+        return node.service.navigation().view().values().stream()
                 .flatMap(List::stream)
                 .anyMatch(candidate -> candidate.nodeId().equals(peer.nodeId()));
     }
 
     private final class Node implements AutoCloseable {
-        final NavigationRuntime runtime;
+        final NavigationService service;
         final PubSubTransport transport;
 
         Node(String name, int port, NodeIdentity identity, List<String> subscriptions, List<NodeEndpoint> samples) {
             SubscriptionStore store = SubscriptionStore.loadOrCreate(dir.resolve(name + "-subscriptions.json"));
             subscriptions.forEach(store::add);
-            runtime = new NavigationRuntime(identity.nodeId().value(), "127.0.0.1", port, store,
-                    new NavigationRuntime.Settings(2, 2, 150, 60_000),
+            NodeConfig.NavigationSection config = new NodeConfig.NavigationSection();
+            config.capacity = 2;
+            config.routingBase = 2;
+            config.cycleIntervalMs = 150L;
+            config.staleAfterMs = 60_000L;
+            service = new NavigationService(identity.nodeId().value(), "127.0.0.1", port, store,
+                    config,
                     () -> TOPICS, () -> samples);
-            NodeEventCoordinator events = new NodeEventCoordinator(identity, dir.resolve(name + "-events"), topicId -> Optional.empty());
+            EventProcessingService events = new EventProcessingService(identity, dir.resolve(name + "-events"), topicId -> Optional.empty());
             transport = new PubSubTransport(new TransportConfig(name, "127.0.0.1", port, List.of(), 100, 500, 50, 100),
                     identity, new NodeEndpoint(identity.nodeId().value(), "127.0.0.1", port),
                     new TransportListener() {
                         @Override
                         public void samplingReceived(NodeId peer, ProtocolMessage message) {
-                            runtime.messageReceived(peer, message);
+                            service.messageReceived(peer, message);
                         }
                     });
-            runtime.attach(transport);
+            service.attach(transport);
         }
 
         void start() throws Exception {
             transport.start();
-            runtime.start();
+            service.start();
         }
 
         @Override
         public void close() {
-            runtime.close();
+            service.close();
             transport.close();
         }
     }

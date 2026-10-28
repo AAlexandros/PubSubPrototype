@@ -37,7 +37,7 @@ import org.pubsub.prototype.registry.replication.ReplicationMembership;
 import org.pubsub.prototype.registry.replication.ReplicationServer;
 import org.pubsub.prototype.registry.topic.TopicState;
 import org.pubsub.prototype.replication.adapter.http.exception.PersistenceUnavailableException;
-import org.pubsub.prototype.replication.service.ReplicaMaintenanceManager;
+import org.pubsub.prototype.replication.service.ReplicaMaintenanceService;
 import org.pubsub.prototype.replication.service.ReplicationService;
 import org.pubsub.prototype.util.HexUtils;
 import org.pubsub.prototype.util.files.JsonSupport;
@@ -77,8 +77,8 @@ import java.util.concurrent.Executors;
  */
 @Path("/")
 @Produces(MediaType.APPLICATION_JSON)
-public final class ReplicationHttpServer implements AutoCloseable {
-    private static final Logger LOG = LoggerFactory.getLogger(ReplicationHttpServer.class);
+public final class ReplicationHttpAdapter implements AutoCloseable {
+    private static final Logger LOG = LoggerFactory.getLogger(ReplicationHttpAdapter.class);
 
     /** Maximum JSON request body accepted by this server (4 MiB). */
 
@@ -87,7 +87,7 @@ public final class ReplicationHttpServer implements AutoCloseable {
     private final ReplicationService service;
     private final ReplicationMembership membership;
     private final ReplicationServer self;
-    private final ReplicaMaintenanceManager maintenance;
+    private final ReplicaMaintenanceService maintenance;
     private final Authenticator<EventEnvelope, TopicState> eventAuthenticator;
     private final Authenticator<PublisherProgressAuthenticator.Request, TopicState> progressAuthenticator;
 
@@ -105,8 +105,8 @@ public final class ReplicationHttpServer implements AutoCloseable {
      * @param workerThreads number of concurrent HTTP request workers
      * @throws IOException if the HTTP listener cannot be created
      */
-    public ReplicationHttpServer(String host, int port, ReplicationServer self, ReplicationService service,
-                                 ReplicationMembership membership, ReplicaMaintenanceManager maintenance,
+    public ReplicationHttpAdapter(String host, int port, ReplicationServer self, ReplicationService service,
+                                 ReplicationMembership membership, ReplicaMaintenanceService maintenance,
                                  Authenticator<EventEnvelope, TopicState> eventAuthenticator,
                                  Authenticator<PublisherProgressAuthenticator.Request, TopicState> progressAuthenticator,
                                  int workerThreads) throws IOException {

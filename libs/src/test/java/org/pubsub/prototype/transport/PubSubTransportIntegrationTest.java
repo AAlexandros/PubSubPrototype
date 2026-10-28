@@ -3,10 +3,11 @@ package org.pubsub.prototype.transport;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.event.EventEnvelope;
-import org.pubsub.prototype.event.EventPublisher;
+import org.pubsub.prototype.event.LocalEventCreator;
 import org.pubsub.prototype.protocol.IdentityStore;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.NodeIdentity;
+import org.pubsub.prototype.protocol.ProtocolMessage;
 import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.sampling.NodeEndpoint;
 
@@ -89,8 +90,8 @@ class PubSubTransportIntegrationTest {
         Probe l1 = new Probe();
         Probe l2 = new Probe();
         NodeIdentity identity = identity("publisher");
-        EventEnvelope event = new EventPublisher(identity.keyPair(), Clock.systemUTC(), tempDir.resolve("events"))
-                .publish(new TopicId("b".repeat(64)), "hello".getBytes());
+        EventEnvelope event = new LocalEventCreator(identity.keyPair(), Clock.systemUTC(), tempDir.resolve("events"))
+                .createAndStoreSignedEvent(new TopicId("b".repeat(64)), "hello".getBytes());
 
         try (PubSubTransport n1 = node("node-1", p1, List.of(peer(p2)), identity, l1);
              PubSubTransport n2 = node("node-2", p2, List.of(peer(p1)), identity("n2"), l2)) {
@@ -98,7 +99,7 @@ class PubSubTransportIntegrationTest {
             n2.start();
 
             assertEventually(() -> n1.activePeerCount() == 1 && n2.activePeerCount() == 1);
-            n1.broadcastEvent(event);
+            n1.broadcastMessage(ProtocolMessage.event(event));
             assertEventually(() -> l2.events.contains(event.eventId()));
         }
     }
@@ -114,8 +115,8 @@ class PubSubTransportIntegrationTest {
         NodeIdentity i1 = identity("target-publisher");
         NodeIdentity i2 = identity("target-recipient");
         NodeIdentity i3 = identity("target-bystander");
-        EventEnvelope event = new EventPublisher(i1.keyPair(), Clock.systemUTC(), tempDir.resolve("target-events"))
-                .publish(new TopicId("c".repeat(64)), "targeted".getBytes());
+        EventEnvelope event = new LocalEventCreator(i1.keyPair(), Clock.systemUTC(), tempDir.resolve("target-events"))
+                .createAndStoreSignedEvent(new TopicId("c".repeat(64)), "targeted".getBytes());
 
         try (PubSubTransport n1 = node("node-1", p1, List.of(peer(p3)), i1, l1);
              PubSubTransport n2 = node("node-2", p2, List.of(), i2, l2);
@@ -125,7 +126,7 @@ class PubSubTransportIntegrationTest {
             n3.start();
             assertEventually(() -> n1.activePeerCount() == 1 && n3.activePeerCount() == 1);
 
-            n1.sendEvent(new NodeEndpoint(i2.nodeId().value(), "127.0.0.1", p2), event);
+            n1.sendMessage(new NodeEndpoint(i2.nodeId().value(), "127.0.0.1", p2), ProtocolMessage.event(event));
 
             assertEventually(() -> l2.events.contains(event.eventId()));
             TimeUnit.MILLISECONDS.sleep(250);
@@ -141,9 +142,9 @@ class PubSubTransportIntegrationTest {
         NodeIdentity receiverIdentity = identity("mismatch-receiver");
         NodeIdentity expectedIdentity = identity("mismatch-expected");
         Probe receiverProbe = new Probe();
-        EventEnvelope event = new EventPublisher(
+        EventEnvelope event = new LocalEventCreator(
                 senderIdentity.keyPair(), Clock.systemUTC(), tempDir.resolve("mismatch-events"))
-                .publish(new TopicId("d".repeat(64)), "must-not-arrive".getBytes());
+                .createAndStoreSignedEvent(new TopicId("d".repeat(64)), "must-not-arrive".getBytes());
 
         try (PubSubTransport sender = node(
                 "sender", senderPort, List.of(), senderIdentity, new Probe());
@@ -152,8 +153,8 @@ class PubSubTransportIntegrationTest {
             sender.start();
             receiver.start();
 
-            sender.sendEvent(new NodeEndpoint(
-                    expectedIdentity.nodeId().value(), "127.0.0.1", receiverPort), event);
+            sender.sendMessage(new NodeEndpoint(
+                    expectedIdentity.nodeId().value(), "127.0.0.1", receiverPort), ProtocolMessage.event(event));
 
             TimeUnit.MILLISECONDS.sleep(500);
             assertEquals(0, sender.activePeerCount());

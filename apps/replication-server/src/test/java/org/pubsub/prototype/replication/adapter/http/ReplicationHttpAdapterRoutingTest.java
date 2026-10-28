@@ -12,10 +12,10 @@ import java.net.http.HttpResponse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReplicationHttpServerRoutingTest {
+class ReplicationHttpAdapterRoutingTest {
     @Test
     void bindsPathAndQueryParametersAndRejectsWrongMethods() throws Exception {
-        try (ReplicationHttpServer server = new ReplicationHttpServer(
+        try (ReplicationHttpAdapter server = new ReplicationHttpAdapter(
                 "127.0.0.1", 0, null, null, null, null, event -> null, request -> null, 1);
              HttpClient client = HttpClient.newHttpClient()) {
             int port = boundPort(server);
@@ -38,8 +38,8 @@ class ReplicationHttpServerRoutingTest {
         }
     }
 
-    private static int boundPort(ReplicationHttpServer server) throws Exception {
-        Field field = ReplicationHttpServer.class.getDeclaredField("server");
+    private static int boundPort(ReplicationHttpAdapter server) throws Exception {
+        Field field = ReplicationHttpAdapter.class.getDeclaredField("server");
         field.setAccessible(true);
         return ((HttpServer) field.get(server)).getAddress().getPort();
     }

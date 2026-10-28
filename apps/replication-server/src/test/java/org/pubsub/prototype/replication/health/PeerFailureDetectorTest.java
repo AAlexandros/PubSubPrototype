@@ -1,4 +1,4 @@
-package org.pubsub.prototype.replication.service;
+package org.pubsub.prototype.replication.health;
 
 import org.junit.jupiter.api.Test;
 

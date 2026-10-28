@@ -1,6 +1,6 @@
 # D4 — Cardano and registry architecture
 
-Cardano provides shared, auditable control-plane state. The local Java runtimes
+Cardano provides shared, auditable control-plane state. The local Java services
 do not query the chain for every operation; registry clients materialize
 validated chain state into atomic snapshots that can be polled cheaply.
 
@@ -31,7 +31,7 @@ signing identities for topic lifecycle and policy transactions. Replication
 operators use their identities to register or unregister storage servers. The
 validators enforce the allowed state transitions on the local Cardano ledger.
 
-The right side is the bridge to the Java runtimes. Registry clients read
+The right side is the bridge to the Java services. Registry clients read
 confirmed UTxO state and replace complete JSON snapshots atomically, so a reader observes
 either the old valid snapshot or the new valid snapshot—never a partially
 written file. Pub/Sub nodes consume topic policies and server endpoints;
@@ -47,14 +47,14 @@ The registry selects one command backend at construction time:
 
 - `HOST` runs the installed `cardano-cli` and requires network magic and a node socket path.
 - `DEVNET` runs `cardano-cli` through the devnet Docker Compose service and requires network magic.
-- `CACHE_ONLY` disables commands and lets application runtimes consume the materialized registry cache.
+- `CACHE_ONLY` disables commands and lets application services consume the materialized registry cache.
 
 Shared Java execution and payment-transaction types live under
 `org.pubsub.prototype.cardano.cli`. The Topic Registry implementation lives
 under `org.pubsub.prototype.registry.topic.cardano`; the separate Replication
 Registry implementation lives under `org.pubsub.prototype.registry.replication.cardano`.
 Each registry keeps its own deployment, datum, mutation, and transaction code.
-The replication runtime consumes a persistence snapshot from
+The replication services consume a persistence snapshot from
 `org.pubsub.prototype.persistence`, without depending on the Cardano registry
 implementation.
 
@@ -62,6 +62,22 @@ There is no automatic fallback between backends. Application YAML selects
 `CACHE_ONLY`, while registry administration scripts select `DEVNET` by default.
 Set `CARDANO_CLI_BACKEND=HOST` to make those scripts use an installed CLI
 instead.
+
+For topic mutations, `CardanoTopicRegistry` selects UTxOs, constructs typed
+commands, and executes the build, sign, and submit steps through its command
+runner. The artifact helper only names and writes transaction files.
+
+`TopicRegistry.activeTopicsSnapshot()` returns active topics;
+`allTopicsSnapshot()` includes deletion tombstones; and
+`findTopicState(topicId)` looks up one topic's state. The node's registry
+synchronizer needs tombstones so it can observe topic deletion. Topic and
+replication registry writes both poll for confirmed state through
+`CardanoConfirmationWaiter` after submitting a transaction.
+
+Replication Registry administration also signs Cardano transactions, using its
+own transaction workflow. The running replication servers separately sign
+internal HTTP requests to other replication servers; those are not Cardano
+transactions.
 
 Deployment metadata and the configured signing identity are loaded lazily and
 cached for the lifetime of a `CardanoTopicRegistry` instance. Changes to
@@ -149,7 +165,7 @@ sequenceDiagram
 ## How to read D10
 
 Each administrative operation has two stages: commit the authoritative change
-on Cardano, then refresh the local read model. Runtimes discover the change on
+on Cardano, then refresh the local read model. Application services discover the change on
 their next polling cycle. The sequence therefore has an expected observation
 delay; a successful transaction does not imply that every JVM has already
 adopted the new view.

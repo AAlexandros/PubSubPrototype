@@ -1,4 +1,4 @@
-package org.pubsub.prototype.registry.topic.cardano.transaction;
+package org.pubsub.prototype.registry.topic.cardano;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -6,8 +6,6 @@ import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 import org.pubsub.prototype.cardano.cli.CardanoCommand;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
 import org.pubsub.prototype.cardano.cli.transaction.CardanoPaymentIdentity;
-import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryConfig;
-import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryDeploymentManager;
 import org.pubsub.prototype.util.files.TextFiles;
 
 import java.nio.file.Path;
@@ -15,7 +13,7 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class CardanoTransactionBuilderAuditTest {
+class CardanoTopicRegistryAuditTest {
     @TempDir
     Path tempDir;
 
@@ -35,26 +33,17 @@ class CardanoTransactionBuilderAuditTest {
                 "registry-deployer",
                 CardanoCliBackend.HOST
         );
-        FailingCommandRunner commandRunner = new FailingCommandRunner(failingStage);
-        CardanoTransactionBuilder builder = new CardanoTransactionBuilder(
-                config,
-                commandRunner,
-                new CardanoRegistryDeploymentManager(config, commandRunner)
-        );
+        CardanoTopicRegistry registry = new CardanoTopicRegistry(config, new FailingCommandRunner(failingStage));
         CardanoPaymentIdentity signer = new CardanoPaymentIdentity(
                 config.signer(),
                 "addr_test1",
                 tempDir.resolve("payment.skey"),
                 tempDir.resolve("payment.vkey")
         );
-
-        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> builder.signAndSubmit(
-                tempDir.resolve("transaction.txbody"),
-                tempDir.resolve("transaction.tx"),
-                signer,
-                "TOPIC_CREATED topicId=1",
-                "TOPIC_CREATE_FAILED topicId=1"
-        ));
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+                () -> registry.signAndSubmit(tempDir.resolve("transaction.txbody"),
+                        tempDir.resolve("transaction.tx"), signer,
+                        "TOPIC_CREATED topicId=1", "TOPIC_CREATE_FAILED topicId=1"));
 
         assertTrue(failure.getMessage().contains(failingStage + " rejected"));
         String auditLog = TextFiles.read(config.transactionLogFile());

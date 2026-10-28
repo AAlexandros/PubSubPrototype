@@ -9,11 +9,11 @@ import java.util.List;
 import java.util.Locale;
 
 /** Validates and normalizes the public key identifiers stored in the Cardano registry. */
-final class CardanoRegistryIdentityValidator {
+public final class CardanoRegistryIdentityValidator {
     private static final String PAYMENT_KEY_HASH_PATTERN = "[0-9a-fA-F]{56}";
 
     /** Validates and normalizes the key identifier carried by a topic mutation for on-chain storage. */
-    TopicMutation normalizeMutation(TopicMutation mutation) {
+    public TopicMutation normalizeMutation(TopicMutation mutation) {
         return switch (mutation.operation()) {
             case ADD_OWNER, REMOVE_OWNER, ADD_ADMIN, REMOVE_ADMIN ->
                     new TopicMutation(mutation.operation(), requirePaymentKeyHash(mutation.value()));
@@ -24,7 +24,7 @@ final class CardanoRegistryIdentityValidator {
     }
 
     /** Validates and normalizes owner or administrator payment-key hashes. */
-    List<String> requirePaymentKeyHashes(List<String> actors) {
+    public List<String> requirePaymentKeyHashes(List<String> actors) {
         List<String> hashes = new ArrayList<>();
         for (String actor : actors) {
             hashes.add(requirePaymentKeyHash(actor));
@@ -33,7 +33,7 @@ final class CardanoRegistryIdentityValidator {
     }
 
     /** Validates a public owner or administrator identifier and returns its canonical lowercase form. */
-    String requirePaymentKeyHash(String actor) {
+    public String requirePaymentKeyHash(String actor) {
         if (!actor.matches(PAYMENT_KEY_HASH_PATTERN)) {
             throw new RegistryConflictException(
                     "owner or administrator must be a 56-character Cardano payment-key hash: " + actor
@@ -43,7 +43,7 @@ final class CardanoRegistryIdentityValidator {
     }
 
     /** Validates and normalizes publisher event-key identifiers for storage on-chain. */
-    List<String> normalizePublisherKeyIds(List<String> publishers) {
+    public List<String> normalizePublisherKeyIds(List<String> publishers) {
         List<String> values = new ArrayList<>();
         for (String publisher : publishers) {
             values.add(normalizePublisherKeyId(publisher));

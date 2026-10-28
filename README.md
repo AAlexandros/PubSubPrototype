@@ -72,6 +72,27 @@ Run lifecycle and experiment commands from Bash at the repository root.
 ./scripts/testbed/down.sh
 ```
 
+Each Pub/Sub node writes logs under
+`.tools/phase-0.9/logs/node-<n>/` while the testbed runs:
+
+- `node.log` contains the complete Java log.
+- `initialization.log` shows configuration, component construction, startup,
+  and listening addresses.
+- `network.log` contains API calls, peer connections, and protocol exchanges.
+  Each file belongs to one node, so local IDs are omitted. Peer and topic IDs
+  usually use four characters in the focused logs. Event telemetry retains
+  full IDs for experiment metrics. Entries show the component's class name.
+
+Match `callId` for an API request and response, `requestId` for a peer exchange,
+and `eventId` for an event across nodes. `./scripts/testbed/collect-logs.sh`
+copies these files into `node-logs/` alongside the combined Compose log. When
+running a node outside the testbed, the default files are
+`<identityPath>/node.log`, `initialization.log`, and `network.log`; override
+their paths with `NODE_LOG_FILE`, `NODE_INIT_LOG_FILE`, and
+`NODE_NETWORK_LOG_FILE`. Payload bytes and signatures are summarized instead
+of logged. Logger names are printed in full; thread names such as
+`nioEventLoopGroup-3-3` identify Netty's I/O worker group and worker index.
+
 `up.sh` accepts 3-50 Pub/Sub nodes and reuses an existing compatible bootstrap.
 The first run can take several minutes because it builds distributions and
 images, initializes the devnet, funds operators, and submits registry

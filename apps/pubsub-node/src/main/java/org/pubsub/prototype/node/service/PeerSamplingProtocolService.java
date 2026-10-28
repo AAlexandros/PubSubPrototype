@@ -1,9 +1,11 @@
-package org.pubsub.prototype.node.runtimes;
+package org.pubsub.prototype.node.service;
 
 import org.pubsub.prototype.protocol.MessageType;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.ProtocolMessage;
 import org.pubsub.prototype.node.util.AsyncUtil;
+import org.pubsub.prototype.node.util.NodeLog;
+import org.pubsub.prototype.node.config.NodeConfig;
 import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.securecyclon.GossipExchange;
 import org.pubsub.prototype.securecyclon.SecureCyclon;
@@ -22,19 +24,19 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.RejectedExecutionException;
 
 /**
- * Bridges the serialized, transport-free protocol to outbound transport operations.
+ * Runs SecureCyclon to maintain a sample of reachable peers. A scheduled cycle
+ * sends gossip through {@link TransportSender}; inbound exchanges and peer
+ * availability updates run on one executor. Newly accepted violation proofs
+ * are forwarded to a bounded random subset of peers.
  */
-public final class PeerSamplingRuntime implements CyclicTransportRuntime {
+public final class PeerSamplingProtocolService implements CyclicTransportService {
 
-    public record Settings(int viewSize, int swapLength, long cycleIntervalMs,
-                           int ageThreshold, int proofFanout, long randomSeed) {
-    }
+    // Default logger
+    private static final Logger LOG = LoggerFactory.getLogger(PeerSamplingProtocolService.class);
 
-    //Default logger
-    private static final Logger LOG = LoggerFactory.getLogger(PeerSamplingRuntime.class);
+    // Runs sampling cycles, incoming messages, and connection updates on one thread.
+    private final ScheduledExecutorService executor = AsyncUtil.scheduledSingleThread("peer-sampling");
 
-    private final ScheduledExecutorService executor =
-            AsyncUtil.scheduledSingleThread("peer-sampling");
     private final SecureCyclon sampling;
     private final long interval;
     private final int proofFanout;
@@ -42,14 +44,18 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
     private final NodeEndpoint self;
     private TransportSender sender;
 
-    public PeerSamplingRuntime(NodeEndpoint self, Settings settings) {
+    public PeerSamplingProtocolService(NodeEndpoint self, NodeConfig.SamplingSection config) {
         this.self = self;
-        this.interval = settings.cycleIntervalMs();
-        this.proofFanout = settings.proofFanout();
-        this.proofFanoutRandom = new Random(settings.randomSeed());
-        Random samplingRandom = new Random(settings.randomSeed());
-        sampling = new SecureCyclon(self, settings.viewSize(), settings.swapLength(), interval,
-                settings.ageThreshold(), samplingRandom, LOG::info);
+        this.interval = config.cycleIntervalMs;
+        this.proofFanout = config.proofFanout;
+        this.proofFanoutRandom = new Random(config.randomSeed);
+        Random samplingRandom = new Random(config.randomSeed);
+        sampling = new SecureCyclon(self, config.viewSize, config.swapLength, interval,
+                config.ageThreshold, samplingRandom, LOG::info);
+        NodeLog.init(LOG,
+                "SAMPLING_CONFIGURED advertised={}:{} viewSize={} swapLength={} cycleMs={} ageThreshold={} proofFanout={}",
+                self.host(), self.port(), config.viewSize, config.swapLength, interval,
+                config.ageThreshold, proofFanout);
     }
 
     public SecureCyclon sampling() {
@@ -63,7 +69,7 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
 
     @Override
     public void start() {
-        LOG.info("PEER_SAMPLING_STARTED nodeId={} every interval={}ms", self.nodeId(), interval);
+        NodeLog.init(LOG, "SAMPLING_STARTED cycleMs={}", interval);
         executor.scheduleWithFixedDelay(this::runCycle, interval, interval, TimeUnit.MILLISECONDS);
     }
 
@@ -76,12 +82,20 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
             LOG.error(SecureCyclonEvent.CYCLE + " reason=fatal_logic_error", ex);
             throw ex;
         }
-        if (outgoing == null) return;
+        if (outgoing == null) {
+            LOG.info("SAMPLING_CYCLE_OUT nodeId={} result=no_exchange viewSize={}", self.nodeId(),
+                    sampling.view().size());
+            return;
+        }
 
         try {
             ProtocolMessage request = ProtocolMessage.gossip(
                     MessageType.SECURECYCLON_REQUEST, outgoing.requestId(), outgoing.exchange());
-            sender.sendSampling(outgoing.partner(), request);
+            NodeLog.network(LOG, "SAMPLING_SEND peer={} type={} requestId={} descriptors={} samples={} proofs={}",
+                    NodeLog.node(outgoing.partner().nodeId()), request.type(),
+                    request.requestId(), request.exchange().descriptors().size(),
+                    request.exchange().samples().size(), request.exchange().proofs().size());
+            sender.sendMessage(outgoing.partner(), request);
         } catch (RuntimeException ex) {
             LOG.warn(SecureCyclonEvent.CYCLE + " reason=transport_error; will_retry", ex);
         }
@@ -93,9 +107,13 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
      * immediately drains every violation proof newly accepted since the previous
      * message and sends it to a random subset of at most {@code proofFanout}
      * current neighbors, excluding the sender.
-    */
+     */
     @Override
     public void messageReceived(NodeId peer, ProtocolMessage message) {
+        NodeLog.network(LOG, "SAMPLING_IN peer={} type={} requestId={} descriptors={} samples={} proofs={}",
+                NodeLog.node(peer.value()), message.type(), message.requestId(),
+                message.exchange().descriptors().size(), message.exchange().samples().size(),
+                message.exchange().proofs().size());
         executor.execute(() -> {
             try {
                 switch (message.type()) {
@@ -104,7 +122,11 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
                                 peer.value(), message.exchange(), System.currentTimeMillis());
                         ProtocolMessage responseMessage = ProtocolMessage.gossip(
                                 MessageType.SECURECYCLON_RESPONSE, message.requestId(), response);
-                        sender.replySampling(peer, responseMessage);
+                        NodeLog.network(LOG,
+                                "SAMPLING_SEND peer={} type={} requestId={} descriptors={} samples={} proofs={}",
+                                NodeLog.node(peer.value()), responseMessage.type(), responseMessage.requestId(),
+                                response.descriptors().size(), response.samples().size(), response.proofs().size());
+                        sender.replyMessage(peer, responseMessage);
                     }
                     case SECURECYCLON_RESPONSE -> sampling.handleSwapResponse(
                             peer.value(), message.requestId(), message.exchange(), System.currentTimeMillis());
@@ -119,9 +141,11 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
                     default -> throw new IllegalArgumentException(
                             "Unsupported peer-sampling message: " + message.type());
                 }
+                LOG.info("SAMPLING_OUT peer={} type={} requestId={} viewSize={} result=accepted",
+                        NodeLog.node(peer.value()), message.type(), message.requestId(), sampling.view().size());
             } catch (IllegalArgumentException ex) {
-                LOG.warn("{} nodeId={} peerNodeId={} reason={}",
-                        SecureCyclonEvent.EXCHANGE_REJECTED, self.nodeId(), peer.value(), ex.getMessage());
+                LOG.warn("{} peer={} reason={}",
+                        SecureCyclonEvent.EXCHANGE_REJECTED, NodeLog.node(peer.value()), ex.getMessage());
             } finally {
                 disseminateNewProofs(peer);
             }
@@ -134,21 +158,33 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
     }
 
     public void seedResolved(NodeEndpoint peer) {
+        LOG.info("SAMPLING_SEED_RESOLVED peer={} endpoint={}:{}", NodeLog.node(peer.nodeId()), peer.host(),
+                peer.port());
         sampling.bootstrap(peer);
+        LOG.info("SAMPLING_VIEW_UPDATED size={}", sampling.view().size());
     }
 
-    /** Records transport liveness on the sampling executor, preserving protocol serialization. */
+    /**
+     * Records transport liveness on the sampling executor, preserving protocol
+     * serialization.
+     */
     public void peerDisconnected(NodeId peer) {
+        LOG.info("SAMPLING_PEER_UNAVAILABLE peer={}", NodeLog.node(peer.value()));
         submit(() -> sampling.peerUnavailable(peer.value(), System.currentTimeMillis()));
     }
 
-    /** A verified HELLO connection is stronger evidence than an old gossip descriptor. */
+    /**
+     * A verified HELLO connection is stronger evidence than an old gossip
+     * descriptor.
+     */
     public void peerConnected(NodeId peer) {
+        LOG.info("SAMPLING_PEER_AVAILABLE peer={}", NodeLog.node(peer.value()));
         submit(() -> sampling.peerAvailable(peer.value()));
     }
 
     private void submit(Runnable task) {
-        if (executor.isShutdown()) return;
+        if (executor.isShutdown())
+            return;
         try {
             executor.execute(task);
         } catch (RejectedExecutionException ignored) {
@@ -172,7 +208,9 @@ public final class PeerSamplingRuntime implements CyclicTransportRuntime {
                 NodeId target = new NodeId(recipient.nodeId());
                 ProtocolMessage proofMessage = ProtocolMessage.gossip(
                         MessageType.SECURECYCLON_PROOF, UUID.randomUUID(), gossip);
-                sender.replySampling(target, proofMessage);
+                NodeLog.network(LOG, "SAMPLING_SEND peer={} type={} requestId={} proofs=1",
+                        NodeLog.node(target.value()), proofMessage.type(), proofMessage.requestId());
+                sender.replyMessage(target, proofMessage);
             }
         }
     }

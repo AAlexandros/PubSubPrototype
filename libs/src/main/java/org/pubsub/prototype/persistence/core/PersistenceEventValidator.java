@@ -34,7 +34,7 @@ public final class PersistenceEventValidator implements Authenticator<EventEnvel
     }
 
     private TopicState activeTopic(String topicId) {
-        TopicState topic = topics.topic(new TopicId(topicId))
+        TopicState topic = topics.findTopicState(new TopicId(topicId))
                 .orElseThrow(() -> new IllegalArgumentException("unknown topic"));
         require(topic.active(), "inactive topic");
         return topic;

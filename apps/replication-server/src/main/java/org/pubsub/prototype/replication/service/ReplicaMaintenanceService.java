@@ -17,6 +17,7 @@ import org.pubsub.prototype.persistence.maintenance.TopicLogReplicaMetadata;
 import org.pubsub.prototype.registry.replication.ReplicationMembership;
 import org.pubsub.prototype.registry.replication.ReplicationServer;
 import org.pubsub.prototype.registry.topic.TopicState;
+import org.pubsub.prototype.replication.health.PeerFailureDetector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,9 +37,14 @@ import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.function.Supplier;
 
 
-/** Decentralized, idempotent repair/release control loop for event and topic-log replicas. */
-public final class ReplicaMaintenanceManager {
-    private static final Logger LOG = LoggerFactory.getLogger(ReplicaMaintenanceManager.class);
+/**
+ * Reconciles local event and topic-log replicas with current membership and
+ * topic policy. Each scheduled run probes relevant peers, checks inventories,
+ * and queues or pulls missing replicas. It releases an obsolete local copy
+ * only after current responsible servers confirm an equivalent copy.
+ */
+public final class ReplicaMaintenanceService {
+    private static final Logger LOG = LoggerFactory.getLogger(ReplicaMaintenanceService.class);
     private static final int MAX_INVENTORY_RECORDS = 10_000;
 
     private final ReplicationServer self;
@@ -55,7 +61,7 @@ public final class ReplicaMaintenanceManager {
     private volatile List<ReplicationServer> lastMembers = List.of();
     private volatile String membershipVersion = versionOf(List.of());
 
-    public ReplicaMaintenanceManager(ReplicationServer self, ReplicationMembership membership, ReplicationService service,
+    public ReplicaMaintenanceService(ReplicationServer self, ReplicationMembership membership, ReplicationService service,
                               FileEventStore store, ReplicationHttpClient http,
                               Supplier<List<TopicState>> topicSnapshot, PeerFailureDetector failureDetector,
                               Duration probeTimeout) {
@@ -176,7 +182,7 @@ public final class ReplicaMaintenanceManager {
         int queued = 0;
         List<ReplicationServer> healthy = healthy(members);
         for (EventReplicaMetadata event : inventory.events()) {
-            Optional<TopicState> topic = topic(event.topicId());
+            Optional<TopicState> topic = findActiveTopicState(event.topicId());
             if (topic.isEmpty() || store.get(event.eventKey()).isPresent()) continue;
             if (containsSelf(DhtAssignment.responsibleServers(event.eventKey(), healthy,
                     topic.orElseThrow().replicationFactor()))) {
@@ -188,7 +194,7 @@ public final class ReplicaMaintenanceManager {
             }
         }
         for (TopicLogReplicaMetadata log : inventory.topicLogs()) {
-            Optional<TopicState> topic = topic(log.topicId());
+            Optional<TopicState> topic = findActiveTopicState(log.topicId());
             String key = EventKeys.topicLogKey(log.topicId());
             if (topic.isEmpty()) continue;
             if (containsSelf(DhtAssignment.responsibleServers(key, healthy, topic.orElseThrow().replicationFactor()))) {
@@ -226,10 +232,10 @@ public final class ReplicaMaintenanceManager {
 
     private Set<String> monitoredServerIds(List<ReplicationServer> members) {
         Set<String> monitored = new LinkedHashSet<>();
-        for (StoredEvent record : store.eventRecords()) topic(record.eventEnvelope().topicId()).ifPresent(topic ->
+        for (StoredEvent record : store.eventRecords()) findActiveTopicState(record.eventEnvelope().topicId()).ifPresent(topic ->
                 monitored.addAll(ids(DhtAssignment.responsibleServers(record.eventKey(), members,
                         topic.replicationFactor()))));
-        for (String topicId : store.topicIds()) topic(topicId).ifPresent(topic ->
+        for (String topicId : store.topicIds()) findActiveTopicState(topicId).ifPresent(topic ->
                 monitored.addAll(ids(DhtAssignment.responsibleServers(EventKeys.topicLogKey(topicId), members,
                         topic.replicationFactor()))));
         monitored.remove(self.serverId());
@@ -241,14 +247,14 @@ public final class ReplicaMaintenanceManager {
         underReplicated.clear();
         List<ReplicationServer> healthy = healthy(members);
         for (StoredEvent record : store.eventRecords()) {
-            Optional<TopicState> topic = topic(record.eventEnvelope().topicId());
+            Optional<TopicState> topic = findActiveTopicState(record.eventEnvelope().topicId());
             if (topic.isEmpty()) continue;
             List<ReplicationServer> desired = DhtAssignment.responsibleServers(record.eventKey(), healthy,
                     topic.orElseThrow().replicationFactor());
             reconcileEvent(record, desired, version, inventories);
         }
         for (String topicId : store.topicIds()) {
-            Optional<TopicState> topic = topic(topicId);
+            Optional<TopicState> topic = findActiveTopicState(topicId);
             if (topic.isEmpty()) continue;
             String key = EventKeys.topicLogKey(topicId);
             List<ReplicationServer> desired = DhtAssignment.responsibleServers(key, healthy,
@@ -328,7 +334,7 @@ public final class ReplicaMaintenanceManager {
     private void drainRepairs(List<ReplicationServer> members, String version) {
         List<ReplicationServer> healthy = healthy(members);
         for (RepairTask task : new ArrayList<>(repairs.values())) {
-            Optional<TopicState> topic = topic(task.topicId);
+            Optional<TopicState> topic = findActiveTopicState(task.topicId);
             if (topic.isEmpty()) continue;
             List<ReplicationServer> desired = DhtAssignment.responsibleServers(task.key, healthy,
                     topic.orElseThrow().replicationFactor());
@@ -407,7 +413,7 @@ public final class ReplicaMaintenanceManager {
         }
     }
 
-    private Optional<TopicState> topic(String topicId) {
+    private Optional<TopicState> findActiveTopicState(String topicId) {
         TopicState cached = topics.get(topicId);
         if (cached != null && cached.active()) return Optional.of(cached);
         try {

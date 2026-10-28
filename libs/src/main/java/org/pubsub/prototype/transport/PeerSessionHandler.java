@@ -10,9 +10,10 @@ import org.pubsub.prototype.protocol.ProtocolException;
 import org.pubsub.prototype.protocol.ProtocolMessage;
 import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.util.SecureCyclonEvent;
-import org.pubsub.prototype.event.EventEnvelope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.Marker;
+import org.slf4j.MarkerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -25,6 +26,7 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
 
     // Default logger
     private static final Logger LOG = LoggerFactory.getLogger(PeerSessionHandler.class);
+    private static final Marker NETWORK = MarkerFactory.getMarker("NETWORK");
     private static final long HANDSHAKE_TIMEOUT_MS = 3_000;
 
     private final PubSubTransport transport;
@@ -69,13 +71,14 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
         // If this is the initiator of a connection, send a HELLO message
         if (outbound) {
             localChallenge = handshake.freshChallenge();
+            LOG.info(NETWORK, "HELLO_SEND endpoint={}", endpoint.key());
             ctx.writeAndFlush(ProtocolMessage.hello(identity.nodeId(), config.nodeName())
                     .withEndpoint(transport.advertisedEndpoint())
                     .withHandshake(handshake.hello(identity, localChallenge)));
         }
     }
 
-    /**    (non-Javadoc)
+    /**
      * Handles incoming protocol messages from the peer.
      * Transport messages, e.g., HELLO, HELLO_ACK, PING, are handled by this object via some private method.
      * Application messages are getting delegated to the respective higher-level protocol implementations.
@@ -123,6 +126,7 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
         validateRemoteIdentity(nodeId);
         handshake.identify(nodeId, message.handshake());
         remoteNodeId = nodeId;
+        LOG.info(NETWORK, "HELLO_IN peer={}", shortPeer(nodeId.value()));
         remoteChallenge = message.handshake().challenge();
         remoteAdvertisedEndpoint = message.endpoint();
         localChallenge = handshake.freshChallenge();
@@ -142,10 +146,12 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
                 localChallenge, message.handshake() == null ? null : message.handshake().challenge()));
         transport.resolved(endpoint, nodeId, message.endpoint());
         remoteNodeId = nodeId;
+        LOG.info(NETWORK, "HELLO_ACK_IN peer={}", shortPeer(nodeId.value()));
         remoteChallenge = message.handshake().challenge();
         context.writeAndFlush(ProtocolMessage.helloFinish(identity.nodeId())
                 .withHandshake(handshake.signed(identity, PeerHandshakeAuthenticator.Step.FINISH,
                         localChallenge, identity.nodeId(), nodeId, localChallenge, remoteChallenge)));
+        LOG.info(NETWORK, "HELLO_FINISH_SEND peer={}", shortPeer(nodeId.value()));
         activate();
     }
 
@@ -158,6 +164,7 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
                 PeerHandshakeAuthenticator.Step.FINISH, nodeId, identity.nodeId(),
                 remoteChallenge, localChallenge));
         transport.resolved(endpoint, nodeId, remoteAdvertisedEndpoint);
+        LOG.info(NETWORK, "HELLO_FINISH_IN peer={}", shortPeer(nodeId.value()));
         activate();
     }
 
@@ -178,7 +185,8 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
         transport.resetBackoff(endpoint);
         if (handshakeTimeout != null) handshakeTimeout.cancel(false);
         if (!transport.registerActive(remoteNodeId, this)) return;
-        LOG.info("PEER_CONNECTED peer={}", remoteNodeId.value());
+        LOG.info(NETWORK, "PEER_CONNECTED peer={} direction={}", shortPeer(remoteNodeId.value()),
+                outbound ? "outbound" : "inbound");
         pingTask = context.executor().scheduleAtFixedRate(this::sendPing, config.pingIntervalMs(), config.pingIntervalMs(), TimeUnit.MILLISECONDS);
     }
 
@@ -191,20 +199,22 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
         ScheduledFuture<?> timeout = context.executor().schedule(() -> {
             PendingPing removed = pendingPings.remove(requestId);
             if (removed != null) {
-                LOG.warn("PING_TIMEOUT peer={} requestId={}", peerLabel(), requestId);
+                LOG.warn(NETWORK, "PING_TIMEOUT peer={} requestId={}", peerLabel(), requestId);
                 context.close();
             }
         }, config.pingTimeoutMs(), TimeUnit.MILLISECONDS);
         pendingPings.put(requestId, new PendingPing(sentAt, timeout));
         context.writeAndFlush(ProtocolMessage.ping(requestId, sentAt));
-        LOG.info("PING_SENT peer={} requestId={}", peerLabel(), requestId);
+        LOG.info(NETWORK, "PING_SENT peer={} requestId={}", peerLabel(), requestId);
     }
 
     private void handlePing(ChannelHandlerContext ctx, ProtocolMessage message) {
         if (!active) {
             throw new ProtocolException("PING before handshake");
         }
+        LOG.info(NETWORK, "PING_RECEIVED peer={} requestId={}", peerLabel(), message.requestId());
         ctx.writeAndFlush(ProtocolMessage.pong(message.requestId(), message.sentAt()));
+        LOG.info(NETWORK, "PONG_SENT peer={} requestId={}", peerLabel(), message.requestId());
     }
 
     private void handlePong(ProtocolMessage message) {
@@ -217,7 +227,7 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
         }
         pending.timeout.cancel(false);
         long rttMs = Duration.between(pending.sentAt, Instant.now()).toMillis();
-        LOG.info("PONG_RECEIVED peer={} requestId={} rttMs={}", peerLabel(), message.requestId(), rttMs);
+        LOG.info(NETWORK, "PONG_RECEIVED peer={} requestId={} rttMs={}", peerLabel(), message.requestId(), rttMs);
         transport.recordPong(remoteNodeId, rttMs);
     }
 
@@ -232,13 +242,6 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
         if (active && context != null && context.channel().isActive()) context.writeAndFlush(message);
     }
 
-    void sendEvent(EventEnvelope event) {
-        if (!active || context == null || !context.channel().isActive()) {
-            return;
-        }
-        context.writeAndFlush(ProtocolMessage.event(event));
-    }
-
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
         cleanup();
@@ -249,9 +252,9 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        LOG.warn("{} nodeId={} peerNodeId={} reason=malformed_frame detail={}",
-                SecureCyclonEvent.EXCHANGE_REJECTED, identity.nodeId().value(), peerLabel(), cause.toString());
-        LOG.warn("PEER_DISCONNECTED peer={} reason={}", peerLabel(), cause.toString());
+        LOG.warn("{} peer={} reason=malformed_frame detail={}",
+                SecureCyclonEvent.EXCHANGE_REJECTED, peerLabel(), cause.toString());
+        LOG.warn(NETWORK, "PEER_DISCONNECTED peer={} reason={}", peerLabel(), cause.toString());
         ctx.close();
     }
 
@@ -287,14 +290,18 @@ final class PeerSessionHandler extends SimpleChannelInboundHandler<ProtocolMessa
         pendingPings.values().forEach(pending -> pending.timeout.cancel(false));
         pendingPings.clear();
         if (active) {
-            LOG.info("PEER_DISCONNECTED peer={}", peerLabel());
+            LOG.info(NETWORK, "PEER_DISCONNECTED peer={}", peerLabel());
         }
         active = false;
         transport.unregisterActive(remoteNodeId, this);
     }
 
     private String peerLabel() {
-        return remoteNodeId == null ? (endpoint == null ? "unknown" : endpoint.key()) : remoteNodeId.value();
+        return remoteNodeId == null ? (endpoint == null ? "unknown" : endpoint.key()) : shortPeer(remoteNodeId.value());
+    }
+
+    private static String shortPeer(String nodeId) {
+        return nodeId.substring(0, Math.min(4, nodeId.length()));
     }
 
     private boolean preferredForPair() {

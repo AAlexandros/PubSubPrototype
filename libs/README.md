@@ -7,13 +7,14 @@ identity without Netty, while `org.pubsub.prototype.transport` contains the
 Netty connection code.
 
 The repository still has separate Gradle projects for `apps:pubsub-node`,
-`apps:replication-server`, and `tools:telemetry`.
+`apps:replication-server`, `tools:telemetry`, and `tools:registry-cli`.
 
 Useful tasks:
 
 ```text
 :libs:test                       Run all library tests
-:libs:runRegistryCli             Run the Cardano topic registry CLI
+:tools:registry-cli:runRegistryCli
+                                 Run the Cardano topic registry CLI
 :apps:replication-server:runReplicationRegistryCli
                                  Run the Cardano replication registry CLI
 ```

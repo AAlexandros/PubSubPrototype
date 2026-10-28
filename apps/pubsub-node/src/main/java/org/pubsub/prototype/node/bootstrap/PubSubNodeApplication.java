@@ -1,15 +1,16 @@
 package org.pubsub.prototype.node.bootstrap;
 
 import org.pubsub.prototype.navigation.SubscriptionStore;
-import org.pubsub.prototype.node.adapter.http.NodeControlHttpServer;
+import org.pubsub.prototype.node.adapter.http.NodeControlHttpAdapter;
 import org.pubsub.prototype.node.adapter.transport.NodeTransportListener;
 import org.pubsub.prototype.node.config.NodeConfig;
-import org.pubsub.prototype.node.runtimes.DisseminationRuntime;
-import org.pubsub.prototype.node.runtimes.NavigationRuntime;
-import org.pubsub.prototype.node.runtimes.PeerSamplingRuntime;
-import org.pubsub.prototype.node.runtimes.PersistenceRuntime;
-import org.pubsub.prototype.node.runtimes.RegistrySynchronizer;
-import org.pubsub.prototype.node.service.NodeEventCoordinator;
+import org.pubsub.prototype.node.service.DisseminationService;
+import org.pubsub.prototype.node.service.NavigationService;
+import org.pubsub.prototype.node.service.PeerSamplingProtocolService;
+import org.pubsub.prototype.node.service.EventStorageService;
+import org.pubsub.prototype.node.service.TopicRegistrySyncService;
+import org.pubsub.prototype.node.service.EventProcessingService;
+import org.pubsub.prototype.node.util.NodeLog;
 import org.pubsub.prototype.protocol.IdentityStore;
 import org.pubsub.prototype.protocol.NodeIdentity;
 import org.pubsub.prototype.event.EventDeduplicator;
@@ -18,91 +19,112 @@ import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryConfig;
 import org.pubsub.prototype.registry.topic.cardano.CardanoTopicRegistry;
 import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.transport.PubSubTransport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 
 /**
  * Owns construction and lifecycle for one Pub/Sub node process.
  *
- * <p>{@link #runUntilShutdown()} waits on the calling thread while network, HTTP, and scheduled
- * work run on their own threads. The shutdown hook calls {@link #close()}, which stops components
- * and releases the wait; repeated close calls are safe.</p>
+ * <p>
+ * {@link #runUntilShutdown()} waits on the calling thread while network, HTTP,
+ * and scheduled
+ * work run on their own threads. The shutdown hook calls {@link #close()},
+ * which stops components
+ * and releases the wait; repeated close calls are safe.
+ * </p>
  */
 public final class PubSubNodeApplication implements AutoCloseable {
-    private final RegistrySynchronizer registry;
-    private final PersistenceRuntime persistence;
-    private final PeerSamplingRuntime sampling;
-    private final NavigationRuntime navigation;
-    private final DisseminationRuntime dissemination;
+
+    // Default logger
+    private static final Logger LOG = LoggerFactory.getLogger(PubSubNodeApplication.class);
+
+    // Services
+    private final TopicRegistrySyncService registry;
+    private final EventStorageService eventStorage;
+    private final PeerSamplingProtocolService sampling;
+    private final NavigationService navigation;
+    private final DisseminationService dissemination;
+
     private final PubSubTransport transport;
-    private final NodeControlHttpServer controlServer;
     private final CountDownLatch stopped = new CountDownLatch(1);
 
-    private PubSubNodeApplication(RegistrySynchronizer registry, PersistenceRuntime persistence,
-                            PeerSamplingRuntime sampling, NavigationRuntime navigation,
-                            DisseminationRuntime dissemination, PubSubTransport transport,
-                            NodeControlHttpServer controlServer) {
+    // Creates an HTTP API for sending commands to this node and inspecting its
+    // state.
+    // The testbed exposes this port on the host's loopback interface.
+    private final NodeControlHttpAdapter controlAdapter;
+
+    private PubSubNodeApplication(TopicRegistrySyncService registry,
+            EventStorageService eventStorage,
+            PeerSamplingProtocolService sampling, NavigationService navigation,
+            DisseminationService dissemination, PubSubTransport transport,
+            NodeControlHttpAdapter controlAdapter) {
         this.registry = registry;
-        this.persistence = persistence;
+        this.eventStorage = eventStorage;
         this.sampling = sampling;
         this.navigation = navigation;
         this.dissemination = dissemination;
         this.transport = transport;
-        this.controlServer = controlServer;
+        this.controlAdapter = controlAdapter;
     }
 
     public static PubSubNodeApplication create(NodeConfig config) throws IOException {
+        NodeLog.init(LOG, "BOOTSTRAP_STARTED p2p={}:{} control={}:{} seeds={}",
+                config.node().listenHost, config.node().listenPort, config.controlHost(),
+                config.controlPort(), config.peers().size());
         // Initialize the identity of the node, which is shared among:
-        // NodeEventService — uses the key pair to sign events.
-        // PeerSamplingRuntime — uses its nodeId.
-        // NavigationRuntime — uses its nodeId.
-        // DisseminationRuntime — uses its nodeId.
+        // EventProcessingService uses the key pair to sign events.
+        // PeerSamplingProtocolService — uses its nodeId.
+        // NavigationService — uses its nodeId.
+        // DisseminationService — uses its nodeId.
         // PubSubTransport — uses the identity for authenticated peer communication.
-        // NodeControlHttpServer — exposes runtime information using that nodeId.
+        // NodeControlHttpAdapter — exposes node information using that nodeId.
         NodeIdentity identity = IdentityStore.loadOrCreate(config.identityPath());
-        // Initialize the topic registry synchronizer
-        RegistrySynchronizer registry = createRegistry(config);
-        // Initialize the event coordinator
-        EventValidator eventValidator = new EventValidator(registry, new EventDeduplicator(10_000));
-        NodeEventCoordinator eventService = new NodeEventCoordinator(identity, config.identityPath(), eventValidator);
-        // Initialize the persistence runtime
-        PersistenceRuntime persistence = createPersistence(config, registry);
-        eventService.attachPersistence(persistence);
+        NodeLog.init(LOG, "IDENTITY_READY id={} directory={}",
+                NodeLog.node(identity.nodeId().value()), config.identityPath());
 
-        // Initialize the node endpoint
+        // Initialize the topic registry sync service.
+        TopicRegistrySyncService registry = createRegistry(config);
+
+        // Initialize the event services
+        EventValidator eventValidator = new EventValidator(registry, new EventDeduplicator(10_000));
+        EventProcessingService eventService = new EventProcessingService(identity, config.identityPath(),
+                eventValidator);
+        // Initialize event storage and recovery.
+        EventStorageService eventStorage = new EventStorageService(config.persistence(), registry);
+        eventService.attachEventStorage(eventStorage);
+
+        // Initialize the protocol services
         NodeEndpoint self = new NodeEndpoint(identity.nodeId().value(), config.sampling().advertisedHost,
                 config.node().listenPort);
-        // Initialize the peer sampling runtime (Layer one)
-        PeerSamplingRuntime sampling = createSampling(config, self);
-        // Initialize the navigation runtime (Layer two)
-        NavigationRuntime navigation = createNavigation(config, identity, registry, sampling);
-        // Initialize the dissemination runtime (The actual dissemination layer)
-        DisseminationRuntime dissemination = createDissemination(config, identity, registry, navigation);
+        // Initialize the peer sampling protocol service (Layer one).
+        PeerSamplingProtocolService sampling = new PeerSamplingProtocolService(self, config.sampling());
+        // Initialize the navigation service (Layer two).
+        NavigationService navigation = createNavigation(config, identity, registry, sampling);
+        // Initialize the dissemination service.
+        DisseminationService dissemination = new DisseminationService(
+                identity.nodeId().value(), config.sampling().advertisedHost, config.node().listenPort,
+                config.dissemination(), navigation, registry::activeTopicIds);
 
         // The pub-sub transport used to transmit the various messages between the nodes
         PubSubTransport transport = new PubSubTransport(config.toTransportConfig(), identity, self,
                 new NodeTransportListener(sampling, navigation, dissemination, eventService, eventValidator));
-        // Attach the transport to all the runtimes
+        // Attach the transport to the protocol services.
         sampling.attach(transport);
         navigation.attach(transport);
         dissemination.attach(transport);
-        eventService.attachSender(transport);
         eventService.attachDissemination(dissemination);
 
-        // Local command and inspection adapter; the testbed publishes its port only on host loopback.
-        NodeControlHttpServer controlServer = new NodeControlHttpServer(
-                config.controlHost(), config.controlPort(), eventService);
-        controlServer.addSampling(sampling.sampling(), identity.nodeId().value(),
-                config.sampling().viewSize);
-        controlServer.addNavigation(navigation, identity.nodeId().value());
-        controlServer.addDissemination(dissemination, identity.nodeId().value());
-        controlServer.addPersistence(persistence);
+        NodeControlHttpAdapter controlAdapter = new NodeControlHttpAdapter(
+                config.controlHost(), config.controlPort(), eventService, sampling.sampling(), navigation,
+                dissemination, eventStorage, identity.nodeId().value(), config.sampling().viewSize);
 
-        return new PubSubNodeApplication(registry, persistence, sampling, navigation,
-                dissemination, transport, controlServer);
+        NodeLog.init(LOG, "COMPONENTS_WIRED");
+        return new PubSubNodeApplication(registry, eventStorage, sampling, navigation,
+                dissemination, transport, controlAdapter);
     }
 
     public void runUntilShutdown() throws InterruptedException {
@@ -111,7 +133,7 @@ public final class PubSubNodeApplication implements AutoCloseable {
         try {
             start();
             stopped.await();
-        // finally block to cover all the edge cases that the start may fail
+            // finally block to cover all the edge cases that the start may fail
         } finally {
             close();
             try {
@@ -123,35 +145,37 @@ public final class PubSubNodeApplication implements AutoCloseable {
     }
 
     /**
-     * Start all the node runtimes.
+     * Start the node services, adapters, and transport.
+     * 
      * @throws InterruptedException
      */
     public void start() throws InterruptedException {
         registry.start();
-        controlServer.start();
+        controlAdapter.start();
         transport.start();
         sampling.start();
         navigation.start();
         dissemination.start();
+        NodeLog.init(LOG, "NODE_READY");
     }
 
     @Override
     public void close() {
         try {
-            controlServer.close();
+            controlAdapter.close();
             registry.close();
             sampling.close();
             navigation.close();
             dissemination.close();
-            persistence.close();
+            eventStorage.close();
             transport.close();
         } finally {
             stopped.countDown();
         }
     }
 
-    private static RegistrySynchronizer createRegistry(NodeConfig config) {
-        return new RegistrySynchronizer(
+    private static TopicRegistrySyncService createRegistry(NodeConfig config) {
+        return new TopicRegistrySyncService(
                 new CardanoTopicRegistry(new CardanoRegistryConfig(
                         Path.of(config.registry().runtimeDir),
                         config.registry().signer,
@@ -159,52 +183,17 @@ public final class PubSubNodeApplication implements AutoCloseable {
                 config.registry().pollIntervalMs);
     }
 
-    // Runtime creation helpers
+    // Service construction helpers
 
-    private static PersistenceRuntime createPersistence(NodeConfig config, RegistrySynchronizer registry) {
-        NodeConfig.PersistenceSection persistence = config.persistence();
-        return new PersistenceRuntime(new PersistenceRuntime.Settings(
-                Path.of(persistence.membershipPath),
-                Path.of(persistence.deliveryStatePath),
-                Duration.ofMillis(persistence.connectionTimeoutMs),
-                Duration.ofMillis(persistence.requestTimeoutMs),
-                persistence.retries,
-                persistence.recoveryConcurrency), registry);
-    }
-
-    private static PeerSamplingRuntime createSampling(NodeConfig config, NodeEndpoint self) {
-        NodeConfig.SamplingSection sampling = config.sampling();
-        return new PeerSamplingRuntime(
-                self,
-                new PeerSamplingRuntime.Settings(sampling.viewSize, sampling.swapLength,
-                        sampling.cycleIntervalMs, sampling.ageThreshold, sampling.proofFanout,
-                        sampling.randomSeed));
-    }
-
-    private static NavigationRuntime createNavigation(NodeConfig config, NodeIdentity identity,
-                                                      RegistrySynchronizer registry,
-                                                      PeerSamplingRuntime sampling) {
-        NodeConfig.NavigationSection navigation = config.navigation();
-        return new NavigationRuntime(
+    private static NavigationService createNavigation(NodeConfig config, NodeIdentity identity,
+            TopicRegistrySyncService registry,
+            PeerSamplingProtocolService sampling) {
+        return new NavigationService(
                 identity.nodeId().value(), config.sampling().advertisedHost, config.node().listenPort,
                 SubscriptionStore.loadOrCreate(config.subscriptionsPath()),
-                new NavigationRuntime.Settings(navigation.capacity, navigation.routingBase,
-                        navigation.cycleIntervalMs, navigation.staleAfterMs),
+                config.navigation(),
                 registry::activeTopicIds,
                 () -> sampling.sampling().view());
     }
 
-    private static DisseminationRuntime createDissemination(NodeConfig config, NodeIdentity identity,
-                                                            RegistrySynchronizer registry,
-                                                            NavigationRuntime navigation) {
-        NodeConfig.DisseminationSection dissemination = config.dissemination();
-        return new DisseminationRuntime(
-                identity.nodeId().value(), config.sampling().advertisedHost,
-                config.node().listenPort,
-                new DisseminationRuntime.Settings(dissemination.randomLinkCount,
-                        dissemination.cycleIntervalMs, dissemination.staleAfterMs,
-                        dissemination.randomSeed),
-                navigation,
-                registry::activeTopicIds);
-    }
 }

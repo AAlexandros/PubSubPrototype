@@ -21,8 +21,11 @@ import org.pubsub.prototype.protocol.ProtocolMessage;
 import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.Marker;
+import org.slf4j.MarkerFactory;
 
 import java.util.Map;
+import java.net.InetSocketAddress;
 import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.Set;
@@ -39,6 +42,7 @@ import static org.pubsub.prototype.util.validation.Validators.require;
 
 public final class PubSubTransport implements TransportSender, AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(PubSubTransport.class);
+    private static final Marker INITIALIZATION = MarkerFactory.getMarker("INITIALIZATION");
     private final TransportConfig config;
     private final NodeIdentity identity;
     private final NodeEndpoint advertisedEndpoint;
@@ -66,6 +70,12 @@ public final class PubSubTransport implements TransportSender, AutoCloseable {
         } : listener;
         this.bossGroup = new NioEventLoopGroup(1);
         this.workerGroup = new NioEventLoopGroup();
+        LOG.info(INITIALIZATION, "TRANSPORT_CONFIGURED bind={}:{} advertised={}:{} seeds={} pingIntervalMs={} pingTimeoutMs={} reconnectInitialMs={} reconnectMaxMs={}",
+                config.listenHost(), config.listenPort(),
+                advertisedEndpoint == null ? "none" : advertisedEndpoint.host(),
+                advertisedEndpoint == null ? 0 : advertisedEndpoint.port(), config.peers().size(),
+                config.pingIntervalMs(), config.pingTimeoutMs(),
+                config.reconnectInitialMs(), config.reconnectMaxMs());
     }
 
     NodeEndpoint advertisedEndpoint() {
@@ -73,14 +83,8 @@ public final class PubSubTransport implements TransportSender, AutoCloseable {
     }
 
     @Override
-    public void sendSampling(NodeEndpoint peer, ProtocolMessage message) {
+    public void sendMessage(NodeEndpoint peer, ProtocolMessage message) {
         send(peer, message);
-    }
-
-    /** Sends an event only to the selected overlay peer, connecting dynamically when necessary. */
-    @Override
-    public void sendEvent(NodeEndpoint peer, EventEnvelope event) {
-        send(peer, ProtocolMessage.event(event));
     }
 
     private void send(NodeEndpoint peer, ProtocolMessage message) {
@@ -111,7 +115,7 @@ public final class PubSubTransport implements TransportSender, AutoCloseable {
     }
 
     @Override
-    public void replySampling(NodeId peer, ProtocolMessage message) {
+    public void replyMessage(NodeId peer, ProtocolMessage message) {
         PeerSessionHandler handler = activePeers.get(peer);
         if (handler != null) handler.sendMessage(message);
     }
@@ -152,8 +156,8 @@ public final class PubSubTransport implements TransportSender, AutoCloseable {
             running.set(false);
             throw exception;
         }
-        LOG.info("NODE_STARTED name={} nodeId={} listen={}:{}", config.nodeName(),
-                identity.nodeId().value(), config.listenHost(), config.listenPort());
+        LOG.info(INITIALIZATION, "TRANSPORT_LISTENING bind={}:{} seeds={}",
+                config.listenHost(), ((InetSocketAddress) serverChannel.localAddress()).getPort(), config.peers().size());
 
         for (PeerEndpoint peer : config.peers()) {
             backoffs.put(peer.key(), new ReconnectBackoff(config.reconnectInitialMs(), config.reconnectMaxMs()));
@@ -165,19 +169,11 @@ public final class PubSubTransport implements TransportSender, AutoCloseable {
         return activePeers.size();
     }
 
+    /** Sends only to currently active sessions, without new connections. */
     @Override
-    public void broadcastEvent(EventEnvelope event) {
+    public void broadcastMessage(ProtocolMessage message) {
         for (PeerSessionHandler handler : activePeers.values()) {
-            handler.sendEvent(event);
-        }
-    }
-
-    @Override
-    public void forwardEvent(EventEnvelope event, NodeId exceptPeer) {
-        for (Map.Entry<NodeId, PeerSessionHandler> entry : activePeers.entrySet()) {
-            if (!entry.getKey().equals(exceptPeer)) {
-                entry.getValue().sendEvent(event);
-            }
+            handler.sendMessage(message);
         }
     }
 

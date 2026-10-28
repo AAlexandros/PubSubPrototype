@@ -1,15 +1,12 @@
 package org.pubsub.prototype.persistence.core;
 
-import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.event.EventCrypto;
 import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.StoredEvent;
-import org.pubsub.prototype.persistence.adapter.DeliveryStateStore;
 import org.pubsub.prototype.persistence.adapter.FileEventStore;
-import org.pubsub.prototype.persistence.adapter.ReplicationHttpClient;
 import org.pubsub.prototype.registry.replication.FileReplicationRegistry;
 import org.pubsub.prototype.registry.replication.ReplicationServer;
 import org.pubsub.prototype.registry.replication.ReplicationServerState;
@@ -17,20 +14,17 @@ import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.registry.topic.TopicState;
 import org.pubsub.prototype.util.files.JsonSupport;
 
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -114,57 +108,6 @@ class PersistenceCoreTest {
         PersistenceEventValidator closed = new PersistenceEventValidator(id ->
                 java.util.Optional.of(topic(2, 3, List.of("ff".repeat(32)))));
         assertThrows(IllegalArgumentException.class, () -> closed.validate(valid));
-    }
-
-    @Test
-    void recoveryFetchesInOrderSuppressesDuplicatesAndSurvivesRestart() throws Exception {
-        KeyPair publisher = keys();
-        List<EventEnvelope> events = List.of(event(TOPIC, publisher, 0, 10), event(TOPIC, publisher, 1, 11),
-                event(TOPIC, publisher, 2, 12));
-        String publisherId = EventCrypto.publisherKeyId(publisher.getPublic());
-        AtomicReference<String> eventLookupQuery = new AtomicReference<>();
-        HttpServer fake = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        fake.createContext("/v1/client/topics/" + TOPIC + "/publishers", exchange -> json(exchange,
-                List.of(PublisherProgress.fromEvent(events.get(2)))));
-        for (EventEnvelope event : events) {
-            StoredEvent stored = new StoredEvent(EventKeys.eventKey(event), event, Instant.EPOCH, 10, 0, 10);
-            fake.createContext("/v1/client/events/" + stored.eventKey(), exchange -> {
-                eventLookupQuery.set(exchange.getRequestURI().getQuery());
-                json(exchange, stored);
-            });
-        }
-        fake.start();
-        try (ReplicationHttpClient http = new ReplicationHttpClient(Duration.ofSeconds(1), Duration.ofSeconds(1), 0)) {
-            PersistenceClient client = new PersistenceClient(() -> List.of(new ReplicationServer("aa".repeat(32),
-                    "127.0.0.1", fake.getAddress().getPort())), http);
-            Path stateFile = temp.resolve("delivery.json");
-            DeliveryStateStore initial = new DeliveryStateStore(stateFile);
-            initial.recordDelivered(TOPIC, publisherId, 0, 10);
-            assertEquals(10, initial.latestDeliveredTimestamp(TOPIC));
-            List<Long> delivered = new ArrayList<>();
-            PersistenceEventValidator validator = new PersistenceEventValidator(id -> java.util.Optional.of(topic(1, 10, List.of())));
-            try (RecoveryService recovery = new RecoveryService(
-                    client, new DeliveryStateStore(stateFile), validator, 2)) {
-                assertEquals(2, recovery.recover(
-                        TOPIC, event -> delivered.add(event.sequenceNumber())).deliveredCount());
-                assertEquals("topicId=" + TOPIC, eventLookupQuery.get());
-                assertEquals(List.of(1L, 2L), delivered);
-            }
-            try (RecoveryService restarted = new RecoveryService(
-                    client, new DeliveryStateStore(stateFile), validator, 2)) {
-                assertEquals(0, restarted.recover(
-                        TOPIC, event -> fail("duplicate delivery")).deliveredCount());
-            }
-        } finally {
-            fake.stop(0);
-        }
-    }
-
-    private static void json(com.sun.net.httpserver.HttpExchange exchange, Object value) throws java.io.IOException {
-        byte[] bytes = JsonSupport.MAPPER.writeValueAsBytes(value);
-        exchange.sendResponseHeaders(200, bytes.length);
-        exchange.getResponseBody().write(bytes);
-        exchange.close();
     }
 
     private static ReplicationServer server(String prefix) {

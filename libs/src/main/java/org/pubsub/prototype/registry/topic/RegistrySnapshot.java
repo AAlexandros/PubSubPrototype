@@ -20,7 +20,7 @@ public record RegistrySnapshot(List<TopicState> topics, Instant observedAt) {
     /**
      * Retrieve the state of a topic for a given topic ID.
      */
-    public Optional<TopicState> topic(TopicId topicId) {
+    public Optional<TopicState> findTopicState(TopicId topicId) {
         return topics.stream().filter(topic -> topic.topicId().equals(topicId)).findFirst();
     }
 }

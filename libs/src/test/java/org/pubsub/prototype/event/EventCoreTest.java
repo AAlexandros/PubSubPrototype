@@ -30,9 +30,9 @@ class EventCoreTest {
     @Test
     void canonicalEncodingSigningAndEventIdAreDeterministic() throws Exception {
         KeyPair keyPair = keyPair();
-        EventPublisher publisher = new EventPublisher(keyPair, CLOCK, tempDir);
+        LocalEventCreator eventCreator = new LocalEventCreator(keyPair, CLOCK, tempDir);
 
-        EventEnvelope first = publisher.publish(TOPIC_ID, "hello".getBytes());
+        EventEnvelope first = eventCreator.createAndStoreSignedEvent(TOPIC_ID, "hello".getBytes());
         EventEnvelope sameBody = EventEnvelope.unsigned(
                 first.topicId(), first.publisherPublicKey(), first.sequenceNumber(), first.timestamp(), first.payload());
 
@@ -68,10 +68,10 @@ class EventCoreTest {
     @Test
     void sequenceStateSurvivesRestart() throws Exception {
         KeyPair keyPair = keyPair();
-        EventPublisher firstPublisher = new EventPublisher(keyPair, CLOCK, tempDir);
+        LocalEventCreator firstCreator = new LocalEventCreator(keyPair, CLOCK, tempDir);
 
-        EventEnvelope first = firstPublisher.publish(TOPIC_ID, "one".getBytes());
-        EventEnvelope second = new EventPublisher(keyPair, CLOCK, tempDir).publish(TOPIC_ID, "two".getBytes());
+        EventEnvelope first = firstCreator.createAndStoreSignedEvent(TOPIC_ID, "one".getBytes());
+        EventEnvelope second = new LocalEventCreator(keyPair, CLOCK, tempDir).createAndStoreSignedEvent(TOPIC_ID, "two".getBytes());
 
         assertEquals(0, first.sequenceNumber());
         assertEquals(1, second.sequenceNumber());
@@ -80,11 +80,11 @@ class EventCoreTest {
     @Test
     void persistedEventsAdvanceSequenceWhenStateFileLags() throws Exception {
         KeyPair keyPair = keyPair();
-        EventPublisher firstPublisher = new EventPublisher(keyPair, CLOCK, tempDir);
-        firstPublisher.publish(TOPIC_ID, "one".getBytes());
+        LocalEventCreator firstCreator = new LocalEventCreator(keyPair, CLOCK, tempDir);
+        firstCreator.createAndStoreSignedEvent(TOPIC_ID, "one".getBytes());
         java.nio.file.Files.delete(tempDir.resolve("event-sequences.json"));
 
-        EventEnvelope second = new EventPublisher(keyPair, CLOCK, tempDir).publish(TOPIC_ID, "two".getBytes());
+        EventEnvelope second = new LocalEventCreator(keyPair, CLOCK, tempDir).createAndStoreSignedEvent(TOPIC_ID, "two".getBytes());
 
         assertEquals(1, second.sequenceNumber());
     }
@@ -93,8 +93,8 @@ class EventCoreTest {
     void validatorHandlesOpenModeratedDeletedDuplicatesAndConflicts() throws Exception {
         KeyPair allowed = keyPair();
         KeyPair unregistered = keyPair();
-        EventEnvelope allowedEvent = new EventPublisher(allowed, CLOCK, tempDir.resolve("allowed")).publish(TOPIC_ID, "ok".getBytes());
-        EventEnvelope unregisteredEvent = new EventPublisher(unregistered, CLOCK, tempDir.resolve("other")).publish(TOPIC_ID, "no".getBytes());
+        EventEnvelope allowedEvent = new LocalEventCreator(allowed, CLOCK, tempDir.resolve("allowed")).createAndStoreSignedEvent(TOPIC_ID, "ok".getBytes());
+        EventEnvelope unregisteredEvent = new LocalEventCreator(unregistered, CLOCK, tempDir.resolve("other")).createAndStoreSignedEvent(TOPIC_ID, "no".getBytes());
         String allowedPublisher = EventCrypto.publisherKeyId(allowed.getPublic());
 
         EventValidator openValidator = validator(topic(List.of(), true));
@@ -105,7 +105,7 @@ class EventCoreTest {
         assertEquals(EventRejectReason.UNAUTHORIZED_PUBLISHER, moderatedValidator.validate(unregisteredEvent).reason());
         assertEquals(EventSequenceStatus.DUPLICATE, moderatedValidator.validate(allowedEvent).sequenceStatus());
 
-        EventEnvelope conflict = new EventPublisher(allowed, CLOCK, tempDir.resolve("conflict")).publish(TOPIC_ID, "different".getBytes());
+        EventEnvelope conflict = new LocalEventCreator(allowed, CLOCK, tempDir.resolve("conflict")).createAndStoreSignedEvent(TOPIC_ID, "different".getBytes());
         assertEquals(EventRejectReason.INVALID_SEQUENCE, moderatedValidator.validate(conflict).reason());
 
         EventValidator deletedValidator = validator(topic(List.of(), false));

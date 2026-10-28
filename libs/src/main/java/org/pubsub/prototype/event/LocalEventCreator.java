@@ -14,7 +14,8 @@ import java.util.Base64;
 
 import static org.pubsub.prototype.constants.EventConstants.EVENTS_DIRECTORY;
 
-public final class EventPublisher {
+/** Creates, signs, and stores a local event before the node sends it to peers. */
+public final class LocalEventCreator {
     private static final ObjectMapper MAPPER = JsonSupport.MAPPER.copy()
             .enable(SerializationFeature.INDENT_OUTPUT);
 
@@ -23,7 +24,7 @@ public final class EventPublisher {
     private final EventSequenceStore sequenceStore;
     private final Path eventDir;
 
-    public EventPublisher(KeyPair keyPair, Clock clock, Path runtimeDir) {
+    public LocalEventCreator(KeyPair keyPair, Clock clock, Path runtimeDir) {
         this.keyPair = keyPair;
         this.clock = clock;
         this.sequenceStore = new EventSequenceStore(runtimeDir);
@@ -35,7 +36,11 @@ public final class EventPublisher {
         }
     }
 
-    public EventEnvelope publish(TopicId topicId, byte[] payload) {
+    /**
+     * Assigns the next publisher sequence, signs the envelope, and stores it on disk.
+     * Topic validation and peer transmission belong to the calling node service.
+     */
+    public EventEnvelope createAndStoreSignedEvent(TopicId topicId, byte[] payload) {
         String publisherPublicKey = Base64.getEncoder().encodeToString(keyPair.getPublic().getEncoded());
         String publisherKeyId = EventCrypto.publisherKeyId(keyPair.getPublic());
         long sequenceNumber = sequenceStore.reserve(topicId.value(), publisherKeyId);

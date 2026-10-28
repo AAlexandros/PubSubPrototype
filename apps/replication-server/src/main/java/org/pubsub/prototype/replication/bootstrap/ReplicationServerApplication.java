@@ -15,10 +15,10 @@ import org.pubsub.prototype.registry.replication.ReplicationRegistryReader;
 import org.pubsub.prototype.registry.replication.ReplicationServer;
 import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryConfig;
 import org.pubsub.prototype.registry.topic.cardano.CardanoTopicRegistry;
-import org.pubsub.prototype.replication.adapter.http.ReplicationHttpServer;
+import org.pubsub.prototype.replication.adapter.http.ReplicationHttpAdapter;
 import org.pubsub.prototype.replication.config.ReplicationServerConfig;
-import org.pubsub.prototype.replication.service.PeerFailureDetector;
-import org.pubsub.prototype.replication.service.ReplicaMaintenanceManager;
+import org.pubsub.prototype.replication.health.PeerFailureDetector;
+import org.pubsub.prototype.replication.service.ReplicaMaintenanceService;
 import org.pubsub.prototype.replication.service.ReplicationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,16 +43,16 @@ public final class ReplicationServerApplication implements AutoCloseable {
     private final AtomicReference<List<ReplicationServer>> members;
     private final FileEventStore store;
     private final ReplicationHttpClient client;
-    private final ReplicaMaintenanceManager replicaMaintenance;
-    private final ReplicationHttpServer server;
+    private final ReplicaMaintenanceService replicaMaintenance;
+    private final ReplicationHttpAdapter httpAdapter;
     private final ScheduledExecutorService maintenance;
     private final CountDownLatch stopped = new CountDownLatch(1);
 
     private ReplicationServerApplication(ReplicationServerConfig config, ReplicationRegistryReader registry,
                                          AtomicReference<List<ReplicationServer>> members,
                                          FileEventStore store, ReplicationHttpClient client,
-                                         ReplicaMaintenanceManager replicaMaintenance,
-                                         ReplicationHttpServer server,
+                                         ReplicaMaintenanceService replicaMaintenance,
+                                         ReplicationHttpAdapter httpAdapter,
                                          ScheduledExecutorService maintenance) {
         this.config = config;
         this.registry = registry;
@@ -60,7 +60,7 @@ public final class ReplicationServerApplication implements AutoCloseable {
         this.store = store;
         this.client = client;
         this.replicaMaintenance = replicaMaintenance;
-        this.server = server;
+        this.httpAdapter = httpAdapter;
         this.maintenance = maintenance;
     }
 
@@ -92,16 +92,16 @@ public final class ReplicationServerApplication implements AutoCloseable {
                 config.requestVerificationKeyPath(), config.serverId());
         ReplicationHttpClient client = new ReplicationHttpClient(Duration.ofMillis(config.connectionTimeoutMs()),
                 Duration.ofMillis(config.requestTimeoutMs()), config.retries(), requestSigner);
-        TopicStateProvider topicProvider = topicId -> topics.topic(topicId);
+        TopicStateProvider topicProvider = topics::findTopicState;
         PeerFailureDetector failureDetector = new PeerFailureDetector(config.failureProbeAttempts());
         PersistenceEventValidator eventAuthenticator = new PersistenceEventValidator(topicProvider);
         PublisherProgressAuthenticator progressAuthenticator = new PublisherProgressAuthenticator(topicProvider);
         ReplicationService service = new ReplicationService(config.self(), membership,
                 eventAuthenticator, topicProvider, store, client, failureDetector);
-        ReplicaMaintenanceManager replicaMaintenance = new ReplicaMaintenanceManager(config.self(), membership,
-                service, store, client, () -> topics.snapshot().topics(), failureDetector,
+        ReplicaMaintenanceService replicaMaintenance = new ReplicaMaintenanceService(config.self(), membership,
+                service, store, client, () -> topics.activeTopicsSnapshot().topics(), failureDetector,
                 Duration.ofMillis(config.failureProbeTimeoutMs()));
-        ReplicationHttpServer server = new ReplicationHttpServer(config.listenHost(), config.port(),
+        ReplicationHttpAdapter httpAdapter = new ReplicationHttpAdapter(config.listenHost(), config.port(),
                 config.self(), service, membership, replicaMaintenance, eventAuthenticator,
                 progressAuthenticator, config.httpWorkerThreads());
         ScheduledExecutorService maintenance = Executors.newScheduledThreadPool(3, runnable -> {
@@ -110,7 +110,7 @@ public final class ReplicationServerApplication implements AutoCloseable {
             return thread;
         });
         return new ReplicationServerApplication(config, registry, members, store, client,
-                replicaMaintenance, server, maintenance);
+                replicaMaintenance, httpAdapter, maintenance);
     }
 
     public void runUntilShutdown() throws InterruptedException {
@@ -149,7 +149,7 @@ public final class ReplicationServerApplication implements AutoCloseable {
                 LOG.warn("Expiration cleanup failed: {}", ex.getMessage());
             }
         }, config.cleanupIntervalMs(), config.cleanupIntervalMs(), TimeUnit.MILLISECONDS);
-        server.start();
+        httpAdapter.start();
         maintenance.scheduleWithFixedDelay(() -> {
             try {
                 replicaMaintenance.runOnce();
@@ -164,7 +164,7 @@ public final class ReplicationServerApplication implements AutoCloseable {
     @Override
     public void close() {
         try {
-            server.close();
+            httpAdapter.close();
             maintenance.shutdownNow();
             client.close();
         } finally {

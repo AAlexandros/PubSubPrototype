@@ -24,8 +24,8 @@ existing phase entrypoints remain stable.
   handling.
 - `TelemetryTool` mixed command dispatch, JSONL validation, Avro/Parquet
   conversion, aggregation, summaries, and data-dictionary rendering.
-- Remaining high-risk oversized types include `ReplicaMaintenanceManager`,
-  `CardanoTransactionBuilder`, `DisseminationEngine`, `PubSubTransport`,
+- Remaining high-risk oversized types include `ReplicaMaintenanceService`,
+  `CardanoTopicRegistry`, `DisseminationEngine`, `PubSubTransport`,
   `PeerSessionHandler`, and `NodeConfig`. They need additional
   characterization tests before extraction.
 - `ProtocolMessage` is a nullable multi-purpose record and `protocol-core`

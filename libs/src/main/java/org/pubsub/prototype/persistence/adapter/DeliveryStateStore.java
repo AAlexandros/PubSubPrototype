@@ -1,7 +1,6 @@
 package org.pubsub.prototype.persistence.adapter;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import org.pubsub.prototype.persistence.DeliveryProgress;
 import org.pubsub.prototype.util.files.AtomicFiles;
 import org.pubsub.prototype.util.HexUtils;
 import org.pubsub.prototype.util.files.JsonSupport;
@@ -14,7 +13,11 @@ import java.util.Map;
 
 import static org.pubsub.prototype.constants.PersistenceConstants.PUBLISHER_KEY_ID_FIELD;
 import static org.pubsub.prototype.constants.PersistenceConstants.TOPIC_ID_FIELD;
+import static org.pubsub.prototype.constants.PersistenceConstants.LAST_DELIVERED_SEQUENCE_NUMBER_FIELD;
+import static org.pubsub.prototype.constants.PersistenceConstants.LAST_DELIVERED_TIMESTAMP_FIELD;
+import static org.pubsub.prototype.util.validation.Validation.start;
 
+/** Stores the highest accepted sequence and timestamp per topic and publisher on local disk. */
 public final class DeliveryStateStore {
     private static final TypeReference<Map<String, Map<String, DeliveryProgress>>> TYPE = new TypeReference<>() { };
     private final Path file;
@@ -26,12 +29,21 @@ public final class DeliveryStateStore {
     }
 
     public synchronized DeliveryProgress progress(String topicId, String publisherKeyId) {
-        HexUtils.normalizeSha256(topicId, TOPIC_ID_FIELD);
-        HexUtils.normalizeSha256(publisherKeyId, PUBLISHER_KEY_ID_FIELD);
+        topicId = HexUtils.normalizeSha256(topicId, TOPIC_ID_FIELD);
+        publisherKeyId = HexUtils.normalizeSha256(publisherKeyId, PUBLISHER_KEY_ID_FIELD);
         return state.getOrDefault(topicId, Map.of()).getOrDefault(publisherKeyId, DeliveryProgress.empty());
     }
 
-    public synchronized boolean recordDelivered(String topicId, String publisherKeyId, long sequenceNumber, long timestamp) {
+    /**
+     * Saves the sequence and timestamp only if the sequence is higher than the stored value.
+     * Lower sequence gaps are not tracked.
+     *
+     * @return whether the stored values changed
+     */
+    public synchronized boolean recordLatestAcceptedSequence(
+            String topicId, String publisherKeyId, long sequenceNumber, long timestamp) {
+        topicId = HexUtils.normalizeSha256(topicId, TOPIC_ID_FIELD);
+        publisherKeyId = HexUtils.normalizeSha256(publisherKeyId, PUBLISHER_KEY_ID_FIELD);
         DeliveryProgress previous = progress(topicId, publisherKeyId);
         if (sequenceNumber <= previous.lastDeliveredSequenceNumber()) return false;
         Map<String, Map<String, DeliveryProgress>> updated = deepCopy(state);
@@ -47,7 +59,7 @@ public final class DeliveryStateStore {
     }
 
     public synchronized long latestDeliveredTimestamp(String topicId) {
-        HexUtils.normalizeSha256(topicId, TOPIC_ID_FIELD);
+        topicId = HexUtils.normalizeSha256(topicId, TOPIC_ID_FIELD);
         return state.getOrDefault(topicId, Map.of()).values().stream()
                 .mapToLong(DeliveryProgress::lastDeliveredTimestamp)
                 .max().orElse(0);
@@ -74,5 +86,20 @@ public final class DeliveryStateStore {
         Map<String, Map<String, DeliveryProgress>> result = new LinkedHashMap<>();
         source.forEach((topic, publishers) -> result.put(topic, new LinkedHashMap<>(publishers)));
         return result;
+    }
+
+    /** The highest sequence this node accepted for one topic and publisher, with its timestamp. */
+    public record DeliveryProgress(long lastDeliveredSequenceNumber, long lastDeliveredTimestamp) {
+        public DeliveryProgress {
+            start()
+                    .require(lastDeliveredSequenceNumber >= -1,
+                            LAST_DELIVERED_SEQUENCE_NUMBER_FIELD + " must be at least -1")
+                    .nonNegative(lastDeliveredTimestamp, LAST_DELIVERED_TIMESTAMP_FIELD)
+                    .throwIfInvalid();
+        }
+
+        public static DeliveryProgress empty() {
+            return new DeliveryProgress(-1, 0);
+        }
     }
 }

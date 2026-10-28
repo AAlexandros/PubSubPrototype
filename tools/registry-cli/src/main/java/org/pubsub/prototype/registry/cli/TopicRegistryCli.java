@@ -1,4 +1,4 @@
-package org.pubsub.prototype.registry.topic.cardano;
+package org.pubsub.prototype.registry.cli;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -6,16 +6,18 @@ import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 import org.pubsub.prototype.registry.topic.CreateTopicRequest;
 import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.registry.topic.TopicState;
+import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryConfig;
+import org.pubsub.prototype.registry.topic.cardano.CardanoTopicRegistry;
 import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 
-public final class RegistryCli {
+public final class TopicRegistryCli {
     private static final ObjectMapper MAPPER = JsonSupport.MAPPER;
 
-    private RegistryCli() {
+    private TopicRegistryCli() {
     }
 
     public static void main(String[] args) {
@@ -29,7 +31,7 @@ public final class RegistryCli {
 
     private static void run(String[] args) {
         if (args.length < 3) {
-            throw new IllegalArgumentException("Usage: RegistryCli <runtime-dir> <cache-only|host|devnet> <command> ...");
+            throw new IllegalArgumentException("Usage: TopicRegistryCli <runtime-dir> <cache-only|host|devnet> <command> ...");
         }
         Path runtimeDir = Path.of(args[0]);
         CardanoCliBackend backend = CardanoCliBackend.parse(args[1]);
@@ -42,16 +44,16 @@ public final class RegistryCli {
                 System.out.println("REGISTRY_DEPLOYED");
             }
             case "query" -> {
-                boolean all = contains(args, "--all");
+                boolean includeTombstones = contains(args, "--all");
                 System.out.println(pretty(
-                        all ? registry.snapshotIncludingTombstones() : registry.snapshot(),
+                        includeTombstones ? registry.allTopicsSnapshot() : registry.activeTopicsSnapshot(),
                         "registry snapshot"
                 ));
             }
             case "utxos" -> System.out.println(registry.scriptUtxosJson());
             case "topic" -> {
                 TopicId topicId = new TopicId(args[4]);
-                TopicState topic = registry.topic(topicId).orElseThrow(() -> new IllegalArgumentException("unknown topicId"));
+                TopicState topic = registry.findTopicState(topicId).orElseThrow(() -> new IllegalArgumentException("unknown topicId"));
                 System.out.println(pretty(topic, "topic"));
             }
             case "create" -> {

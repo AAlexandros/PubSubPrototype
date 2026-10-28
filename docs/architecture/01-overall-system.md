@@ -56,12 +56,13 @@ flowchart LR
 ## How to read D1
 
 Start in the center with the Pub/Sub data plane. Nodes exchange live events over
-their peer overlay. The original publisher also submits each accepted event to
-one replication entry server; receiving peers do not independently persist the
-same event. The entry server calculates which servers should hold the replicas.
+their peer overlay. The publishing node sends each accepted `EventEnvelope` as
+JSON over HTTP to one replication server (`POST /v1/client/events`). The server
+selects which servers hold copies and returns a `StoredEvent`. Nodes receive
+events from peers without submitting another storage request.
 
 The Cardano plane changes much less frequently. Topic rules and replication
-membership are materialized as local snapshots that runtimes poll. The dashed
+membership are materialized as local snapshots that application services poll. The dashed
 arrows therefore mean “observe current configuration,” not that every event is
 written to or read from the chain.
 

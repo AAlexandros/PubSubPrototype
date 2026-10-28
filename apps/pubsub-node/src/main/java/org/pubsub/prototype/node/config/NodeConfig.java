@@ -166,6 +166,7 @@ public record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSec
         public Long randomSeed;
     }
 
+    /** YAML settings for event storage and recovery. */
     public static final class PersistenceSection {
         public String membershipPath;
         public String deliveryStatePath;

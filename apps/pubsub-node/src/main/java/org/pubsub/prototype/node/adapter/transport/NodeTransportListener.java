@@ -5,48 +5,48 @@ import org.pubsub.prototype.event.EventValidator;
 import org.pubsub.prototype.protocol.NodeId;
 import org.pubsub.prototype.protocol.ProtocolMessage;
 import org.pubsub.prototype.sampling.NodeEndpoint;
-import org.pubsub.prototype.node.runtimes.DisseminationRuntime;
-import org.pubsub.prototype.node.runtimes.NavigationRuntime;
-import org.pubsub.prototype.node.runtimes.PeerSamplingRuntime;
-import org.pubsub.prototype.node.service.NodeEventCoordinator;
+import org.pubsub.prototype.node.service.DisseminationService;
+import org.pubsub.prototype.node.service.NavigationService;
+import org.pubsub.prototype.node.service.PeerSamplingProtocolService;
+import org.pubsub.prototype.node.service.EventProcessingService;
 import org.pubsub.prototype.transport.TransportListener;
 
 import java.util.Objects;
 
 /** Dispatches transport events to the peer-sampling, navigation, and event sub-listeners by message type. */
 public final class NodeTransportListener implements TransportListener {
-    private final PeerSamplingRuntime sampling;
-    private final NavigationRuntime navigation;
-    private final NodeEventCoordinator events;
+    private final PeerSamplingProtocolService peerSamplingService;
+    private final NavigationService navigationService;
+    private final EventProcessingService eventService;
+    private final DisseminationService disseminationService;
     private final EventValidator eventValidator;
-    private final DisseminationRuntime dissemination;
 
-    public NodeTransportListener(PeerSamplingRuntime sampling, NavigationRuntime navigation,
-                                 DisseminationRuntime dissemination, NodeEventCoordinator events,
+    public NodeTransportListener(PeerSamplingProtocolService sampling, NavigationService navigation,
+                                 DisseminationService dissemination, EventProcessingService events,
                                  EventValidator eventValidator) {
-        this.sampling = Objects.requireNonNull(sampling);
-        this.navigation = Objects.requireNonNull(navigation);
-        this.events = Objects.requireNonNull(events);
+        this.peerSamplingService = Objects.requireNonNull(sampling);
+        this.navigationService = Objects.requireNonNull(navigation);
+        this.eventService = Objects.requireNonNull(events);
         this.eventValidator = Objects.requireNonNull(eventValidator);
-        this.dissemination = Objects.requireNonNull(dissemination);
+        this.disseminationService = Objects.requireNonNull(dissemination);
     }
 
     @Override
     public void seedResolved(NodeEndpoint peer) {
-        sampling.seedResolved(peer);
+        peerSamplingService.seedResolved(peer);
     }
 
     @Override
     public void samplingReceived(NodeId peer, ProtocolMessage message) {
         switch (message.type()) {
             case SECURECYCLON_REQUEST, SECURECYCLON_RESPONSE, SECURECYCLON_PROOF -> {
-                sampling.messageReceived(peer, message);
+                peerSamplingService.messageReceived(peer, message);
             }
             case NAVIGATION_REQUEST, NAVIGATION_RESPONSE -> {
-                navigation.messageReceived(peer, message);
+                navigationService.messageReceived(peer, message);
             }
             case DISSEMINATION_REQUEST, DISSEMINATION_RESPONSE -> {
-                dissemination.messageReceived(peer, message);
+                disseminationService.messageReceived(peer, message);
             }
             default -> {
             }
@@ -55,17 +55,17 @@ public final class NodeTransportListener implements TransportListener {
 
     @Override
     public void eventReceived(NodeId peerNodeId, EventEnvelope event) {
-        events.eventReceived(peerNodeId, event, eventValidator.validate(event));
+        eventService.handleIncomingEvent(peerNodeId, event, eventValidator.validate(event));
     }
 
     @Override
     public void peerDisconnected(NodeId nodeId) {
-        sampling.peerDisconnected(nodeId);
-        dissemination.peerDisconnected(nodeId);
+        peerSamplingService.peerDisconnected(nodeId);
+        disseminationService.peerDisconnected(nodeId);
     }
 
     @Override
     public void peerConnected(NodeId nodeId) {
-        sampling.peerConnected(nodeId);
+        peerSamplingService.peerConnected(nodeId);
     }
 }

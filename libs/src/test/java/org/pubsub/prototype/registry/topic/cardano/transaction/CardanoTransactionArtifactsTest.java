@@ -21,7 +21,7 @@ class CardanoTransactionArtifactsTest {
         CardanoRegistryConfig config = new CardanoRegistryConfig(
                 tempDir.resolve("runtime/registry"),
                 "registry-deployer",
-                CardanoCliBackend.CACHE_ONLY
+                CardanoCliBackend.HOST
         );
         CardanoTransactionArtifacts artifacts = new CardanoTransactionArtifacts(config);
 

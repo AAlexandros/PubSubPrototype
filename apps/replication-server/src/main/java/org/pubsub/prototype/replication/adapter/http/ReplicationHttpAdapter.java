@@ -34,6 +34,7 @@ import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.StoredEvent;
 import org.pubsub.prototype.persistence.maintenance.ReplicaRepairRequest;
 import org.pubsub.prototype.registry.replication.ReplicationMembership;
+import org.pubsub.prototype.registry.RegistryUnavailableException;
 import org.pubsub.prototype.registry.replication.ReplicationServer;
 import org.pubsub.prototype.registry.topic.TopicState;
 import org.pubsub.prototype.replication.adapter.http.exception.PersistenceUnavailableException;
@@ -50,10 +51,12 @@ import java.io.InputStream;
 import java.net.URI;
 import java.time.Clock;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Supplier;
 
 /**
  * HTTP API for one replication server.
@@ -90,6 +93,7 @@ public final class ReplicationHttpAdapter implements AutoCloseable {
     private final ReplicaMaintenanceService maintenance;
     private final Authenticator<EventEnvelope, TopicState> eventAuthenticator;
     private final Authenticator<PublisherProgressAuthenticator.Request, TopicState> progressAuthenticator;
+    private final Supplier<Map<String, Object>> registryStatus;
 
     /**
      * Creates the HTTP API and its worker pool. This does not open the listening socket until {@link #start()}.
@@ -109,13 +113,14 @@ public final class ReplicationHttpAdapter implements AutoCloseable {
                                  ReplicationMembership membership, ReplicaMaintenanceService maintenance,
                                  Authenticator<EventEnvelope, TopicState> eventAuthenticator,
                                  Authenticator<PublisherProgressAuthenticator.Request, TopicState> progressAuthenticator,
-                                 int workerThreads) throws IOException {
+                                 int workerThreads, Supplier<Map<String, Object>> registryStatus) throws IOException {
         this.self = self;
         this.service = service;
         this.membership = membership;
         this.maintenance = maintenance;
         this.eventAuthenticator = Objects.requireNonNull(eventAuthenticator);
         this.progressAuthenticator = Objects.requireNonNull(progressAuthenticator);
+        this.registryStatus = Objects.requireNonNull(registryStatus);
         Authenticator<HttpRequestAuthenticator.Request, String> replicaAuthenticator = self == null || membership == null
                 ? request -> { throw new SecurityException("replication authentication unavailable"); }
                 : new HttpRequestAuthenticator(() -> membership.activeServers().stream()
@@ -281,9 +286,20 @@ public final class ReplicationHttpAdapter implements AutoCloseable {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put(ApiFields.STATUS, ApiValues.UP);
         result.put(ApiFields.SERVER_ID, self.serverId());
-        result.put(ApiFields.MEMBERSHIP, membership.activeServers());
+        try {
+            result.put(ApiFields.MEMBERSHIP, membership.activeServers());
+        } catch (RegistryUnavailableException ignored) {
+            result.put(ApiFields.MEMBERSHIP, List.of());
+        }
+        result.put("registries", registryStatus.get());
         result.put(ApiFields.EVENT_KEYS, maintenance.localEventKeys());
         return json(200, result);
+    }
+
+    @GET
+    @Path(ApiPaths.OPS_REGISTRY)
+    public Response registryStatus() {
+        return json(200, registryStatus.get());
     }
 
     /**
@@ -360,7 +376,8 @@ public final class ReplicationHttpAdapter implements AutoCloseable {
                 status = web.getResponse().getStatus();
                 message = status == 404 ? HttpErrorCodes.NOT_FOUND
                         : status == 405 ? HttpErrorCodes.METHOD_NOT_ALLOWED : JsonHttp.safeMessage(exception);
-            } else if (exception instanceof PersistenceUnavailableException) {
+            } else if (exception instanceof PersistenceUnavailableException
+                    || exception instanceof RegistryUnavailableException) {
                 status = 503;
                 message = JsonHttp.safeMessage(exception);
             } else if (exception instanceof SecurityException) {

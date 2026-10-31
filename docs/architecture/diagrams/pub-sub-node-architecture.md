@@ -2,22 +2,21 @@
 
 Arrows show calls or callbacks. Responses are omitted. Outgoing peer messages
 pass through Peer Transport; incoming messages return through Transport Listener.
-The registry path shows the testbed's cache-only node configuration.
+Each node queries Cardano independently and publishes local registry views.
 
 ```mermaid
 flowchart TB
     LOCAL["Local Application"]
     ADMIN["Topic owner or administrator"]
     REGISTRY_TOOLS["Registry administration tools"]
-    CARDANO["Cardano Topic Registry"]
-    CACHE["Shared topic registry cache"]
+    CARDANO["Cardano Topic and Replication Registries"]
     REPLICATION["Replication Servers"]
     PEERS["Remote Pub/Sub Nodes"]
 
     subgraph NODE["Pub/Sub Node"]
         direction TB
 
-        REG["Topic Registry Sync"]
+        REG["Local Topic and Membership Views"]
         SAMPLING["Peer Sampling"]
         NAV["Navigation"]
         DIS["Dissemination"]
@@ -56,8 +55,7 @@ flowchart TB
 
     ADMIN -->|"Add or remove publisher"| REGISTRY_TOOLS
     REGISTRY_TOOLS -->|"Submit transaction and query confirmed state"| CARDANO
-    REGISTRY_TOOLS -->|"Refresh topic state"| CACHE
-    REG -->|"Poll cached topic state"| CACHE
+    REG -->|"Poll confirmed UTxOs through read-only socket"| CARDANO
     STORAGE -->|"Store events, query progress, fetch events"| REPLICATION
     TRANSPORT <-->|"P2P messages"| PEERS
 
@@ -65,5 +63,5 @@ flowchart TB
     classDef external fill:#f2e8fa,stroke:#8464a5,color:#3f285f
 
     class REG,SAMPLING,NAV,DIS,EVENT,STORAGE,TRANSPORT,LISTENER internal
-    class LOCAL,ADMIN,REGISTRY_TOOLS,CARDANO,CACHE,REPLICATION,PEERS external
+    class LOCAL,ADMIN,REGISTRY_TOOLS,CARDANO,REPLICATION,PEERS external
 ```

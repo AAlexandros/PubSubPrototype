@@ -20,7 +20,7 @@ if [[ ! -f "$REGISTRY_RUNTIME_DIR/deployment.env" ]]; then
   scripts/registry/build.sh
   scripts/registry/deploy.sh
 fi
-if [[ ! -f "$(dirname "$REPLICATION_REGISTRY_STATE")/deployment.env" ]]; then
+if [[ ! -f "$REPLICATION_REGISTRY_RUNTIME_DIR/deployment.env" ]]; then
   scripts/replication/build.sh
   scripts/replication/deploy.sh
 fi
@@ -32,12 +32,11 @@ for operator in "${operators[@]}"; do
 done
 IFS=,; ids_csv="${ids[*]}"; unset IFS
 node scripts/testbed/generate.mjs "$ROOT_DIR" "$node_count" "$ids_csv" >/dev/null
-scripts/replication/query-servers.sh >/dev/null 2>&1 || true
+current_membership="$(scripts/replication/query-servers.sh --all)"
 for index in 0 1 2; do
-  if [[ ! -f "$REPLICATION_REGISTRY_STATE" ]] || ! grep -q "${ids[$index]}" "$REPLICATION_REGISTRY_STATE"; then
+  if ! grep -q "${ids[$index]}" <<< "$current_membership"; then
     scripts/replication/register-server.sh "$TESTBED_RUNTIME/config/server-$((index + 1)).yaml"
   fi
 done
-scripts/replication/query-servers.sh > "$TESTBED_RUNTIME/replication-membership.json"
 printf '%s\n' "$node_count" > "$TESTBED_RUNTIME/node-count.txt"
-echo "Phase 0.9 testbed bootstrapped: $node_count Pub/Sub nodes, 3 replication servers, registries ready"
+echo "Phase 0.10 testbed bootstrapped: $node_count Pub/Sub nodes, 3 replication servers, registries deployed"

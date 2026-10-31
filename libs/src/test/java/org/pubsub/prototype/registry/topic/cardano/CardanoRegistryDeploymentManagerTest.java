@@ -3,7 +3,8 @@ package org.pubsub.prototype.registry.topic.cardano;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.cardano.CardanoEnvironmentFile;
-import org.pubsub.prototype.cardano.cli.CacheOnlyCardanoCommandRunner;
+import org.pubsub.prototype.cardano.CardanoNetwork;
+import org.pubsub.prototype.cardano.cli.HostCardanoCommandRunner;
 import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 
 import java.nio.file.Path;
@@ -21,12 +22,12 @@ class CardanoRegistryDeploymentManagerTest {
         CardanoRegistryConfig config = new CardanoRegistryConfig(
                 tempDir.resolve("runtime/registry"),
                 "registry-deployer",
-                CardanoCliBackend.CACHE_ONLY
+                CardanoCliBackend.HOST
         );
         writeDeployment(config, "address-1", "policy-1");
         CardanoRegistryDeploymentManager manager = new CardanoRegistryDeploymentManager(
                 config,
-                new CacheOnlyCardanoCommandRunner()
+                new HostCardanoCommandRunner(new CardanoNetwork("42", Map.of()))
         );
 
         assertEquals(new RegistryDeployment("address-1", "policy-1"), manager.read());
@@ -35,7 +36,7 @@ class CardanoRegistryDeploymentManagerTest {
 
         CardanoRegistryDeploymentManager restarted = new CardanoRegistryDeploymentManager(
                 config,
-                new CacheOnlyCardanoCommandRunner()
+                new HostCardanoCommandRunner(new CardanoNetwork("42", Map.of()))
         );
         assertEquals(new RegistryDeployment("address-2", "policy-2"), restarted.read());
     }

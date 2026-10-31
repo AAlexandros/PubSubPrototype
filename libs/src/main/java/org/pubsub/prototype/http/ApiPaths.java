@@ -14,6 +14,7 @@ public final class ApiPaths {
     public static final String REPLICATION_INVENTORY = REPLICATION_ROOT + "/inventory";
     public static final String OPS_MAINTENANCE_STATUS = OPS_ROOT + "/maintenance/status";
     public static final String OPS_HEALTH = OPS_ROOT + "/health";
+    public static final String OPS_REGISTRY = OPS_ROOT + "/registry";
 
     public static final String EVENT_PUBLISH = "/v1/events/publish";
     public static final String EVENT_INJECT = "/v1/events/inject";

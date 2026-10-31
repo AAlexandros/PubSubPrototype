@@ -14,14 +14,10 @@ flowchart LR
   ReplCLI -->|signed transaction| Devnet
   Devnet --> TopicContract[Topic Registry validator and policy]
   Devnet --> ReplContract[Replication Registry validator]
-  TopicContract --> TopicQuery[Topic query and snapshot tools]
-  ReplContract --> ReplQuery[Membership query and snapshot tools]
-  TopicQuery --> TopicCache[(Atomic topics snapshot)]
-  ReplQuery --> ReplCache[(Atomic servers snapshot)]
-  TopicCache -. poll .-> NodeSync[Pub/Sub registry synchronizers]
-  TopicCache -. poll .-> ServerSync[Replication topic clients]
-  ReplCache -. poll .-> NodeMembership[Pub/Sub persistence clients]
-  ReplCache -. poll .-> ServerMembership[Replication membership views]
+  Devnet -->|read-only CLI query| NodeSync[Each Pub/Sub node]
+  Devnet -->|read-only CLI query| ServerSync[Each replication server]
+  NodeSync --> NodeViews[(Local atomic topic and membership views)]
+  ServerSync --> ServerViews[(Local atomic topic and membership views)]
 ```
 
 ## How to read D4
@@ -31,11 +27,12 @@ signing identities for topic lifecycle and policy transactions. Replication
 operators use their identities to register or unregister storage servers. The
 validators enforce the allowed state transitions on the local Cardano ledger.
 
-The right side is the bridge to the Java services. Registry clients read
-confirmed UTxO state and replace complete JSON snapshots atomically, so a reader observes
-either the old valid snapshot or the new valid snapshot—never a partially
-written file. Pub/Sub nodes consume topic policies and server endpoints;
-replication servers consume both topic policies and the active membership.
+Each application independently queries its configured Cardano node through a
+read-only socket. It validates the returned UTxOs and replaces its in-memory
+view as a unit. A failed query preserves the prior view. The first successful
+query is required for registry readiness, and a view older than the configured
+maximum age cannot authorize new topic or membership decisions. The configured
+node and socket are trusted; Java does not independently verify the chain.
 
 Event payloads and replica inventories are absent by design. Cardano records
 governance and discovery data, while the data and persistence planes handle the
@@ -47,7 +44,6 @@ The registry selects one command backend at construction time:
 
 - `HOST` runs the installed `cardano-cli` and requires network magic and a node socket path.
 - `DEVNET` runs `cardano-cli` through the devnet Docker Compose service and requires network magic.
-- `CACHE_ONLY` disables commands and lets application services consume the materialized registry cache.
 
 Shared Java execution and payment-transaction types live under
 `org.pubsub.prototype.cardano.cli`. The Topic Registry implementation lives
@@ -58,8 +54,8 @@ The replication services consume a persistence snapshot from
 `org.pubsub.prototype.persistence`, without depending on the Cardano registry
 implementation.
 
-There is no automatic fallback between backends. Application YAML selects
-`CACHE_ONLY`, while registry administration scripts select `DEVNET` by default.
+There is no snapshot fallback. Application YAML selects `HOST`, while registry
+administration scripts select `DEVNET` by default.
 Set `CARDANO_CLI_BACKEND=HOST` to make those scripts use an installed CLI
 instead.
 
@@ -67,12 +63,22 @@ For topic mutations, `CardanoTopicRegistry` selects UTxOs, constructs typed
 commands, and executes the build, sign, and submit steps through its command
 runner. The artifact helper only names and writes transaction files.
 
-`TopicRegistry.activeTopicsSnapshot()` returns active topics;
-`allTopicsSnapshot()` includes deletion tombstones; and
+`TopicRegistry.activeTopicsSnapshot()` returns an immutable list of active
+topics ordered by topic ID; `allTopicsSnapshot()` returns the same ordered list
+including deletion tombstones; and
 `findTopicState(topicId)` looks up one topic's state. The node's registry
 synchronizer needs tombstones so it can observe topic deletion. Topic and
 replication registry writes both poll for confirmed state through
 `CardanoConfirmationWaiter` after submitting a transaction.
+
+`TopicStateProvider` supplies the topic state used by event authorization and
+validation. Each Pub/Sub node and replication server polls
+`TopicRegistry.allTopicsSnapshot()` into its own
+`RegistryObserver<List<TopicState>>`. The observer records when either registry
+list was read, so the list elements do not carry an observation timestamp. Event
+checks read from the fresh list through `TopicStateProvider`, so an event does
+not trigger a Cardano query. The same list supplies active topics to routing
+and replica maintenance.
 
 Replication Registry administration also signs Cardano transactions, using its
 own transaction workflow. The running replication servers separately sign

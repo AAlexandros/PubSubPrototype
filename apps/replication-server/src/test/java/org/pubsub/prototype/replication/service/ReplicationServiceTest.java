@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.event.EventCrypto;
+import org.pubsub.prototype.auth.SignedHttpRequest;
 import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.event.TopicStateProvider;
 import org.pubsub.prototype.persistence.adapter.FileEventStore;
@@ -21,6 +22,10 @@ import org.pubsub.prototype.replication.health.PeerFailureDetector;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.security.interfaces.EdECPrivateKey;
+import java.util.Arrays;
+import java.util.HexFormat;
 import java.security.KeyPairGenerator;
 import java.time.Clock;
 import java.time.Duration;
@@ -57,8 +62,9 @@ class ReplicationServiceTest {
                         "127.0.0.1", listener.getAddress().getPort()));
             }
             ReplicationServer self = new ReplicationServer("ff".repeat(32), "127.0.0.1", 9999);
+            SignedHttpRequest requestSigner = testRequestSigner();
             try (ReplicationHttpClient http = new ReplicationHttpClient(
-                    Duration.ofSeconds(1), Duration.ofSeconds(1), 0)) {
+                    Duration.ofSeconds(1), Duration.ofSeconds(1), 0, requestSigner)) {
                 TopicStateProvider topics = id -> Optional.of(topic);
                 ReplicationService service = new ReplicationService(self, () -> members,
                         new PersistenceEventValidator(topics), topics,
@@ -70,6 +76,27 @@ class ReplicationServiceTest {
         } finally {
             listeners.forEach(listener -> listener.stop(0));
         }
+    }
+
+    private SignedHttpRequest testRequestSigner() throws Exception {
+        var keys = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        byte[] encodedPublic = keys.getPublic().getEncoded();
+        byte[] verification = cardanoKey(Arrays.copyOfRange(encodedPublic,
+                encodedPublic.length - 32, encodedPublic.length));
+        byte[] signing = cardanoKey(((EdECPrivateKey) keys.getPrivate()).getBytes().orElseThrow());
+        Path verificationFile = temp.resolve("request.vkey");
+        Path signingFile = temp.resolve("request.skey");
+        Files.writeString(verificationFile, "{\"cborHex\":\"" + HexFormat.of().formatHex(verification) + "\"}");
+        Files.writeString(signingFile, "{\"cborHex\":\"" + HexFormat.of().formatHex(signing) + "\"}");
+        return SignedHttpRequest.load(signingFile, verificationFile, EventCrypto.sha256Hex(verification));
+    }
+
+    private static byte[] cardanoKey(byte[] raw) {
+        byte[] cbor = new byte[34];
+        cbor[0] = 0x58;
+        cbor[1] = 0x20;
+        System.arraycopy(raw, 0, cbor, 2, 32);
+        return cbor;
     }
 
     @Test

@@ -15,8 +15,7 @@ import org.pubsub.prototype.persistence.adapter.ReplicationHttpClient;
 import org.pubsub.prototype.persistence.core.EventKeys;
 import org.pubsub.prototype.persistence.core.ReplicationServerClient;
 import org.pubsub.prototype.persistence.core.PersistenceEventValidator;
-import org.pubsub.prototype.registry.replication.FileReplicationRegistry;
-import org.pubsub.prototype.registry.replication.ReplicationRegistryReader;
+import org.pubsub.prototype.registry.replication.ReplicationMembership;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,19 +60,18 @@ public final class EventStorageService implements AutoCloseable {
     private final PersistenceEventValidator recoveryValidator;
 
     /**
-     * Reads replication-server addresses from the configured local registry snapshot.
+     * Uses the current replication-registry view to choose active server endpoints for storage and recovery.
      * Each active registration supplies the host and port used for HTTP requests.
      */
-    public EventStorageService(NodeConfig.PersistenceSection config, TopicStateProvider topics) {
-        Path membershipPath = Path.of(config.membershipPath);
+    public EventStorageService(NodeConfig.PersistenceSection config, TopicStateProvider topics,
+                               ReplicationMembership membership) {
         Path deliveryStatePath = Path.of(config.deliveryStatePath);
         Duration connectionTimeout = Duration.ofMillis(config.connectionTimeoutMs);
         Duration requestTimeout = Duration.ofMillis(config.requestTimeoutMs);
-        ReplicationRegistryReader registry = new FileReplicationRegistry(membershipPath);
 
         this.deliveryState = new DeliveryStateStore(deliveryStatePath);
         ReplicationHttpClient replicationHttpClient = new ReplicationHttpClient(connectionTimeout, requestTimeout, config.retries);
-        this.replicationServerClient = new ReplicationServerClient(registry::activeServers, replicationHttpClient);
+        this.replicationServerClient = new ReplicationServerClient(membership, replicationHttpClient);
         requirePositive(config.recoveryConcurrency, CONCURRENCY_FIELD);
         this.recoveryValidator = new PersistenceEventValidator(topics);
 
@@ -84,8 +82,8 @@ public final class EventStorageService implements AutoCloseable {
         });
         this.storageExecutor = AsyncUtil.singleThread("event-storage");
 
-        NodeLog.init(LOG, "PERSISTENCE_READY membership={} deliveryState={} connectTimeout={} requestTimeout={} retries={} recoveryConcurrency={}",
-                membershipPath, deliveryStatePath, connectionTimeout,
+        NodeLog.init(LOG, "PERSISTENCE_READY deliveryState={} connectTimeout={} requestTimeout={} retries={} recoveryConcurrency={}",
+                deliveryStatePath, connectionTimeout,
                 requestTimeout, config.retries, config.recoveryConcurrency);
     }
 

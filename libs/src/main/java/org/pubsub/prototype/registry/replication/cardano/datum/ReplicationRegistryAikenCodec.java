@@ -9,6 +9,9 @@ import org.pubsub.prototype.registry.replication.cardano.mutation.ReplicationSer
 import org.pubsub.prototype.registry.replication.cardano.mutation.ReplicationServerOperation;
 import org.pubsub.prototype.util.files.JsonSupport;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
 
@@ -42,15 +45,30 @@ public final class ReplicationRegistryAikenCodec {
 
     public ReplicationServerState decodeDatum(JsonNode datum) {
         ArrayNode fields = fields(datum, 0, 7);
-        return new ReplicationServerState(
-                bytesValue(fields.get(0)),
-                bytesValue(fields.get(1)),
-                new String(HEX.parseHex(bytesValue(fields.get(2))), StandardCharsets.UTF_8),
-                Math.toIntExact(integerValue(fields.get(3))),
-                integerValue(fields.get(4)),
-                integerValue(fields.get(5)),
-                constructorIndex(fields.get(6)) == 1
-        );
+        String serverId = bytesValue(fields.get(0));
+        String operator = bytesValue(fields.get(1));
+        if (!serverId.matches("[0-9a-f]{64}") || !operator.matches("[0-9a-f]{56}")) {
+            throw new IllegalArgumentException("Invalid replication registry identity");
+        }
+        String host;
+        try {
+            host = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(HEX.parseHex(bytesValue(fields.get(2))))).toString();
+        } catch (CharacterCodingException ex) {
+            throw new IllegalArgumentException("Invalid replication registry host encoding", ex);
+        }
+        int port = Math.toIntExact(integerValue(fields.get(3)));
+        long start = integerValue(fields.get(4));
+        long end = integerValue(fields.get(5));
+        int active = constructorIndex(fields.get(6));
+        if (host.isBlank() || port <= 0 || port > 65535 || start < 0 || end < start
+                || (active != 0 && active != 1) || !fields.get(6).path("fields").isArray()
+                || fields.get(6).path("fields").size() != 0) {
+            throw new IllegalArgumentException("Invalid replication registry endpoint or commitment");
+        }
+        return new ReplicationServerState(serverId, operator, host, port, start, end, active == 1);
     }
 
     private static ObjectNode constructor(int index) {

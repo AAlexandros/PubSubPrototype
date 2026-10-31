@@ -18,4 +18,4 @@ fi
 compose up -d --build --remove-orphans
 for index in 1 2 3; do wait_http "http://127.0.0.1:$((8100 + index))/v1/ops/health" "replication-server-$index"; done
 for index in $(seq 1 "$node_count"); do wait_http "http://127.0.0.1:$((8000 + index))/v1/peer-sampling/view" "pubsub-node-$index"; done
-echo "Phase 0.9 testbed is ready ($node_count Pub/Sub nodes, 3 replication servers)"
+echo "Phase 0.10 testbed processes are running ($node_count Pub/Sub nodes, 3 replication servers)"

@@ -27,14 +27,6 @@ public record CardanoReplicationRegistryConfig(Path runtimeDir, String signer, C
         return runtimeDir.resolve("transactions.log");
     }
 
-    public Path scriptUtxoCacheFile() {
-        return runtimeDir.resolve("script-utxos.json");
-    }
-
-    public Path stateFile() {
-        return runtimeDir.resolve("servers.json");
-    }
-
     public Path projectRoot() {
         Path devnetDir = runtimeDir.toAbsolutePath().normalize().getParent().getParent();
         Path opsDir = devnetDir.getParent().getParent();

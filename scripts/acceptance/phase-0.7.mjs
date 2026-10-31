@@ -142,17 +142,24 @@ timing:
   if (filtered.length !== 0) throw Error('publisher-progress timestamp filter returned stale publishers');
   save('topic-publisher-log-timestamp-filter', {sinceTimestamp: latest, publishers: filtered});
 } else if (mode === 'recover') {
-  const result = await json(`http://127.0.0.1:8003/v1/events/recover/${args[0]}`, {method: 'POST'});
-  if (result.missingCount !== Number(args[1]) || result.deliveredCount !== Number(args[1])
-      || result.unavailableEventKeys.length !== 0 || new Set(result.deliveredEventKeys).size !== Number(args[1])) {
+  const topic = args[0];
+  const expectedCount = Number(args[1]);
+  const nodeIndex = Number(args[2] ?? 3);
+  const sequences = args.length > 3
+    ? args.slice(3).map(Number)
+    : Array.from({length: expectedCount}, (_, index) => index + 1);
+  if (sequences.length !== expectedCount) throw Error('recovery sequence count does not match expected count');
+  const result = await json(`http://127.0.0.1:800${nodeIndex}/v1/events/recover/${topic}`, {method: 'POST'});
+  if (result.missingCount !== expectedCount || result.deliveredCount !== expectedCount
+      || result.unavailableEventKeys.length !== 0 || new Set(result.deliveredEventKeys).size !== expectedCount) {
     throw Error(`unexpected recovery result: ${JSON.stringify(result)}`);
   }
-  const expected = [1, 2, 3].map(sequence => {
+  const expected = sequences.map(sequence => {
     const published = JSON.parse(fs.readFileSync(path.join(evidence, `published-sequence-${sequence}.json`), 'utf8'));
     return eventKey(published.envelope).eventKey;
   });
   if (result.deliveredEventKeys.join() !== expected.join()) throw Error('recovered events were not delivered in sequence order');
-  save('node-3-recovery-result', result);
+  save(`node-${nodeIndex}-recovery-result`, result);
 } else if (mode === 'health-snapshot') {
   const snapshot = await Promise.all([1, 2, 3].map(health));
   if (args[0] === 'replication-inventories-after-restart') {

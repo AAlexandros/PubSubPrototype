@@ -1,12 +1,10 @@
 package org.pubsub.prototype.registry.topic.cardano;
 
 import org.pubsub.prototype.cardano.CardanoEnvironmentFile;
-import org.pubsub.prototype.cardano.cli.CardanoCliUnavailableException;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
 import org.pubsub.prototype.cardano.cli.command.BuildScriptAddressCommand;
 import org.pubsub.prototype.cardano.cli.command.PolicyIdCommand;
 import org.pubsub.prototype.registry.RegistryConflictException;
-import org.pubsub.prototype.util.files.TextFiles;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -17,7 +15,6 @@ import java.util.Map;
 
 /** Manages Cardano registry scripts and persisted deployment metadata. */
 public final class CardanoRegistryDeploymentManager {
-    private static final String EMPTY_JSON_OBJECT = "{}";
     private static final String TOPIC_STATE_SCRIPT = "topic-state.plutus.json";
     private static final String TOPIC_POLICY_SCRIPT = "topic-policy.plutus.json";
     private static final String SCRIPTS_DIRECTORY = "scripts";
@@ -50,7 +47,8 @@ public final class CardanoRegistryDeploymentManager {
             return cachedDeployment;
         }
         if (!Files.exists(config.deploymentFile())) {
-            return initialize();
+            throw new RegistryConflictException("Trusted topic registry deployment metadata is missing: "
+                    + config.deploymentFile());
         }
         Map<String, String> values = CardanoEnvironmentFile.readRequired(
                 config.deploymentFile(),
@@ -98,9 +96,6 @@ public final class CardanoRegistryDeploymentManager {
         values.put(CardanoRegistryEnvironment.TOPIC_REGISTRY_VALIDATOR_ADDRESS, deployment.validatorAddress());
         values.put(CardanoRegistryEnvironment.TOPIC_POLICY_ID, deployment.policyId());
         CardanoEnvironmentFile.write(config.deploymentFile(), values);
-        if (!Files.exists(config.scriptUtxoCacheFile())) {
-            TextFiles.write(config.scriptUtxoCacheFile(), EMPTY_JSON_OBJECT);
-        }
     }
 
     private Path stageScript(String filename) {
@@ -133,11 +128,7 @@ public final class CardanoRegistryDeploymentManager {
     }
 
     private void requireCommandExecution() {
-        try {
-            commandRunner.requireCommandExecution();
-        } catch (CardanoCliUnavailableException ex) {
-            throw new RegistryConflictException(ex.getMessage());
-        }
+        commandRunner.requireCommandExecution();
     }
 
 }

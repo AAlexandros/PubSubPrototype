@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -54,16 +55,14 @@ class EventStorageServiceRecoveryTest {
         }
         fake.start();
         try {
-            Path membershipFile = temp.resolve("servers.json");
-            JsonSupport.MAPPER.writeValue(membershipFile.toFile(), List.of(new ReplicationServerState(
-                    "aa".repeat(32), "operator-1", "127.0.0.1", fake.getAddress().getPort(), 0, 100, true)));
+            List<ReplicationServerState> members = List.of(new ReplicationServerState(
+                    "aa".repeat(32), "operator-1", "127.0.0.1", fake.getAddress().getPort(), 0, 100, true));
             Path stateFile = temp.resolve("delivery.json");
             DeliveryStateStore initial = new DeliveryStateStore(stateFile);
             initial.recordLatestAcceptedSequence(TOPIC, publisherId, 0, 10);
             assertEquals(10, initial.latestDeliveredTimestamp(TOPIC));
             List<Long> delivered = new ArrayList<>();
             NodeConfig.PersistenceSection config = new NodeConfig.PersistenceSection();
-            config.membershipPath = membershipFile.toString();
             config.deliveryStatePath = stateFile.toString();
             config.connectionTimeoutMs = 1_000L;
             config.requestTimeoutMs = 1_000L;
@@ -71,7 +70,8 @@ class EventStorageServiceRecoveryTest {
             config.recoveryConcurrency = 2;
             try (EventStorageService storage = new EventStorageService(config, id ->
                     java.util.Optional.of(new TopicState(new TopicId(TOPIC), "test", List.of("owner"),
-                            List.of(), List.of(), 1, 10, true)))) {
+                            List.of(), List.of(), 1, 10, true)),
+                    () -> members.stream().map(ReplicationServerState::endpoint).toList())) {
                 assertEquals(2, storage.recover(
                         TOPIC, event -> delivered.add(event.sequenceNumber())).deliveredCount());
                 assertEquals("topicId=" + TOPIC, eventLookupQuery.get());
@@ -79,7 +79,8 @@ class EventStorageServiceRecoveryTest {
             }
             try (EventStorageService restarted = new EventStorageService(config, id ->
                     java.util.Optional.of(new TopicState(new TopicId(TOPIC), "test", List.of("owner"),
-                            List.of(), List.of(), 1, 10, true)))) {
+                            List.of(), List.of(), 1, 10, true)),
+                    () -> members.stream().map(ReplicationServerState::endpoint).toList())) {
                 assertEquals(0, restarted.recover(
                         TOPIC, event -> fail("duplicate delivery")).deliveredCount());
             }

@@ -3,30 +3,12 @@ package org.pubsub.prototype.registry.topic;
 import org.junit.jupiter.api.Test;
 import org.pubsub.prototype.registry.topic.cardano.mutation.TopicMutation;
 
-import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-class RegistrySnapshotTest {
-    @Test
-    void snapshotsCompareByTopicContentAndObservationTime() {
-        TopicState topic = new TopicState(
-                new TopicId("0".repeat(64)),
-                "orders",
-                List.of("node-1"),
-                List.of(),
-                List.of(),
-                1,
-                60,
-                true
-        );
-        Instant observedAt = Instant.parse("2026-08-27T00:00:00Z");
-
-        assertEquals(new RegistrySnapshot(List.of(topic), observedAt), new RegistrySnapshot(List.of(topic), observedAt));
-    }
-
+class TopicStateTest {
     @Test
     void topicStateRequiresValidAdministrativeInvariants() {
         TopicId topicId = new TopicId("1".repeat(64));

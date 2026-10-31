@@ -17,13 +17,20 @@ if have_command cardano-testnet && have_command cardano-node && have_command car
       --testnet-magic "$NETWORK_MAGIC" \
       --num-pool-nodes "${CARDANO_TESTNET_NUM_POOL_NODES:-1}" \
       --slot-length "${CARDANO_TESTNET_SLOT_LENGTH:-2}" \
-      --epoch-length "${CARDANO_TESTNET_EPOCH_LENGTH:-500}" \
+      --epoch-length "${CARDANO_TESTNET_EPOCH_LENGTH:-10000}" \
       --output-dir "$TESTNET_DIR" \
       > "$RUNTIME_DIR/cardano-testnet.log" 2>&1 &
     echo "$!" > "$RUNTIME_DIR/cardano-testnet.pid"
   fi
 else
-  docker_compose up -d --build
+  if [ -n "$(docker_compose ps --status running -q cardano-node)" ]; then
+    echo "Cardano devnet container is already running"
+  elif [ -d "$TESTNET_DIR/byron-gen-command" ]; then
+    echo "Cardano testnet output exists, but its container is not running. Run ops/infra/devnet/scripts/reset.sh before starting a new testnet." >&2
+    exit 1
+  else
+    docker_compose up -d --build
+  fi
 fi
 
 write_network_env

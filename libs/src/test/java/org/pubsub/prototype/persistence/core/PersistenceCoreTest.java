@@ -7,12 +7,9 @@ import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.StoredEvent;
 import org.pubsub.prototype.persistence.adapter.FileEventStore;
-import org.pubsub.prototype.registry.replication.FileReplicationRegistry;
 import org.pubsub.prototype.registry.replication.ReplicationServer;
-import org.pubsub.prototype.registry.replication.ReplicationServerState;
 import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.registry.topic.TopicState;
-import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -61,21 +58,6 @@ class PersistenceCoreTest {
         java.util.Collections.reverse(reversed);
         assertEquals(DhtAssignment.responsibleServers("44".repeat(32), servers, 2),
                 DhtAssignment.responsibleServers("44".repeat(32), reversed, 2));
-    }
-
-    @Test
-    void registrySnapshotFiltersAndReconstructs() throws Exception {
-        Path file = temp.resolve("servers.json");
-        ReplicationServerState active = new ReplicationServerState("ab".repeat(32), "operator-1", "localhost",
-                9000, 2, 9, true);
-        ReplicationServerState inactive = new ReplicationServerState("cd".repeat(32), "operator-2", "localhost",
-                9001, 3, 10, false);
-        JsonSupport.MAPPER.writeValue(file.toFile(), List.of(active, inactive));
-
-        FileReplicationRegistry registry = new FileReplicationRegistry(file);
-        assertEquals(List.of(active), registry.queryServers(false));
-        assertEquals(List.of(active, inactive), registry.queryServers(true));
-        assertEquals(List.of(active.endpoint()), registry.activeServers());
     }
 
     @Test

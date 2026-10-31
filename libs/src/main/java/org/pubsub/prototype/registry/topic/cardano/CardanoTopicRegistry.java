@@ -1,23 +1,23 @@
 package org.pubsub.prototype.registry.topic.cardano;
 
+import org.pubsub.prototype.cardano.CardanoConfirmationWaiter;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunnerFactory;
-import org.pubsub.prototype.cardano.cli.CardanoCliUnavailableException;
-import org.pubsub.prototype.cardano.CardanoConfirmationWaiter;
 import org.pubsub.prototype.cardano.cli.transaction.CardanoPaymentIdentity;
 import org.pubsub.prototype.cardano.cli.transaction.CardanoTransactionLog;
 import org.pubsub.prototype.cardano.cli.transaction.SignTransactionCommand;
 import org.pubsub.prototype.cardano.cli.transaction.SubmitTransactionCommand;
 import org.pubsub.prototype.constants.CryptoConstants;
 import org.pubsub.prototype.registry.RegistryConflictException;
+import org.pubsub.prototype.registry.RegistryDataException;
+import org.pubsub.prototype.registry.RegistryIdentityException;
 import org.pubsub.prototype.registry.topic.CreateTopicRequest;
-import org.pubsub.prototype.registry.topic.RegistrySnapshot;
 import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.registry.topic.TopicRegistry;
 import org.pubsub.prototype.registry.topic.TopicState;
+import org.pubsub.prototype.registry.topic.cardano.datum.AikenScriptDataCodec;
 import org.pubsub.prototype.registry.topic.cardano.datum.CardanoCliUtxoParser;
 import org.pubsub.prototype.registry.topic.cardano.datum.CardanoScriptUtxo;
-import org.pubsub.prototype.registry.topic.cardano.datum.AikenScriptDataCodec;
 import org.pubsub.prototype.registry.topic.cardano.mutation.TopicMutation;
 import org.pubsub.prototype.registry.topic.cardano.mutation.TopicOperation;
 import org.pubsub.prototype.registry.topic.cardano.mutation.TopicStateTransitions;
@@ -26,25 +26,28 @@ import org.pubsub.prototype.registry.topic.cardano.transaction.CardanoTransactio
 import org.pubsub.prototype.registry.topic.cardano.transaction.CardanoTransactionSigner;
 import org.pubsub.prototype.registry.topic.cardano.transaction.command.CreateTopicCommand;
 import org.pubsub.prototype.registry.topic.cardano.transaction.command.SpendTopicCommand;
-import org.pubsub.prototype.util.files.TextFiles;
 
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.Instant;
+import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * Reads topic state from the configured Cardano script and submits topic transactions.
+ * Every read queries live script UTxOs. Trusted deployment metadata identifies the script address
+ * and minting policy; no local UTxO snapshot is used for registry decisions.
+ */
 public final class CardanoTopicRegistry implements TopicRegistry {
     private static final HexFormat HEX = HexFormat.of();
     private static final long SCRIPT_OUTPUT_LOVELACE = 2_000_000L;
     private static final int TOPIC_TOKEN_QUANTITY = 1;
 
-    private final CardanoRegistryConfig config;
     private final CardanoCommandRunner commandRunner;
     private final CardanoCliUtxoParser utxoParser;
     private final CardanoRegistryDeploymentManager deployments;
@@ -54,12 +57,12 @@ public final class CardanoTopicRegistry implements TopicRegistry {
     private final CardanoTransactionSigner transactionSigner;
     private final CardanoTransactionLog transactionLog;
 
+    /** Creates a registry with the Cardano command backend selected by {@code config}. */
     public CardanoTopicRegistry(CardanoRegistryConfig config) {
         this(config, CardanoCommandRunnerFactory.create(config.cliBackend(), config.runtimeDir()));
     }
 
     CardanoTopicRegistry(CardanoRegistryConfig config, CardanoCommandRunner commandRunner) {
-        this.config = config;
         this.commandRunner = commandRunner;
         this.utxoParser = new CardanoCliUtxoParser();
         this.deployments = new CardanoRegistryDeploymentManager(config, commandRunner);
@@ -71,8 +74,8 @@ public final class CardanoTopicRegistry implements TopicRegistry {
     }
 
     @Override
-    public RegistrySnapshot activeTopicsSnapshot() {
-        return new RegistrySnapshot(readOnChainTopics().stream().filter(TopicState::active).toList(), Instant.now());
+    public List<TopicState> activeTopicsSnapshot() {
+        return readOnChainTopics().stream().filter(TopicState::active).toList();
     }
 
     @Override
@@ -80,9 +83,10 @@ public final class CardanoTopicRegistry implements TopicRegistry {
         return readOnChainTopics().stream().filter(topic -> topic.topicId().equals(topicId)).findFirst();
     }
 
+    /** Mints the topic token from a consumed payment UTxO and waits for its script output. */
     @Override
     public TopicId createTopic(CreateTopicRequest request) {
-        requireCommandExecution();
+        commandRunner.requireCommandExecution();
         RegistryDeployment deployment = deployments.read();
         CardanoPaymentIdentity signer = transactionSigner.identity();
         String creationSeed = signer.paymentUtxo(commandRunner, Set.of());
@@ -158,26 +162,27 @@ public final class CardanoTopicRegistry implements TopicRegistry {
         mutate(topicId, TopicMutation.setRetentionPeriod(retentionPeriod));
     }
 
+    /** Stages the built scripts and records their Cardano address and policy ID. */
     public void deploy() {
         deployments.initialize();
     }
 
     @Override
-    public RegistrySnapshot allTopicsSnapshot() {
-        return new RegistrySnapshot(readOnChainTopics(), Instant.now());
+    public List<TopicState> allTopicsSnapshot() {
+        return readOnChainTopics();
     }
 
+    /** Returns the raw live script UTxO query for administration and diagnostics. */
     public String scriptUtxosJson() {
         RegistryDeployment deployment = deployments.read();
-        String json = commandRunner.queryScriptUtxosJson(deployment.validatorAddress()).orElseThrow(
+        return commandRunner.queryScriptUtxosJson(deployment.validatorAddress()).orElseThrow(
                 () -> new RegistryConflictException("Cardano registry is unavailable; script UTxOs cannot be queried")
         );
-        writeScriptUtxoCache(json);
-        return json;
     }
 
+    /** Builds an unsigned last-owner removal transaction for a contract rejection check. */
     public void buildInvalidLastOwnerRemoval(TopicId topicId, String owner) {
-        requireCommandExecution();
+        commandRunner.requireCommandExecution();
         TopicState current = findTopicState(topicId).orElseThrow(() -> new RegistryConflictException("unknown on-chain topicId: " + topicId));
         RegistryDeployment deployment = deployments.read();
         CardanoPaymentIdentity signer = transactionSigner.identity();
@@ -192,8 +197,9 @@ public final class CardanoTopicRegistry implements TopicRegistry {
                 deployment, signer, datum, body);
     }
 
+    /** Builds a replacement topic UTxO, submits it, and waits for the spent output to move. */
     private void mutate(TopicId topicId, TopicMutation mutation) {
-        requireCommandExecution();
+        commandRunner.requireCommandExecution();
         TopicState current = findTopicState(topicId).orElseThrow(() -> new RegistryConflictException("unknown on-chain topicId: " + topicId));
         RegistryDeployment deployment = deployments.read();
         CardanoPaymentIdentity signer = transactionSigner.identity();
@@ -265,14 +271,6 @@ public final class CardanoTopicRegistry implements TopicRegistry {
         return value.replace(System.lineSeparator(), " ").replace('\n', ' ').replace('\r', ' ').trim();
     }
 
-    private void requireCommandExecution() {
-        try {
-            commandRunner.requireCommandExecution();
-        } catch (CardanoCliUnavailableException ex) {
-            throw new RegistryConflictException(ex.getMessage());
-        }
-    }
-
     private void waitUntilCreated(TopicId topicId) {
         CardanoConfirmationWaiter.await(
                 () -> findTopicState(topicId).isPresent(),
@@ -285,30 +283,43 @@ public final class CardanoTopicRegistry implements TopicRegistry {
                 new RegistryConflictException("submitted Cardano registry transaction did not move topic UTxO: " + topicId));
     }
 
+    /** A missing query is an error; an empty on-chain UTxO set is a valid empty registry. */
     private List<TopicState> readOnChainTopics() {
         RegistryDeployment deployment = deployments.read();
-        Optional<String> scriptUtxosJson = commandRunner.queryScriptUtxosJson(deployment.validatorAddress());
-        if (scriptUtxosJson.isPresent()) {
-            String json = scriptUtxosJson.orElseThrow();
-            writeScriptUtxoCache(json);
-            return parseTopics(json, deployment);
-        }
-        if (Files.exists(config.scriptUtxoCacheFile())) {
-            return parseTopics(TextFiles.read(config.scriptUtxoCacheFile()), deployment);
-        }
-        if (Files.exists(config.deploymentFile())) {
-            return List.of();
-        }
-        throw new RegistryConflictException("Cardano registry is unavailable");
+        String json = commandRunner.queryScriptUtxosJson(deployment.validatorAddress())
+                .orElseThrow(() -> new RegistryConflictException("Cardano topic registry query is unavailable"));
+        return parseTopics(json, deployment);
     }
 
+    /** Rejects inconsistent registry tokens before publishing a complete topic snapshot. */
     private List<TopicState> parseTopics(String scriptUtxosJson, RegistryDeployment deployment) {
-        return utxoParser.parse(scriptUtxosJson).stream()
-                .filter(utxo -> utxo.containsPolicy(deployment.policyId()))
-                .flatMap(utxo -> utxo.topicState().stream())
+        var topics = new LinkedHashMap<TopicId, TopicState>();
+        for (CardanoScriptUtxo utxo : utxoParser.parse(scriptUtxosJson, deployment.validatorAddress())) {
+            if (!utxo.containsPolicy(deployment.policyId())) {
+                continue;
+            }
+            TopicState state = utxo.topicState().orElseThrow(() ->
+                    new RegistryDataException("Invalid topic registry datum at " + utxo.ref()));
+            String policyAssetPrefix = deployment.policyId() + ".";
+            String topicAsset = policyAssetPrefix + state.topicId().value();
+            long registryTokenCount = utxo.assets().keySet().stream()
+                    .filter(asset -> asset.startsWith(policyAssetPrefix))
+                    .count();
+            // The token must identify this datum, and each topic UTxO must carry exactly one registry token.
+            if (utxo.assets().getOrDefault(topicAsset, 0L) != TOPIC_TOKEN_QUANTITY || registryTokenCount != 1) {
+                throw new RegistryIdentityException("Unexpected topic registry token at " + utxo.ref());
+            }
+            // A topic ID represents one state UTxO across the entire queried registry snapshot.
+            if (topics.putIfAbsent(state.topicId(), state) != null) {
+                throw new RegistryDataException("Duplicate topic registry state for " + state.topicId());
+            }
+        }
+        return topics.values().stream()
+                .sorted(Comparator.comparing(topic -> topic.topicId().value()))
                 .toList();
     }
 
+    /** Looks up the current UTxO reference used when spending or confirming a topic. */
     private Optional<CardanoScriptUtxo> topicUtxo(TopicId topicId) {
         RegistryDeployment deployment = deployments.read();
         Optional<String> scriptUtxosJson = commandRunner.queryScriptUtxosJson(deployment.validatorAddress());
@@ -316,8 +327,7 @@ public final class CardanoTopicRegistry implements TopicRegistry {
             return Optional.empty();
         }
         String json = scriptUtxosJson.orElseThrow();
-        writeScriptUtxoCache(json);
-        return utxoParser.parse(json).stream()
+        return utxoParser.parse(json, deployment.validatorAddress()).stream()
                 .filter(utxo -> utxo.containsPolicy(deployment.policyId()))
                 .filter(utxo -> utxo.topicState().map(state -> state.topicId().equals(topicId)).orElse(false))
                 .findFirst();
@@ -356,7 +366,4 @@ public final class CardanoTopicRegistry implements TopicRegistry {
         }
     }
 
-    private void writeScriptUtxoCache(String json) {
-        TextFiles.write(config.scriptUtxoCacheFile(), json);
-    }
 }

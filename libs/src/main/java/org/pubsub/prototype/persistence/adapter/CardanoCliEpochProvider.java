@@ -1,11 +1,12 @@
 package org.pubsub.prototype.persistence.adapter;
 
-import org.pubsub.prototype.persistence.core.EpochProvider;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
 import org.pubsub.prototype.cardano.cli.command.QueryTipCommand;
 import org.pubsub.prototype.constants.CardanoConstants;
+import org.pubsub.prototype.persistence.core.EpochProvider;
 import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.io.IOException;
@@ -16,6 +17,7 @@ public final class CardanoCliEpochProvider implements EpochProvider {
     private static final ObjectMapper MAPPER = JsonSupport.MAPPER;
 
     /** Record used to deserialize the JSON output of {@code cardano-cli query tip}. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private record CardanoTip(@JsonProperty(CardanoConstants.EPOCH_FIELD) Long epoch,
                               @JsonProperty(CardanoConstants.SYNC_PROGRESS_FIELD) String syncProgress) {
     }

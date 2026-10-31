@@ -58,6 +58,11 @@ pubsub_run_gradle() {
   fi
 }
 
+pubsub_run_windows_npx() {
+  # Keep Git Bash from converting cmd.exe's /c switch into a path.
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' cmd.exe /c npx.cmd "$@"
+}
+
 pubsub_run_node_file() {
   local script
   script="$(pubsub_node_path "$1")"

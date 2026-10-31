@@ -106,7 +106,6 @@ class DisseminationIntegrationTest {
                     });
             navigation.attach(transport);
             dissemination.attach(transport);
-            events.attachSender(transport);
             events.attachDissemination(dissemination);
         }
 

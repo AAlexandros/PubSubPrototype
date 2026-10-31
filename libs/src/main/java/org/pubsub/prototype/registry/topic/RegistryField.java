@@ -24,13 +24,7 @@ public enum RegistryField {
     RETENTION_PERIOD("retentionPeriod"),
 
     /** Whether the topic is active. */
-    ACTIVE("active"),
-
-    /** Topics contained in a registry snapshot. */
-    TOPICS("topics"),
-
-    /** Time at which a registry snapshot was observed. */
-    OBSERVED_AT("observedAt");
+    ACTIVE("active");
 
     private final String jsonName;
 

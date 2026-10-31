@@ -4,8 +4,6 @@ import java.util.Locale;
 
 /** Supported sources of Cardano registry state and commands. */
 public enum CardanoCliBackend {
-    /** Read snapshots without live CLI access. */
-    CACHE_ONLY,
     /** Run the CLI installed on the host. */
     HOST,
     /** Run the CLI inside the local Docker devnet. */

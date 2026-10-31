@@ -3,6 +3,7 @@ package org.pubsub.prototype.registry.topic;
 import org.pubsub.prototype.registry.RegistryAuthorizationException;
 import org.pubsub.prototype.registry.RegistryConflictException;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -15,11 +16,11 @@ import java.util.Optional;
  * {@link RegistryConflictException} when the requested state change is invalid.</p>
  */
 public interface TopicRegistry {
-    /** Returns the currently active topics visible to the registry. */
-    RegistrySnapshot activeTopicsSnapshot();
+    /** Returns an immutable list of active topics ordered by topic ID. */
+    List<TopicState> activeTopicsSnapshot();
 
-    /** Returns active and inactive topic records, including deletion tombstones. */
-    RegistrySnapshot allTopicsSnapshot();
+    /** Returns an immutable, topic-ID-ordered list including deletion tombstones. */
+    List<TopicState> allTopicsSnapshot();
 
     /** Returns the state for a topic, given its ID. */
     Optional<TopicState> findTopicState(TopicId topicId);

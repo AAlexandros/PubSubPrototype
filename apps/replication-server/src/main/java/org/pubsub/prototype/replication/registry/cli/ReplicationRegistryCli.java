@@ -1,7 +1,6 @@
 package org.pubsub.prototype.replication.registry.cli;
 
 import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
-import org.pubsub.prototype.registry.replication.FileReplicationRegistry;
 import org.pubsub.prototype.registry.replication.ReplicationServerState;
 import org.pubsub.prototype.registry.replication.cardano.CardanoReplicationRegistry;
 import org.pubsub.prototype.registry.replication.cardano.CardanoReplicationRegistryConfig;

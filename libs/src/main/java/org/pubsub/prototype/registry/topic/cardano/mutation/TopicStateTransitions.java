@@ -4,9 +4,8 @@ import org.pubsub.prototype.registry.RegistryAuthorizationException;
 import org.pubsub.prototype.registry.RegistryConflictException;
 import org.pubsub.prototype.registry.topic.TopicState;
 
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 public final class TopicStateTransitions {
     private TopicStateTransitions() {
@@ -41,15 +40,15 @@ public final class TopicStateTransitions {
     }
 
     private static List<String> add(List<String> values, String value) {
-        Set<String> set = new LinkedHashSet<>(values);
-        set.add(value);
-        return List.copyOf(set);
+        if (values.contains(value)) return List.copyOf(values);
+        List<String> updated = new ArrayList<>(values.size() + 1);
+        updated.add(value);
+        updated.addAll(values);
+        return List.copyOf(updated);
     }
 
     private static List<String> remove(List<String> values, String value) {
-        Set<String> set = new LinkedHashSet<>(values);
-        set.remove(value);
-        return List.copyOf(set);
+        return values.stream().filter(existing -> !existing.equals(value)).toList();
     }
 
     private static List<String> removeOwner(List<String> values, String value) {

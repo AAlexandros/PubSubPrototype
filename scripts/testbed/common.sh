@@ -7,9 +7,7 @@ TESTBED_RUNTIME="$ROOT_DIR/.tools/phase-0.9"
 COMPOSE_FILE="$TESTBED_RUNTIME/compose.yaml"
 VERSIONS_FILE="$ROOT_DIR/ops/infra/devnet/versions.env"
 export REGISTRY_RUNTIME_DIR="$ROOT_DIR/ops/infra/devnet/runtime/registry"
-export REPLICATION_REGISTRY_STATE="$ROOT_DIR/ops/infra/devnet/runtime/replication-registry/servers.json"
-
-pubsub_enable_msys_path_passthrough
+export REPLICATION_REGISTRY_RUNTIME_DIR="$ROOT_DIR/ops/infra/devnet/runtime/replication-registry"
 
 compose() {
   test -f "$COMPOSE_FILE" || { echo "Testbed is not bootstrapped; run scripts/testbed/up.sh" >&2; return 1; }

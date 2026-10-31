@@ -2,7 +2,8 @@ package org.pubsub.prototype.registry.topic.cardano.transaction;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.pubsub.prototype.cardano.cli.CacheOnlyCardanoCommandRunner;
+import org.pubsub.prototype.cardano.CardanoNetwork;
+import org.pubsub.prototype.cardano.cli.HostCardanoCommandRunner;
 import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 import org.pubsub.prototype.cardano.cli.transaction.CardanoPaymentIdentity;
 import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryConfig;
@@ -10,6 +11,7 @@ import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryConfig;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -24,7 +26,7 @@ class CardanoTransactionSignerTest {
         CardanoRegistryConfig config = new CardanoRegistryConfig(
                 runtimeDir,
                 "registry-deployer",
-                CardanoCliBackend.CACHE_ONLY
+                CardanoCliBackend.HOST
         );
         CardanoTransactionSigner signer = signer(config);
         Path addressFile = createIdentity(runtimeDir, config.signer(), "address-1");
@@ -40,7 +42,7 @@ class CardanoTransactionSignerTest {
     private static CardanoTransactionSigner signer(CardanoRegistryConfig config) {
         return new CardanoTransactionSigner(
                 config,
-                new CacheOnlyCardanoCommandRunner(),
+                new HostCardanoCommandRunner(new CardanoNetwork("42", Map.of())),
                 new CardanoRegistryIdentityValidator()
         );
     }

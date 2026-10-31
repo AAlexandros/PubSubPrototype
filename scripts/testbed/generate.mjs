@@ -18,7 +18,8 @@ for (let index = 1; index <= nodeCount; index++) {
 }
 
 for (let index = 1; index <= nodeCount; index++) {
-  const seed = index === 1 ? '[]' : `[{host: pubsub-node-1, port: ${settings.transportPort}}]`;
+  const seedNode = index === 1 ? 2 : 1;
+  const seed = `[{host: pubsub-node-${seedNode}, port: ${settings.transportPort}}]`;
   fs.writeFileSync(path.join(configs, `node-${index}.yaml`), `node:
   name: node-${index}
   listenHost: 0.0.0.0
@@ -26,12 +27,12 @@ for (let index = 1; index <= nodeCount; index++) {
   identityPath: /data/identity
 peers: ${seed}
 transport: {pingIntervalMs: 3000, pingTimeoutMs: 2000, reconnectInitialMs: 500, reconnectMaxMs: 5000}
-registry: {runtimeDir: /registry, signer: node-1, cliBackend: CACHE_ONLY, pollIntervalMs: 1000}
+registry: {runtimeDir: /registry, replicationRuntimeDir: /replication-registry, signer: node-1, cliBackend: HOST, pollIntervalMs: ${settings.registry.pollIntervalMs}, maximumAgeMs: ${settings.registry.maximumAgeMs}}
 control: {host: 0.0.0.0, port: ${settings.controlPort}}
 peerSampling: {advertisedHost: pubsub-node-${index}, viewSize: ${settings.secureCyclon.viewSize}, swapLength: ${settings.secureCyclon.swapLength}, cycleIntervalMs: ${settings.secureCyclon.cycleIntervalMs}, ageThreshold: ${settings.secureCyclon.ageThreshold}, proofFanout: ${settings.secureCyclon.proofFanout}, randomSeed: ${9000 + index}}
 navigation: {capacity: ${settings.navigation.capacity}, routingBase: ${settings.navigation.routingBase}, cycleIntervalMs: ${settings.navigation.cycleIntervalMs}, staleAfterMs: ${settings.navigation.staleAfterMs}, subscriptionsPath: /data/identity/subscriptions.json}
 dissemination: {randomLinkCount: ${settings.dissemination.randomLinkCount}, cycleIntervalMs: ${settings.dissemination.cycleIntervalMs}, staleAfterMs: ${settings.dissemination.staleAfterMs}, randomSeed: ${19000 + index}}
-persistence: {membershipPath: /replication-registry/servers.json, deliveryStatePath: /data/identity/recovery-state.json, connectionTimeoutMs: ${settings.persistence.connectionTimeoutMs}, requestTimeoutMs: ${settings.persistence.requestTimeoutMs}, retries: ${settings.persistence.retries}, recoveryConcurrency: ${settings.persistence.recoveryConcurrency}}
+persistence: {deliveryStatePath: /data/identity/recovery-state.json, connectionTimeoutMs: ${settings.persistence.connectionTimeoutMs}, requestTimeoutMs: ${settings.persistence.requestTimeoutMs}, retries: ${settings.persistence.retries}, recoveryConcurrency: ${settings.persistence.recoveryConcurrency}}
 `);
 }
 const signers = ['node-1', 'node-2', 'node-3'];
@@ -50,11 +51,12 @@ registration:
   commitmentStartEpoch: 0
   commitmentEndEpoch: 100000
 registry:
-  membershipPath: /replication-registry/servers.json
-  pollIntervalMs: 500
+  replicationRuntimeDir: /replication-registry
+  pollIntervalMs: ${settings.registry.pollIntervalMs}
+  maximumAgeMs: ${settings.registry.maximumAgeMs}
   topicRegistryRuntimeDir: /registry
   topicRegistrySigner: ${signers[index - 1]}
-  topicRegistryCliBackend: CACHE_ONLY
+  topicRegistryCliBackend: HOST
 timing: {connectionTimeoutMs: 500, requestTimeoutMs: 1500, retries: 0, cleanupIntervalMs: 1000, failureProbeAttempts: 3, failureProbeTimeoutMs: 500, maintenanceIntervalMs: 500}
 `);
 }
@@ -63,25 +65,26 @@ let compose = `name: phase-0-9\nservices:\n`;
 for (let index = 1; index <= 3; index++) compose += `  replication-server-${index}:
     build: {context: ../.., dockerfile: apps/replication-server/Dockerfile, args: {CARDANO_TESTNET_VERSION: "\${CARDANO_TESTNET_VERSION:-11.0.1}"}}
     command: [/config/server-${index}.yaml]
-    environment: {CARDANO_NETWORK_MAGIC: "\${CARDANO_NETWORK_MAGIC:-42}", CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock}
+    environment: {CARDANO_NETWORK_MAGIC: "\${CARDANO_NETWORK_MAGIC:-42}", CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock, CARDANO_CLI_TIMEOUT_MS: "15000"}
     volumes:
       - {type: bind, source: ./config/server-${index}.yaml, target: /config/server-${index}.yaml, read_only: true}
       - {type: bind, source: ../../ops/infra/devnet/keys/${signers[index - 1]}, target: /request-keys, read_only: true}
-      - {type: bind, source: ../../ops/infra/devnet/runtime/registry, target: /registry, read_only: true}
-      - {type: bind, source: ../../ops/infra/devnet/runtime/replication-registry, target: /replication-registry, read_only: true}
+      - {type: bind, source: ../../ops/infra/devnet/runtime/registry/deployment.env, target: /registry/deployment.env, read_only: true}
+      - {type: bind, source: ../../ops/infra/devnet/runtime/replication-registry/deployment.env, target: /replication-registry/deployment.env, read_only: true}
       - {type: bind, source: ../../ops/infra/devnet/runtime/testnet/socket, target: /node-socket, read_only: true}
       - replication-server-${index}-data:/data
     ports: ["127.0.0.1:${settings.hostReplicationPortBase + index}:${settings.replicationPort}"]
 `;
 for (let index = 1; index <= nodeCount; index++) compose += `  pubsub-node-${index}:
-    build: {context: ../.., dockerfile: apps/pubsub-node/Dockerfile}
+    build: {context: ../.., dockerfile: apps/pubsub-node/Dockerfile, args: {CARDANO_TESTNET_VERSION: "\${CARDANO_TESTNET_VERSION:-11.0.1}"}}
     command: [/config/node-${index}.yaml]
-    environment: {NODE_LOG_FILE: /logs/node.log, NODE_INIT_LOG_FILE: /logs/initialization.log, NODE_NETWORK_LOG_FILE: /logs/network.log}
+    environment: {NODE_LOG_FILE: /logs/node.log, NODE_INIT_LOG_FILE: /logs/initialization.log, NODE_NETWORK_LOG_FILE: /logs/network.log, CARDANO_NETWORK_MAGIC: "\${CARDANO_NETWORK_MAGIC:-42}", CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock, CARDANO_CLI_TIMEOUT_MS: "15000"}
     volumes:
       - {type: bind, source: ./config/node-${index}.yaml, target: /config/node-${index}.yaml, read_only: true}
       - {type: bind, source: ./logs/node-${index}, target: /logs}
-      - {type: bind, source: ../../ops/infra/devnet/runtime/registry, target: /registry, read_only: true}
-      - {type: bind, source: ../../ops/infra/devnet/runtime/replication-registry, target: /replication-registry, read_only: true}
+      - {type: bind, source: ../../ops/infra/devnet/runtime/registry/deployment.env, target: /registry/deployment.env, read_only: true}
+      - {type: bind, source: ../../ops/infra/devnet/runtime/replication-registry/deployment.env, target: /replication-registry/deployment.env, read_only: true}
+      - {type: bind, source: ../../ops/infra/devnet/runtime/testnet/socket, target: /node-socket, read_only: true}
       - pubsub-node-${index}-identity:/data/identity
     ports: ["127.0.0.1:${settings.hostTransportPortBase + index}:${settings.transportPort}", "127.0.0.1:${settings.hostControlPortBase + index}:${settings.controlPort}"]
 `;

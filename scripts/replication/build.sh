@@ -24,6 +24,16 @@ run_aiken_wsl() {
 }
 if command -v aiken >/dev/null 2>&1; then
   (cd "$ROOT_DIR/contracts/replication-registry" && aiken check --skip-tests && aiken build)
+elif pubsub_is_msys && command -v docker >/dev/null 2>&1; then
+  run_aiken_docker replication-registry check --skip-tests
+  run_aiken_docker replication-registry build
+elif [[ "$(uname -s | tr '[:upper:]' '[:lower:]')" == mingw* ]] \
+    && command -v cmd.exe >/dev/null 2>&1 && command -v npx >/dev/null 2>&1; then
+  (
+    cd "$ROOT_DIR/contracts/replication-registry"
+    pubsub_run_windows_npx --yes "@aiken-lang/aiken@$AIKEN_VERSION" check --skip-tests
+    pubsub_run_windows_npx --yes "@aiken-lang/aiken@$AIKEN_VERSION" build
+  )
 elif [[ "$(uname -s | tr '[:upper:]' '[:lower:]')" == mingw* ]] && command -v wsl.exe >/dev/null 2>&1; then
   run_aiken_wsl check --skip-tests
   run_aiken_wsl build

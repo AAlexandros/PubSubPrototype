@@ -6,6 +6,8 @@ public final class CardanoEnvironment {
     public static final String NETWORK_MAGIC = "CARDANO_NETWORK_MAGIC";
     /** Filesystem path to the Cardano node socket. */
     public static final String NODE_SOCKET_PATH = "CARDANO_NODE_SOCKET_PATH";
+    /** Optional maximum duration for a Cardano CLI command. */
+    public static final String CLI_TIMEOUT_MS = "CARDANO_CLI_TIMEOUT_MS";
     /** Generated file containing the network environment. */
     public static final String NETWORK_FILE = "network.env";
 

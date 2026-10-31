@@ -8,6 +8,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -16,7 +17,7 @@ class ReplicationHttpAdapterRoutingTest {
     @Test
     void bindsPathAndQueryParametersAndRejectsWrongMethods() throws Exception {
         try (ReplicationHttpAdapter server = new ReplicationHttpAdapter(
-                "127.0.0.1", 0, null, null, null, null, event -> null, request -> null, 1);
+                "127.0.0.1", 0, null, null, null, null, event -> null, request -> null, 1, Map::of);
              HttpClient client = HttpClient.newHttpClient()) {
             int port = boundPort(server);
             server.start();

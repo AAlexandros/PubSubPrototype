@@ -1,7 +1,5 @@
 package org.pubsub.prototype.replication.config;
 
-import org.pubsub.prototype.cardano.CardanoEnvironment;
-import org.pubsub.prototype.cardano.CardanoNetwork;
 import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 import org.pubsub.prototype.registry.replication.ReplicationServer;
 import org.pubsub.prototype.util.HexUtils;
@@ -9,7 +7,6 @@ import org.pubsub.prototype.util.files.YamlFiles;
 import org.pubsub.prototype.util.validation.Validation;
 
 import java.nio.file.Path;
-import java.util.Map;
 
 import static org.pubsub.prototype.constants.PersistenceConstants.SERVER_ID_FIELD;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.ADVERTISED_HOST;
@@ -23,11 +20,12 @@ import static org.pubsub.prototype.replication.config.ReplicationConfigConstants
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.HTTP_WORKER_THREADS;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.LISTEN_HOST;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.MAINTENANCE_INTERVAL_MS;
-import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.MEMBERSHIP_PATH;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.POLL_INTERVAL_MS;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.PORT;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.REGISTRATION_OPERATOR;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.REPLICATION_REGISTRY_CLI_BACKEND;
+import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.REPLICATION_REGISTRY_RUNTIME_DIR;
+import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.REGISTRY_MAXIMUM_AGE_MS;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.REQUEST_TIMEOUT_MS;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.REQUEST_SIGNING_KEY_PATH;
 import static org.pubsub.prototype.replication.config.ReplicationConfigConstants.REQUEST_VERIFICATION_KEY_PATH;
@@ -44,23 +42,22 @@ import static org.pubsub.prototype.util.validation.Validators.requireNonNull;
 public record ReplicationServerConfig(String serverId, String listenHost, String advertisedHost, int port,
                                int httpWorkerThreads,
                                Path storagePath, Path requestSigningKeyPath, Path requestVerificationKeyPath,
-                               Path membershipPath, long membershipPollMs,
+                               Path replicationRegistryRuntimeDir, long membershipPollMs, long registryMaximumAgeMs,
                                Registration registration,
                                Path topicRegistryRuntimeDir, String topicRegistrySigner,
                                CardanoCliBackend topicRegistryCliBackend,
                                long requestTimeoutMs, long connectionTimeoutMs, int retries,
                                long cleanupIntervalMs,
-                               int failureProbeAttempts, long failureProbeTimeoutMs, long maintenanceIntervalMs,
-                               CardanoNetwork cardanoNetwork) {
+                               int failureProbeAttempts, long failureProbeTimeoutMs, long maintenanceIntervalMs) {
     public ReplicationServerConfig {
         serverId = HexUtils.normalizeSha256(serverId, SERVER_ID_FIELD);
         requireNonNull(requestSigningKeyPath, REQUEST_SIGNING_KEY_PATH);
         requireNonNull(requestVerificationKeyPath, REQUEST_VERIFICATION_KEY_PATH);
-        cardanoNetwork = requireNonNull(cardanoNetwork, "cardanoNetwork");
         Validation.start()
                 .port(port, PORT)
                 .positive(httpWorkerThreads, HTTP_WORKER_THREADS)
                 .positive(membershipPollMs, POLL_INTERVAL_MS)
+                .positive(registryMaximumAgeMs, REGISTRY_MAXIMUM_AGE_MS)
                 .positive(requestTimeoutMs, REQUEST_TIMEOUT_MS)
                 .positive(connectionTimeoutMs, CONNECTION_TIMEOUT_MS)
                 .nonNegative(retries, RETRIES)
@@ -75,14 +72,9 @@ public record ReplicationServerConfig(String serverId, String listenHost, String
         return new ReplicationServer(serverId, advertisedHost, port);
     }
 
-    /** Loads and validates the complete replication-server configuration from YAML and process environment. */
+    /** Loads and validates the replication-server configuration from YAML. */
     public static ReplicationServerConfig load(Path file) {
-        return load(file, System.getenv());
-    }
-
-    static ReplicationServerConfig load(Path file, Map<String, String> environment) {
-        requireNonNull(environment, "environment");
-        return read(file).toConfig(cardanoNetwork(environment));
+        return read(file).toConfig();
     }
 
     /** Loads just the YAML values used by the standalone registry-management command. */
@@ -94,21 +86,13 @@ public record ReplicationServerConfig(String serverId, String listenHost, String
         return YamlFiles.read(file, FileConfig.class);
     }
 
-    private static CardanoNetwork cardanoNetwork(Map<String, String> environment) {
-        return new CardanoNetwork(
-                environment.get(CardanoEnvironment.NETWORK_MAGIC),
-                Map.of(CardanoEnvironment.NODE_SOCKET_PATH,
-                        requireNonBlank(environment.get(CardanoEnvironment.NODE_SOCKET_PATH),
-                                CardanoEnvironment.NODE_SOCKET_PATH)));
-    }
-
     private static final class FileConfig {
         public ServerSection server;
         public RegistrationSection registration;
         public RegistrySection registry;
         public TimingSection timing;
 
-        ReplicationServerConfig toConfig(CardanoNetwork cardanoNetwork) {
+        ReplicationServerConfig toConfig() {
             require(server != null && registration != null && registry != null && timing != null,
                     "Config must define server, registration, registry, and timing sections");
             return new ReplicationServerConfig(
@@ -121,8 +105,9 @@ public record ReplicationServerConfig(String serverId, String listenHost, String
                     Path.of(requireNonBlank(server.storagePath, STORAGE_PATH)),
                     Path.of(requireNonBlank(server.requestSigningKeyPath, REQUEST_SIGNING_KEY_PATH)),
                     Path.of(requireNonBlank(server.requestVerificationKeyPath, REQUEST_VERIFICATION_KEY_PATH)),
-                    Path.of(requireNonBlank(registry.membershipPath, MEMBERSHIP_PATH)),
+                    Path.of(requireNonBlank(registry.replicationRuntimeDir, REPLICATION_REGISTRY_RUNTIME_DIR)),
                     requireNonNull(registry.pollIntervalMs, POLL_INTERVAL_MS),
+                    requireNonNull(registry.maximumAgeMs, REGISTRY_MAXIMUM_AGE_MS),
                     new Registration(requireNonBlank(registration.operator, REGISTRATION_OPERATOR),
                             requireNonNull(registration.commitmentStartEpoch, COMMITMENT_START_EPOCH),
                             requireNonNull(registration.commitmentEndEpoch, COMMITMENT_END_EPOCH),
@@ -136,8 +121,7 @@ public record ReplicationServerConfig(String serverId, String listenHost, String
                     requireNonNull(timing.cleanupIntervalMs, CLEANUP_INTERVAL_MS),
                     requireNonNull(timing.failureProbeAttempts, FAILURE_PROBE_ATTEMPTS),
                     requireNonNull(timing.failureProbeTimeoutMs, FAILURE_PROBE_TIMEOUT_MS),
-                    requireNonNull(timing.maintenanceIntervalMs, MAINTENANCE_INTERVAL_MS),
-                    cardanoNetwork);
+                    requireNonNull(timing.maintenanceIntervalMs, MAINTENANCE_INTERVAL_MS));
         }
 
         RegistryRegistration toRegistryRegistration() {
@@ -195,8 +179,9 @@ public record ReplicationServerConfig(String serverId, String listenHost, String
     }
 
     private static final class RegistrySection {
-        public String membershipPath;
+        public String replicationRuntimeDir;
         public Long pollIntervalMs;
+        public Long maximumAgeMs;
         public String topicRegistryRuntimeDir;
         public String topicRegistrySigner;
         public CardanoCliBackend topicRegistryCliBackend;

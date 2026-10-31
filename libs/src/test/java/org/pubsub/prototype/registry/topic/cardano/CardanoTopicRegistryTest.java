@@ -3,7 +3,6 @@ package org.pubsub.prototype.registry.topic.cardano;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
-import org.pubsub.prototype.cardano.cli.CardanoCliUnavailableException;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunnerFactory;
 import org.pubsub.prototype.registry.RegistryAuthorizationException;
@@ -96,12 +95,8 @@ class CardanoTopicRegistryTest {
     }
 
     @Test
-    void cacheOnlyBackendDoesNotAllowTransactionSubmission() {
-        CardanoCommandRunner runner = CardanoCommandRunnerFactory.create(
-                CardanoCliBackend.CACHE_ONLY, Path.of("/registry"));
-
-        assertTrue(runner.queryScriptUtxosJson("address").isEmpty());
-        assertThrows(CardanoCliUnavailableException.class, runner::requireCommandExecution);
+    void cacheOnlyBackendIsRejected() {
+        assertThrows(IllegalArgumentException.class, () -> CardanoCliBackend.parse("CACHE_ONLY"));
     }
 
     @Test

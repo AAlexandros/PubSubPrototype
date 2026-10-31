@@ -36,6 +36,7 @@ import org.pubsub.prototype.node.service.EventProcessingService;
 import org.pubsub.prototype.node.util.AsyncUtil;
 import org.pubsub.prototype.node.util.NodeLog;
 import org.pubsub.prototype.registry.topic.TopicId;
+import org.pubsub.prototype.registry.RegistryUnavailableException;
 import org.pubsub.prototype.sampling.PeerSamplingService;
 import org.pubsub.prototype.util.files.JsonSupport;
 import org.slf4j.Logger;
@@ -48,6 +49,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ExecutorService;
+import java.util.function.Supplier;
 
 import static org.pubsub.prototype.http.ApiFields.CAPACITY;
 import static org.pubsub.prototype.http.ApiFields.FINGER_TOPICS;
@@ -81,12 +83,13 @@ public final class NodeControlHttpAdapter implements AutoCloseable {
     private final EventStorageService eventStorage;
     private final String nodeId;
     private final int samplingCapacity;
+    private final Supplier<Map<String, Object>> registryStatus;
 
     public NodeControlHttpAdapter(String host, int port, EventProcessingService events,
                                   PeerSamplingService sampling, NavigationService navigation,
-                                  DisseminationService dissemination,
-                                  EventStorageService eventStorage,
-                                  String nodeId, int samplingCapacity) throws IOException {
+                                  DisseminationService dissemination, EventStorageService eventStorage,
+                                  String nodeId, int samplingCapacity,
+                                  Supplier<Map<String, Object>> registryStatus) throws IOException {
         this.bindHost = host;
         this.events = events;
         this.sampling = sampling;
@@ -95,6 +98,7 @@ public final class NodeControlHttpAdapter implements AutoCloseable {
         this.eventStorage = eventStorage;
         this.nodeId = nodeId;
         this.samplingCapacity = samplingCapacity;
+        this.registryStatus = registryStatus;
         ResourceConfig routes = new ResourceConfig()
                 .register(this)
                 .register(JacksonFeature.class)
@@ -231,6 +235,12 @@ public final class NodeControlHttpAdapter implements AutoCloseable {
         return json(status, Map.of(HttpErrorCodes.ERROR, message));
     }
 
+    @GET
+    @Path(ApiPaths.OPS_REGISTRY)
+    public Response registryStatus() {
+        return json(200, registryStatus.get());
+    }
+
     /** Logs every local API call, including requests rejected before a resource method runs. */
     private static final class ApiCallLogger implements ContainerRequestFilter, ContainerResponseFilter {
         private static final AtomicLong NEXT_ID = new AtomicLong();
@@ -296,6 +306,9 @@ public final class NodeControlHttpAdapter implements AutoCloseable {
                 status = web.getResponse().getStatus();
                 message = status == 404 ? HttpErrorCodes.NOT_FOUND
                         : status == 405 ? HttpErrorCodes.METHOD_NOT_ALLOWED : JsonHttp.safeMessage(exception);
+            } else if (exception instanceof RegistryUnavailableException) {
+                status = 503;
+                message = JsonHttp.safeMessage(exception);
             } else if (exception instanceof HttpRequestBodyReader.RequestBodyTooLargeException) {
                 status = 413;
                 message = JsonHttp.safeMessage(exception);

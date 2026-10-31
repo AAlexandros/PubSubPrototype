@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.pubsub.prototype.registry.topic.TopicState;
+import org.pubsub.prototype.registry.RegistryDataException;
+import org.pubsub.prototype.registry.RegistryIdentityException;
 import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.util.ArrayList;
@@ -26,11 +28,19 @@ public final class CardanoCliUtxoParser {
      * Each top-level entry is a UTxO keyed by {@code transactionHash#index}.
      */
     public List<CardanoScriptUtxo> parse(String json) {
+        return parse(json, null);
+    }
+
+    /** Validates each returned UTxO against the queried script address when supplied. */
+    public List<CardanoScriptUtxo> parse(String json, String expectedAddress) {
         JsonNode root;
         try {
             root = MAPPER.readTree(json);
         } catch (JsonProcessingException ex) {
-            throw new IllegalArgumentException("Unable to decode cardano-cli UTxO JSON", ex);
+            throw new RegistryDataException("Unable to decode cardano-cli UTxO JSON", ex);
+        }
+        if (root == null || !root.isObject()) {
+            throw new RegistryDataException("Cardano topic UTxO query must return a JSON object");
         }
         List<CardanoScriptUtxo> utxos = new ArrayList<>();
         Iterator<Map.Entry<String, JsonNode>> fields = root.fields();
@@ -38,6 +48,12 @@ public final class CardanoCliUtxoParser {
         while (fields.hasNext()) {
             Map.Entry<String, JsonNode> field = fields.next();
             JsonNode utxo = field.getValue();
+            if (!utxo.isObject() || !utxo.path(VALUE_FIELD).isObject()) {
+                throw new RegistryDataException("Invalid topic registry UTxO at " + field.getKey());
+            }
+            if (expectedAddress != null && !expectedAddress.equals(utxo.path("address").asText())) {
+                throw new RegistryIdentityException("Unexpected topic registry address at " + field.getKey());
+            }
             Optional<String> rawDatum = rawDatum(utxo);
             utxos.add(new CardanoScriptUtxo(
                     field.getKey(),

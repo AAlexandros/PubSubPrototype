@@ -32,3 +32,6 @@ persistence:
   requestTimeoutMs: 3000
   retries: 1
   recoveryConcurrency: 8
+registry:
+  pollIntervalMs: 5000
+  maximumAgeMs: 30000

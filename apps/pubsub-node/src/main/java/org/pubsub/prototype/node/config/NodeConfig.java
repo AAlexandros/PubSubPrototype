@@ -88,9 +88,11 @@ public record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSec
                 "Pub-sub config must define registry, peerSampling, navigation, dissemination, and persistence sections");
         Validation.start()
                 .nonBlank(config.registry.runtimeDir, REGISTRY_RUNTIME_DIR)
+                .nonBlank(config.registry.replicationRuntimeDir, REGISTRY_REPLICATION_RUNTIME_DIR)
                 .nonBlank(config.registry.signer, REGISTRY_SIGNER)
                 .required(config.registry.cliBackend, REGISTRY_CLI_BACKEND)
                 .positive(config.registry.pollIntervalMs, REGISTRY_POLL_INTERVAL_MS)
+                .positive(config.registry.maximumAgeMs, REGISTRY_MAXIMUM_AGE_MS)
                 .throwIfInvalid();
 
         int maximumSwapLength = config.sampling.viewSize == null ? MAX_OVERLAY_SIZE : config.sampling.viewSize;
@@ -122,7 +124,6 @@ public record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSec
                 .throwIfInvalid();
 
         Validation.start()
-                .nonBlank(config.persistence.membershipPath, PERSISTENCE_MEMBERSHIP_PATH)
                 .nonBlank(config.persistence.deliveryStatePath, PERSISTENCE_DELIVERY_STATE_PATH)
                 .positive(config.persistence.connectionTimeoutMs, PERSISTENCE_CONNECTION_TIMEOUT_MS)
                 .positive(config.persistence.requestTimeoutMs, PERSISTENCE_REQUEST_TIMEOUT_MS)
@@ -168,7 +169,6 @@ public record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSec
 
     /** YAML settings for event storage and recovery. */
     public static final class PersistenceSection {
-        public String membershipPath;
         public String deliveryStatePath;
         public Long connectionTimeoutMs;
         public Long requestTimeoutMs;
@@ -197,9 +197,11 @@ public record NodeConfig(NodeSection node, List<PeerSection> peers, TransportSec
 
     public static final class RegistrySection {
         public String runtimeDir;
+        public String replicationRuntimeDir;
         public String signer;
         public CardanoCliBackend cliBackend;
         public Long pollIntervalMs;
+        public Long maximumAgeMs;
     }
 
     public static final class ControlSection {

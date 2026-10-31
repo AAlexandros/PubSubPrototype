@@ -12,6 +12,8 @@ import org.pubsub.prototype.registry.topic.TopicState;
 import org.pubsub.prototype.registry.topic.cardano.mutation.TopicMutation;
 import org.pubsub.prototype.util.files.JsonSupport;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -30,6 +32,19 @@ public final class AikenScriptDataCodec {
     private static final String BYTES_FIELD = "bytes";
     private static final String INTEGER_FIELD = "int";
     private static final String LIST_FIELD = "list";
+
+    // Fields for TopicState datum
+    private static final int TOPIC_STATE_FIELD_COUNT = 8;
+    private static final int TOPIC_ID_FIELD = 0;
+    private static final int NAME_FIELD = 1;
+    private static final int OWNERS_FIELD = 2;
+    private static final int ADMINS_FIELD = 3;
+    private static final int PUBLISHERS_FIELD = 4;
+    private static final int REPLICATION_FACTOR_FIELD = 5;
+    private static final int RETENTION_PERIOD_FIELD = 6;
+    private static final int ACTIVE_FIELD = 7;
+    private static final int FALSE_CONSTRUCTOR = 0;
+    private static final int TRUE_CONSTRUCTOR = 1;
 
     /** Encodes a topic state as the inline datum stored at the registry script. */
     public String encodeDatum(TopicState topic, Function<String, String> keyHashResolver) {
@@ -78,15 +93,28 @@ public final class AikenScriptDataCodec {
         try {
             JsonNode root = MAPPER.readTree(json);
             ArrayNode fields = fields(root, 0);
+            if (fields.size() != TOPIC_STATE_FIELD_COUNT) {
+                throw new IllegalArgumentException("Unexpected topic datum field count");
+            }
+            JsonNode activeField = fields.get(ACTIVE_FIELD);
+            int active = constructorIndex(activeField);
+            if ((active != FALSE_CONSTRUCTOR && active != TRUE_CONSTRUCTOR)
+                    || !activeField.path(FIELDS_FIELD).isArray()
+                    || activeField.path(FIELDS_FIELD).size() != 0) {
+                throw new IllegalArgumentException("Invalid topic datum active flag");
+            }
             return new TopicState(
-                    new TopicId(bytesValue(fields.get(0))),
-                    new String(HEX.parseHex(bytesValue(fields.get(1))), StandardCharsets.UTF_8),
-                    decodeBytesList(fields.get(2)),
-                    decodeBytesList(fields.get(3)),
-                    decodeBytesList(fields.get(4)),
-                    intValue(fields.get(5)),
-                    longValue(fields.get(6)),
-                    constructorIndex(fields.get(7)) == 1
+                    new TopicId(bytesValue(fields.get(TOPIC_ID_FIELD))),
+                    StandardCharsets.UTF_8.newDecoder()
+                            .onMalformedInput(CodingErrorAction.REPORT)
+                            .onUnmappableCharacter(CodingErrorAction.REPORT)
+                            .decode(ByteBuffer.wrap(HEX.parseHex(bytesValue(fields.get(NAME_FIELD))))).toString(),
+                    decodeBytesList(fields.get(OWNERS_FIELD)),
+                    decodeBytesList(fields.get(ADMINS_FIELD)),
+                    decodeBytesList(fields.get(PUBLISHERS_FIELD)),
+                    intValue(fields.get(REPLICATION_FACTOR_FIELD)),
+                    longValue(fields.get(RETENTION_PERIOD_FIELD)),
+                    active == TRUE_CONSTRUCTOR
             );
         } catch (Exception ex) {
             throw new IllegalArgumentException("Unable to decode Aiken topic datum", ex);

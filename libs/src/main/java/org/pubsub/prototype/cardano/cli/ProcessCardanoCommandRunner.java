@@ -1,5 +1,6 @@
 package org.pubsub.prototype.cardano.cli;
 
+import org.pubsub.prototype.cardano.CardanoEnvironment;
 import org.pubsub.prototype.cardano.CardanoNetwork;
 
 import java.io.IOException;
@@ -13,9 +14,10 @@ import java.util.concurrent.TimeUnit;
 
 /** Base for Cardano backends that execute an operating-system process. */
 public abstract class ProcessCardanoCommandRunner implements CardanoCommandRunner {
-    private static final Duration COMMAND_TIMEOUT = Duration.ofMinutes(5);
+    private static final Duration DEFAULT_COMMAND_TIMEOUT = Duration.ofMinutes(5);
 
     private final CardanoNetwork network;
+    private final Duration commandTimeout;
 
     /**
      * Creates a process runner using the supplied network environment.
@@ -24,6 +26,12 @@ public abstract class ProcessCardanoCommandRunner implements CardanoCommandRunne
      */
     protected ProcessCardanoCommandRunner(CardanoNetwork network) {
         this.network = network;
+        String configured = network.environment().get(CardanoEnvironment.CLI_TIMEOUT_MS);
+        this.commandTimeout = configured == null ? DEFAULT_COMMAND_TIMEOUT
+                : Duration.ofMillis(Long.parseLong(configured));
+        if (commandTimeout.isZero() || commandTimeout.isNegative()) {
+            throw new IllegalArgumentException(CardanoEnvironment.CLI_TIMEOUT_MS + " must be positive");
+        }
     }
 
     @Override
@@ -45,9 +53,9 @@ public abstract class ProcessCardanoCommandRunner implements CardanoCommandRunne
             Process process = builder.start();
             CompletableFuture<String> stdout = CompletableFuture.supplyAsync(() -> read(process.getInputStream()));
             CompletableFuture<String> stderr = CompletableFuture.supplyAsync(() -> read(process.getErrorStream()));
-            if (!process.waitFor(COMMAND_TIMEOUT.toSeconds(), TimeUnit.SECONDS)) {
+            if (!process.waitFor(commandTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
                 process.destroyForcibly();
-                throw new IllegalStateException(String.join(" ", processCommand) + " timed out after " + COMMAND_TIMEOUT);
+                throw new IllegalStateException(String.join(" ", processCommand) + " timed out after " + commandTimeout);
             }
             String output = stdout.get();
             String error = stderr.get();

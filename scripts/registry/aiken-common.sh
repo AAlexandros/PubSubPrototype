@@ -31,3 +31,18 @@ download_aiken() {
     chmod +x "$AIKEN_TOOLS_DIR/aiken"
   fi
 }
+
+run_aiken_docker() {
+  local project="$1"
+  shift
+  local host_root
+  host_root="$(pubsub_host_path "$ROOT_DIR")"
+
+  # The mounted repository supplies the contracts and stores the pinned Aiken binary.
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' docker run --rm \
+    --mount "type=bind,source=$host_root,target=/workspace" \
+    --workdir "/workspace/contracts/$project" \
+    --env "AIKEN_VERSION=$AIKEN_VERSION" \
+    "${AIKEN_DOCKER_IMAGE:-nixos/nix:2.24.9}" \
+    bash /workspace/scripts/registry/build-aiken-docker.sh "$@"
+}

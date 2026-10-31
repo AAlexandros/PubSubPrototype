@@ -16,8 +16,9 @@ public final class ReplicationConfigConstants {
     public static final String COMMITMENT_START_EPOCH = "registration.commitmentStartEpoch";
     public static final String COMMITMENT_END_EPOCH = "registration.commitmentEndEpoch";
     public static final String REPLICATION_REGISTRY_CLI_BACKEND = "registration.cliBackend";
-    public static final String MEMBERSHIP_PATH = "registry.membershipPath";
     public static final String POLL_INTERVAL_MS = "registry.pollIntervalMs";
+    public static final String REGISTRY_MAXIMUM_AGE_MS = "registry.maximumAgeMs";
+    public static final String REPLICATION_REGISTRY_RUNTIME_DIR = "registry.replicationRuntimeDir";
     public static final String TOPIC_REGISTRY_RUNTIME_DIR = "registry.topicRegistryRuntimeDir";
     public static final String TOPIC_REGISTRY_SIGNER = "registry.topicRegistrySigner";
     public static final String TOPIC_REGISTRY_CLI_BACKEND = "registry.topicRegistryCliBackend";

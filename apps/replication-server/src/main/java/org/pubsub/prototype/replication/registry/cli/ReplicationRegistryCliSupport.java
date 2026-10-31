@@ -1,7 +1,7 @@
 package org.pubsub.prototype.replication.registry.cli;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.pubsub.prototype.registry.replication.FileReplicationRegistry;
+import org.pubsub.prototype.event.EventCrypto;
 import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.io.IOException;
@@ -19,7 +19,7 @@ final class ReplicationRegistryCliSupport {
             JsonNode node = JsonSupport.MAPPER.readTree(Files.readAllBytes(verificationKey));
             String cborHex = node.path("cborHex").asText();
             if (cborHex.isBlank()) throw new IllegalArgumentException("verification key has no cborHex");
-            return FileReplicationRegistry.serverId(HexFormat.of().parseHex(cborHex));
+            return EventCrypto.sha256Hex(HexFormat.of().parseHex(cborHex));
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to read verification key " + verificationKey, ex);
         }

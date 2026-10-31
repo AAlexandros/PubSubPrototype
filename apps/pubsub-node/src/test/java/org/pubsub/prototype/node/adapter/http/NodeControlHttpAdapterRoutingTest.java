@@ -8,6 +8,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -16,7 +17,7 @@ class NodeControlHttpAdapterRoutingTest {
     @Test
     void bindsTopicPathAndRejectsWrongMethods() throws Exception {
         try (NodeControlHttpAdapter server = new NodeControlHttpAdapter(
-                "127.0.0.1", 0, null, null, null, null, null, null, 0);
+                "127.0.0.1", 0, null, null, null, null, null, null, 0, Map::of);
              HttpClient client = HttpClient.newHttpClient()) {
             int port = boundPort(server);
             server.start();

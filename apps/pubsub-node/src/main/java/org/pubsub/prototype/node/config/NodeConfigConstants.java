@@ -19,9 +19,11 @@ final class NodeConfigConstants {
     static final String CONTROL_HOST = "control.host";
     static final String CONTROL_PORT = "control.port";
     static final String REGISTRY_RUNTIME_DIR = "registry.runtimeDir";
+    static final String REGISTRY_REPLICATION_RUNTIME_DIR = "registry.replicationRuntimeDir";
     static final String REGISTRY_SIGNER = "registry.signer";
     static final String REGISTRY_CLI_BACKEND = "registry.cliBackend";
     static final String REGISTRY_POLL_INTERVAL_MS = "registry.pollIntervalMs";
+    static final String REGISTRY_MAXIMUM_AGE_MS = "registry.maximumAgeMs";
     static final String SAMPLING_ADVERTISED_HOST = "peerSampling.advertisedHost";
     static final String SAMPLING_VIEW_SIZE = "peerSampling.viewSize";
     static final String SAMPLING_SWAP_LENGTH = "peerSampling.swapLength";
@@ -38,7 +40,6 @@ final class NodeConfigConstants {
     static final String DISSEMINATION_CYCLE_INTERVAL_MS = "dissemination.cycleIntervalMs";
     static final String DISSEMINATION_STALE_AFTER_MS = "dissemination.staleAfterMs";
     static final String DISSEMINATION_RANDOM_SEED = "dissemination.randomSeed";
-    static final String PERSISTENCE_MEMBERSHIP_PATH = "persistence.membershipPath";
     static final String PERSISTENCE_DELIVERY_STATE_PATH = "persistence.deliveryStatePath";
     static final String PERSISTENCE_CONNECTION_TIMEOUT_MS = "persistence.connectionTimeoutMs";
     static final String PERSISTENCE_REQUEST_TIMEOUT_MS = "persistence.requestTimeoutMs";

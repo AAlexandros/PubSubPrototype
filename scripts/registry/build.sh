@@ -35,6 +35,11 @@ run_aiken() {
     $AIKEN_CMD "$@"
   elif command -v aiken >/dev/null 2>&1; then
     aiken "$@"
+  elif pubsub_is_msys && command -v docker >/dev/null 2>&1; then
+    run_aiken_docker topic-registry "$@"
+  elif [[ "$(uname -s | tr '[:upper:]' '[:lower:]')" == mingw* ]] \
+      && command -v cmd.exe >/dev/null 2>&1 && command -v npx >/dev/null 2>&1; then
+    pubsub_run_windows_npx --yes "@aiken-lang/aiken@$AIKEN_VERSION" "$@"
   elif [[ "$(uname -s | tr '[:upper:]' '[:lower:]')" == mingw* ]]; then
     run_aiken_wsl "$@"
   elif download_aiken; then
@@ -45,9 +50,9 @@ run_aiken() {
     done
     bash -lc "$(printf '%q' "$AIKEN_TOOLS_DIR/aiken") ${quoted_args[*]}"
   elif command -v npx >/dev/null 2>&1; then
-    npx --yes @aiken-lang/aiken@1.1.23 "$@"
+    npx --yes "@aiken-lang/aiken@$AIKEN_VERSION" "$@"
   elif command -v cmd.exe >/dev/null 2>&1; then
-    cmd.exe /c npx --yes @aiken-lang/aiken@1.1.23 "$@"
+    pubsub_run_windows_npx --yes "@aiken-lang/aiken@$AIKEN_VERSION" "$@"
   else
     echo "aiken not found and npx fallback is unavailable" >&2
     return 1

@@ -1,30 +1,24 @@
 package org.pubsub.prototype.registry.replication.cardano;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
 import org.pubsub.prototype.cardano.cli.CardanoCommandRunnerFactory;
 import org.pubsub.prototype.cardano.CardanoConfirmationWaiter;
 import org.pubsub.prototype.registry.replication.ReplicationRegistryClient;
+import org.pubsub.prototype.registry.RegistryDataException;
 import org.pubsub.prototype.registry.replication.ReplicationRegistryReader;
 import org.pubsub.prototype.registry.replication.ReplicationServerState;
 import org.pubsub.prototype.registry.replication.cardano.datum.ReplicationRegistryScriptUtxo;
 import org.pubsub.prototype.registry.replication.cardano.datum.ReplicationRegistryUtxoParser;
 import org.pubsub.prototype.registry.replication.cardano.mutation.ReplicationServerMutation;
-import org.pubsub.prototype.registry.replication.cardano.mutation.ReplicationServerOperation;
 import org.pubsub.prototype.registry.replication.cardano.transaction.ReplicationRegistryTransactionBuilder;
-import org.pubsub.prototype.util.files.JsonSupport;
-import org.pubsub.prototype.util.files.TextFiles;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 
-/** Cardano-backed replication registry client and observed-state snapshot. */
+/** Cardano-backed reader and transaction client for replication-server registrations. */
 public final class CardanoReplicationRegistry implements ReplicationRegistryClient, ReplicationRegistryReader {
-    private static final TypeReference<List<ReplicationServerState>> STATES = new TypeReference<>() { };
 
     private final CardanoReplicationRegistryConfig config;
     private final CardanoCommandRunner runner;
@@ -127,37 +121,23 @@ public final class CardanoReplicationRegistry implements ReplicationRegistryClie
     }
 
     private List<ReplicationServerState> observedStates() {
-        if (config.cliBackend() == CardanoCliBackend.CACHE_ONLY) return readSnapshot();
-        return liveUtxos().stream().flatMap(utxo -> utxo.state().stream()).toList();
+        var states = new LinkedHashMap<String, ReplicationServerState>();
+        for (ReplicationRegistryScriptUtxo utxo : liveUtxos()) {
+            ReplicationServerState state = utxo.state().orElseThrow(() ->
+                    new RegistryDataException("Invalid replication registry datum at " + utxo.ref()));
+            if (states.putIfAbsent(state.serverId(), state) != null) {
+                throw new RegistryDataException("Duplicate replication server registration: " + state.serverId());
+            }
+        }
+        return List.copyOf(states.values());
     }
 
     private synchronized List<ReplicationRegistryScriptUtxo> liveUtxos() {
         var deployment = deployments.read();
         Optional<String> json = runner.queryScriptUtxosJson(deployment.validatorAddress());
-        if (json.isEmpty()) return List.of();
+        if (json.isEmpty()) throw new IllegalStateException("Cardano replication registry query is unavailable");
         String contents = json.orElseThrow();
-        TextFiles.write(config.scriptUtxoCacheFile(), contents);
-        List<ReplicationRegistryScriptUtxo> utxos = utxoParser.parse(contents);
-        writeSnapshot(utxos.stream().flatMap(utxo -> utxo.state().stream()).toList());
-        return utxos;
-    }
-
-    private List<ReplicationServerState> readSnapshot() {
-        if (!Files.exists(config.stateFile())) return List.of();
-        try {
-            return JsonSupport.MAPPER.readValue(config.stateFile().toFile(), STATES);
-        } catch (IOException ex) {
-            throw new IllegalStateException("Unable to read replication-registry snapshot " + config.stateFile(), ex);
-        }
-    }
-
-    private void writeSnapshot(List<ReplicationServerState> states) {
-        try {
-            TextFiles.write(config.stateFile(), JsonSupport.MAPPER.writerWithDefaultPrettyPrinter()
-                    .writeValueAsString(states) + System.lineSeparator());
-        } catch (IOException ex) {
-            throw new IllegalStateException("Unable to write replication-registry snapshot " + config.stateFile(), ex);
-        }
+        return utxoParser.parse(contents, deployment.validatorAddress());
     }
 
     private synchronized ReplicationRegistryTransactionBuilder transactions() {

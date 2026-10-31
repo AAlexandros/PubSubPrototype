@@ -1,15 +1,11 @@
-# D2 Topic Registry Contract
+# Topic Registry contract
 
-Phase 0.2 exposes the Topic Registry through the combined `registry-cardano`
-module, which contains both the registry contract types and Cardano adapter.
+`validators/topic_registry.ak` contains one Aiken validator with `mint` and `spend` handlers. Both handlers share a script hash, which is both the topic policy ID and the registry script's payment credential.
 
-The current contract directory records the validator boundary and deployment artifact
-location used by the prototype adapter:
+- Minting consumes a creation seed, mints exactly one uniquely named topic token, and places it at the registry script with a valid inline topic datum.
+- Spending keeps the token at the same script address and accepts only authorized topic transitions with a valid replacement datum. Deleted topics remain as inactive tombstones.
+- The datum rules include unique actors within each role list, Cardano payment-key hash lengths for owners and admins, event-key ID lengths for publishers, UTF-8 topic names, and the Java-supported replication and retention ranges.
 
-- One topic token identifies each topic state UTxO.
-- Owner-only and owner-or-admin transitions are enforced by the adapter command layer.
-- Deleted topics remain in the registry state as inactive tombstones.
+`CardanoTopicRegistry` queries the live script UTxOs using the deployed address and policy ID. It ignores outputs without that policy token and rejects inconsistent registry-token outputs before publishing a topic snapshot. No shared UTxO cache is used for runtime decisions.
 
-`scripts/registry/build.sh` runs Aiken checks when `aiken` is available and always
-runs the Java registry tests that exercise datum encoding, authorization, tombstones,
-and cache rebuild behavior.
+`scripts/registry/build.sh` compiles the contract, exports cardano-cli script files, and runs the Java registry tests. Because the mint and spend handlers share one script, changing this contract changes both the validator address and topic policy ID; a fresh deployment is required.

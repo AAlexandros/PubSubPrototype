@@ -8,15 +8,22 @@ import org.pubsub.prototype.node.service.DisseminationService;
 import org.pubsub.prototype.node.service.NavigationService;
 import org.pubsub.prototype.node.service.PeerSamplingProtocolService;
 import org.pubsub.prototype.node.service.EventStorageService;
-import org.pubsub.prototype.node.service.TopicRegistrySyncService;
 import org.pubsub.prototype.node.service.EventProcessingService;
 import org.pubsub.prototype.node.util.NodeLog;
 import org.pubsub.prototype.protocol.IdentityStore;
 import org.pubsub.prototype.protocol.NodeIdentity;
 import org.pubsub.prototype.event.EventDeduplicator;
+import org.pubsub.prototype.event.TopicStateProvider;
 import org.pubsub.prototype.event.EventValidator;
 import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryConfig;
 import org.pubsub.prototype.registry.topic.cardano.CardanoTopicRegistry;
+import org.pubsub.prototype.registry.topic.TopicState;
+import org.pubsub.prototype.registry.RegistryObserver;
+import org.pubsub.prototype.registry.RegistryDiagnostics;
+import org.pubsub.prototype.registry.replication.ReplicationMembership;
+import org.pubsub.prototype.registry.replication.ReplicationServerState;
+import org.pubsub.prototype.registry.replication.cardano.CardanoReplicationRegistry;
+import org.pubsub.prototype.registry.replication.cardano.CardanoReplicationRegistryConfig;
 import org.pubsub.prototype.sampling.NodeEndpoint;
 import org.pubsub.prototype.transport.PubSubTransport;
 import org.slf4j.Logger;
@@ -24,7 +31,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.function.Supplier;
 
 /**
  * Owns construction and lifecycle for one Pub/Sub node process.
@@ -42,8 +51,11 @@ public final class PubSubNodeApplication implements AutoCloseable {
     // Default logger
     private static final Logger LOG = LoggerFactory.getLogger(PubSubNodeApplication.class);
 
+    // Registry observers
+    private final RegistryObserver<List<TopicState>> topics;
+    private final RegistryObserver<List<ReplicationServerState>> membership;
+
     // Services
-    private final TopicRegistrySyncService registry;
     private final EventStorageService eventStorage;
     private final PeerSamplingProtocolService sampling;
     private final NavigationService navigation;
@@ -57,12 +69,14 @@ public final class PubSubNodeApplication implements AutoCloseable {
     // The testbed exposes this port on the host's loopback interface.
     private final NodeControlHttpAdapter controlAdapter;
 
-    private PubSubNodeApplication(TopicRegistrySyncService registry,
+    private PubSubNodeApplication(RegistryObserver<List<TopicState>> topics,
+            RegistryObserver<List<ReplicationServerState>> membership,
             EventStorageService eventStorage,
             PeerSamplingProtocolService sampling, NavigationService navigation,
             DisseminationService dissemination, PubSubTransport transport,
             NodeControlHttpAdapter controlAdapter) {
-        this.registry = registry;
+        this.topics = topics;
+        this.membership = membership;
         this.eventStorage = eventStorage;
         this.sampling = sampling;
         this.navigation = navigation;
@@ -86,15 +100,24 @@ public final class PubSubNodeApplication implements AutoCloseable {
         NodeLog.init(LOG, "IDENTITY_READY id={} directory={}",
                 NodeLog.node(identity.nodeId().value()), config.identityPath());
 
-        // Initialize the topic registry sync service.
-        TopicRegistrySyncService registry = createRegistry(config);
+        // Initialize the local topic registry poller.
+        RegistryObserver<List<TopicState>> topics = createTopicObserver(config);
+        TopicStateProvider topicProvider = id -> topics.requireFresh().stream()
+                .filter(topic -> topic.topicId().equals(id)).findFirst();
+        Supplier<List<String>> activeTopicIds = () -> topics.requireFresh().stream()
+                .filter(TopicState::active).map(topic -> topic.topicId().value()).toList();
+        RegistryObserver<List<ReplicationServerState>> membership = createMembershipObserver(config);
 
         // Initialize the event services
-        EventValidator eventValidator = new EventValidator(registry, new EventDeduplicator(10_000));
+        EventValidator eventValidator = new EventValidator(topicProvider, new EventDeduplicator(10_000));
         EventProcessingService eventService = new EventProcessingService(identity, config.identityPath(),
                 eventValidator);
         // Initialize event storage and recovery.
-        EventStorageService eventStorage = new EventStorageService(config.persistence(), registry);
+        ReplicationMembership activeMembership = () -> membership.requireFresh().stream()
+                .filter(ReplicationServerState::active)
+                .map(ReplicationServerState::endpoint)
+                .toList();
+        EventStorageService eventStorage = new EventStorageService(config.persistence(), topicProvider, activeMembership);
         eventService.attachEventStorage(eventStorage);
 
         // Initialize the protocol services
@@ -103,11 +126,11 @@ public final class PubSubNodeApplication implements AutoCloseable {
         // Initialize the peer sampling protocol service (Layer one).
         PeerSamplingProtocolService sampling = new PeerSamplingProtocolService(self, config.sampling());
         // Initialize the navigation service (Layer two).
-        NavigationService navigation = createNavigation(config, identity, registry, sampling);
+        NavigationService navigation = createNavigation(config, identity, activeTopicIds, sampling);
         // Initialize the dissemination service.
         DisseminationService dissemination = new DisseminationService(
                 identity.nodeId().value(), config.sampling().advertisedHost, config.node().listenPort,
-                config.dissemination(), navigation, registry::activeTopicIds);
+                config.dissemination(), navigation, activeTopicIds);
 
         // The pub-sub transport used to transmit the various messages between the nodes
         PubSubTransport transport = new PubSubTransport(config.toTransportConfig(), identity, self,
@@ -118,12 +141,17 @@ public final class PubSubNodeApplication implements AutoCloseable {
         dissemination.attach(transport);
         eventService.attachDissemination(dissemination);
 
+        // Exposes local registry readiness and the last valid observations for operations diagnostics.
         NodeControlHttpAdapter controlAdapter = new NodeControlHttpAdapter(
                 config.controlHost(), config.controlPort(), eventService, sampling.sampling(), navigation,
-                dissemination, eventStorage, identity.nodeId().value(), config.sampling().viewSize);
+                dissemination, eventStorage, identity.nodeId().value(), config.sampling().viewSize,
+                () -> RegistryDiagnostics.snapshot(topics.freshness(), topics.ageMs(),
+                        topics.lastObserved().orElse(List.of()),
+                        membership.freshness(), membership.ageMs(),
+                        membership.lastObserved().orElse(List.of())));
 
         NodeLog.init(LOG, "COMPONENTS_WIRED");
-        return new PubSubNodeApplication(registry, eventStorage, sampling, navigation,
+        return new PubSubNodeApplication(topics, membership, eventStorage, sampling, navigation,
                 dissemination, transport, controlAdapter);
     }
 
@@ -150,20 +178,23 @@ public final class PubSubNodeApplication implements AutoCloseable {
      * @throws InterruptedException
      */
     public void start() throws InterruptedException {
-        registry.start();
+        topics.start();
+        membership.start();
         controlAdapter.start();
         transport.start();
         sampling.start();
         navigation.start();
         dissemination.start();
-        NodeLog.init(LOG, "NODE_READY");
+
+        NodeLog.init(LOG, "NODE_STARTED registryReady=false");
     }
 
     @Override
     public void close() {
         try {
             controlAdapter.close();
-            registry.close();
+            topics.close();
+            membership.close();
             sampling.close();
             navigation.close();
             dissemination.close();
@@ -174,25 +205,34 @@ public final class PubSubNodeApplication implements AutoCloseable {
         }
     }
 
-    private static TopicRegistrySyncService createRegistry(NodeConfig config) {
-        return new TopicRegistrySyncService(
-                new CardanoTopicRegistry(new CardanoRegistryConfig(
-                        Path.of(config.registry().runtimeDir),
-                        config.registry().signer,
-                        config.registry().cliBackend)),
-                config.registry().pollIntervalMs);
+    // Component construction helpers
+
+    private static RegistryObserver<List<TopicState>> createTopicObserver(NodeConfig config) {
+        CardanoTopicRegistry registry = new CardanoTopicRegistry(new CardanoRegistryConfig(
+                Path.of(config.registry().runtimeDir),
+                config.registry().signer,
+                config.registry().cliBackend));
+        return new RegistryObserver<>("topic", config.node().name, registry::allTopicsSnapshot,
+                config.registry().pollIntervalMs,
+                config.registry().maximumAgeMs);
     }
 
-    // Service construction helpers
+    private static RegistryObserver<List<ReplicationServerState>> createMembershipObserver(NodeConfig config) {
+        CardanoReplicationRegistry registry = new CardanoReplicationRegistry(
+                new CardanoReplicationRegistryConfig(Path.of(config.registry().replicationRuntimeDir),
+                        config.registry().signer, config.registry().cliBackend));
+        return new RegistryObserver<>("replication", config.node().name, () -> registry.queryServers(true),
+                config.registry().pollIntervalMs, config.registry().maximumAgeMs);
+    }
 
     private static NavigationService createNavigation(NodeConfig config, NodeIdentity identity,
-            TopicRegistrySyncService registry,
+            Supplier<List<String>> activeTopicIds,
             PeerSamplingProtocolService sampling) {
         return new NavigationService(
                 identity.nodeId().value(), config.sampling().advertisedHost, config.node().listenPort,
                 SubscriptionStore.loadOrCreate(config.subscriptionsPath()),
                 config.navigation(),
-                registry::activeTopicIds,
+                activeTopicIds,
                 () -> sampling.sampling().view());
     }
 

@@ -51,13 +51,12 @@ flowchart LR
   end
   PeerServer[Peer replication server(s)<br/>same application, separate JVMs]
 
-  subgraph Registry[Registry administration and read models]
+  subgraph Registry[Registry administration]
     direction TB
     Cli[Registry tools<br/>create topics and change server membership]
-    Refresh[Registry query and snapshot refresh]
-    Snapshots[(Confirmed registry snapshots<br/>topic policies · active servers)]
-    Refresh -->|atomic snapshot update| Snapshots
   end
+  NodeView[(Node-local topic and membership views)]
+  ServerView[(Server-local topic and membership views)]
 
   subgraph Ledger[Cardano devnet]
     Chain[Cardano ledger<br/>records transactions and runs validators]
@@ -67,13 +66,14 @@ flowchart LR
     Chain -->|executes on-chain| ReplValidator
   end
   Cli -->|submit transactions| Chain
-  Refresh -->|query confirmed registry state| Chain
+  NodeView -->|independent UTxO polling| Chain
+  ServerView -->|independent UTxO polling| Chain
 
   Users -->|publish, subscribe, recover| API
   StorageRecovery -->|store, progress and lookup| RepAPI
   RepAPI <-->|replica store and lookup| PeerServer
-  Snapshots -. topic policies .-> Node
-  Snapshots -. topic policies and membership .-> Server
+  NodeView -. topic policies and membership .-> Node
+  ServerView -. topic policies and membership .-> Server
   Admin --> Cli
 ```
 

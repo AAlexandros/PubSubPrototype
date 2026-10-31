@@ -1,6 +1,6 @@
 package org.pubsub.prototype.replication.bootstrap;
 
-import org.pubsub.prototype.cardano.cli.HostCardanoCommandRunner;
+import org.pubsub.prototype.cardano.cli.CardanoCommandRunnerFactory;
 import org.pubsub.prototype.auth.PublisherProgressAuthenticator;
 import org.pubsub.prototype.auth.SignedHttpRequest;
 import org.pubsub.prototype.event.TopicStateProvider;
@@ -9,12 +9,16 @@ import org.pubsub.prototype.persistence.adapter.FileEventStore;
 import org.pubsub.prototype.persistence.adapter.ReplicationHttpClient;
 import org.pubsub.prototype.persistence.core.EpochProvider;
 import org.pubsub.prototype.persistence.core.PersistenceEventValidator;
-import org.pubsub.prototype.registry.replication.FileReplicationRegistry;
+import org.pubsub.prototype.registry.RegistryObserver;
+import org.pubsub.prototype.registry.RegistryDiagnostics;
 import org.pubsub.prototype.registry.replication.ReplicationMembership;
 import org.pubsub.prototype.registry.replication.ReplicationRegistryReader;
 import org.pubsub.prototype.registry.replication.ReplicationServer;
 import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryConfig;
 import org.pubsub.prototype.registry.topic.cardano.CardanoTopicRegistry;
+import org.pubsub.prototype.registry.topic.TopicState;
+import org.pubsub.prototype.registry.replication.cardano.CardanoReplicationRegistry;
+import org.pubsub.prototype.registry.replication.cardano.CardanoReplicationRegistryConfig;
 import org.pubsub.prototype.replication.adapter.http.ReplicationHttpAdapter;
 import org.pubsub.prototype.replication.config.ReplicationServerConfig;
 import org.pubsub.prototype.replication.health.PeerFailureDetector;
@@ -31,7 +35,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 
 /** Owns construction and lifecycle for one replication-server process. */
@@ -39,8 +42,8 @@ public final class ReplicationServerApplication implements AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationServerApplication.class);
 
     private final ReplicationServerConfig config;
-    private final ReplicationRegistryReader registry;
-    private final AtomicReference<List<ReplicationServer>> members;
+    private final RegistryObserver<List<ReplicationServer>> members;
+    private final RegistryObserver<List<TopicState>> topics;
     private final FileEventStore store;
     private final ReplicationHttpClient client;
     private final ReplicaMaintenanceService replicaMaintenance;
@@ -48,15 +51,16 @@ public final class ReplicationServerApplication implements AutoCloseable {
     private final ScheduledExecutorService maintenance;
     private final CountDownLatch stopped = new CountDownLatch(1);
 
-    private ReplicationServerApplication(ReplicationServerConfig config, ReplicationRegistryReader registry,
-                                         AtomicReference<List<ReplicationServer>> members,
+    private ReplicationServerApplication(ReplicationServerConfig config,
+                                         RegistryObserver<List<ReplicationServer>> members,
+                                         RegistryObserver<List<TopicState>> topics,
                                          FileEventStore store, ReplicationHttpClient client,
                                          ReplicaMaintenanceService replicaMaintenance,
                                          ReplicationHttpAdapter httpAdapter,
                                          ScheduledExecutorService maintenance) {
         this.config = config;
-        this.registry = registry;
         this.members = members;
+        this.topics = topics;
         this.store = store;
         this.client = client;
         this.replicaMaintenance = replicaMaintenance;
@@ -65,25 +69,24 @@ public final class ReplicationServerApplication implements AutoCloseable {
     }
 
     public static ReplicationServerApplication create(ReplicationServerConfig config) throws IOException {
-        // Get the locally stored replication server states
-        // This happens once at creation of the application, then the membership is updated periodically by the polling mechanism.
-        ReplicationRegistryReader registry = new FileReplicationRegistry(config.membershipPath());
-        // Polling replaces this complete membership snapshot while request and maintenance threads read it
-        AtomicReference<List<ReplicationServer>> members = new AtomicReference<>(List.copyOf(registry.activeServers()));
-        LOG.info("REPLICATION_REGISTRY_SYNCED serverId={} activeServerCount={} membership={}",
-                config.serverId(), members.get().size(), members.get());
-        ReplicationMembership membership = members::get;
-
-        // Creates its own topic registry instance that is used to validate events, acquiring replication factors etc.
-        CardanoTopicRegistry topics = new CardanoTopicRegistry(new CardanoRegistryConfig(
+        // Initialize the two registries: replication and topic
+        // Registry used to track active replication servers
+        ReplicationRegistryReader replicationRegistry = new CardanoReplicationRegistry(
+                new CardanoReplicationRegistryConfig(config.replicationRegistryRuntimeDir(),
+                        config.topicRegistrySigner(), config.topicRegistryCliBackend()));
+        RegistryObserver<List<ReplicationServer>> members = new RegistryObserver<>(
+                "replication", config.serverId(), replicationRegistry::activeServers,
+                config.membershipPollMs(), config.registryMaximumAgeMs());
+        ReplicationMembership membership = members::requireFresh;
+        // Topic registry instance that is used to validate events, acquiring replication factors etc.
+        CardanoTopicRegistry topicRegistry = new CardanoTopicRegistry(new CardanoRegistryConfig(
                 config.topicRegistryRuntimeDir(), config.topicRegistrySigner(), config.topicRegistryCliBackend()));
+        RegistryObserver<List<TopicState>> topicObserver = new RegistryObserver<>(
+                "topic", config.serverId(), topicRegistry::allTopicsSnapshot,
+                config.membershipPollMs(), config.registryMaximumAgeMs());
 
-        // This prototype approach of acquiring epoch information, is using the Cardano CLI to acquire the epoch tip 
-        EpochProvider epochs = new CardanoCliEpochProvider(new HostCardanoCommandRunner(
-                config.cardanoNetwork()));
-        // Get the current epoch (approximated via tip)
-        epochs.currentEpoch();
-
+        EpochProvider epochs = new CardanoCliEpochProvider(CardanoCommandRunnerFactory.create(
+                config.topicRegistryCliBackend(), config.topicRegistryRuntimeDir()));
         FileEventStore store = new FileEventStore(config.storagePath(), Clock.systemUTC(), epochs);
         store.ensureServerIdentity(config.serverId());
 
@@ -92,24 +95,30 @@ public final class ReplicationServerApplication implements AutoCloseable {
                 config.requestVerificationKeyPath(), config.serverId());
         ReplicationHttpClient client = new ReplicationHttpClient(Duration.ofMillis(config.connectionTimeoutMs()),
                 Duration.ofMillis(config.requestTimeoutMs()), config.retries(), requestSigner);
-        TopicStateProvider topicProvider = topics::findTopicState;
+        TopicStateProvider topicProvider = id -> topicObserver.requireFresh().stream()
+                .filter(topic -> topic.topicId().equals(id)).findFirst();
         PeerFailureDetector failureDetector = new PeerFailureDetector(config.failureProbeAttempts());
         PersistenceEventValidator eventAuthenticator = new PersistenceEventValidator(topicProvider);
         PublisherProgressAuthenticator progressAuthenticator = new PublisherProgressAuthenticator(topicProvider);
         ReplicationService service = new ReplicationService(config.self(), membership,
                 eventAuthenticator, topicProvider, store, client, failureDetector);
         ReplicaMaintenanceService replicaMaintenance = new ReplicaMaintenanceService(config.self(), membership,
-                service, store, client, () -> topics.activeTopicsSnapshot().topics(), failureDetector,
+                service, store, client, () -> topicObserver.requireFresh().stream()
+                        .filter(TopicState::active).toList(), failureDetector,
                 Duration.ofMillis(config.failureProbeTimeoutMs()));
         ReplicationHttpAdapter httpAdapter = new ReplicationHttpAdapter(config.listenHost(), config.port(),
                 config.self(), service, membership, replicaMaintenance, eventAuthenticator,
-                progressAuthenticator, config.httpWorkerThreads());
+                progressAuthenticator, config.httpWorkerThreads(),
+                () -> RegistryDiagnostics.snapshot(topicObserver.freshness(), topicObserver.ageMs(),
+                        topicObserver.lastObserved().orElse(List.of()),
+                        members.freshness(), members.ageMs(),
+                        members.lastObserved().orElse(List.of())));
         ScheduledExecutorService maintenance = Executors.newScheduledThreadPool(3, runnable -> {
             Thread thread = new Thread(runnable, "replication-maintenance");
             thread.setDaemon(true);
             return thread;
         });
-        return new ReplicationServerApplication(config, registry, members, store, client,
+        return new ReplicationServerApplication(config, members, topicObserver, store, client,
                 replicaMaintenance, httpAdapter, maintenance);
     }
 
@@ -131,17 +140,8 @@ public final class ReplicationServerApplication implements AutoCloseable {
     }
 
     public void start() {
-        maintenance.scheduleWithFixedDelay(() -> {
-            try {
-                List<ReplicationServer> observed = List.copyOf(registry.activeServers());
-                if (!observed.equals(members.getAndSet(observed))) {
-                    LOG.info("REPLICATION_REGISTRY_SYNCED serverId={} activeServerCount={} membership={}",
-                            config.serverId(), observed.size(), observed);
-                }
-            } catch (RuntimeException ex) {
-                LOG.warn("Replication registry sync failed: {}", ex.getMessage());
-            }
-        }, 0, config.membershipPollMs(), TimeUnit.MILLISECONDS);
+        members.start();
+        topics.start();
         maintenance.scheduleWithFixedDelay(() -> {
             try {
                 store.cleanupExpired();
@@ -166,6 +166,8 @@ public final class ReplicationServerApplication implements AutoCloseable {
         try {
             httpAdapter.close();
             maintenance.shutdownNow();
+            members.close();
+            topics.close();
             client.close();
         } finally {
             stopped.countDown();

@@ -2,6 +2,7 @@ use aiken/crypto.{sha2_256}
 use aiken/collection/dict
 use aiken/collection/list
 use aiken/primitive/bytearray
+use cardano/address.{Script}
 use cardano/assets
 use cardano/assets.{PolicyId}
 use cardano/transaction.{InlineDatum, OutputReference, Transaction}
@@ -22,7 +23,10 @@ use pubsub/topic_registry/types.{
   VerificationKeyHash,
 }
 
-validator topic_policy {
+const max_replication_factor: Int = 50
+const max_retention_period: Int = 9223372036854775807
+
+validator topic_registry {
   mint(redeemer: MintAction, policy_id: PolicyId, self: Transaction) {
     let MintTopic { creation_ref, token_name, topic_id } = redeemer
     expect [Pair(minted_name, quantity)] =
@@ -38,21 +42,27 @@ validator topic_policy {
         |> bytearray.concat(bytearray.from_int_big_endian(creation_ref.output_index, 8))
         |> sha2_256
 
+    let topic_outputs = list.filter(self.outputs, fn(output) {
+      assets.quantity_of(output.value, policy_id, token_name) > 0
+    })
+    expect [topic_output] = topic_outputs
+    expect Script(output_script_hash) = topic_output.address.payment_credential
+    expect InlineDatum(datum) = topic_output.datum
+    expect topic: TopicState = datum
+
     and {
       consumes_creation_seed?,
       (quantity == 1)?,
       (minted_name == token_name)?,
       (token_name == expected_token_name)?,
       (topic_id == expected_token_name)?,
+      (assets.quantity_of(topic_output.value, policy_id, token_name) == 1)?,
+      (output_script_hash == policy_id)?,
+      (topic.topic_id == topic_id)?,
+      valid_topic_state(topic)?,
     }
   }
 
-  else(_ctx) {
-    fail
-  }
-}
-
-validator topic_state {
   spend(datum: Option<TopicState>, redeemer: TopicAction, own_ref: OutputReference, self: Transaction) {
     expect Some(current) = datum
     expect Some(own_input) =
@@ -70,8 +80,7 @@ validator topic_state {
       authorized(self.extra_signatories, current, redeemer)?,
       current.active?,
       (next.topic_id == current.topic_id)?,
-      positive_values(next)?,
-      valid_owner_set(next)?,
+      valid_topic_state(next)?,
       irreversible_deletion(current, next, redeemer)?,
       token_preserved(own_input.output.value, next_output.value)?,
       valid_transition(current, next, redeemer)?,
@@ -106,12 +115,19 @@ fn has_owner_or_admin_signature(signers: List<VerificationKeyHash>, topic: Topic
     || list.any(topic.admins, fn(admin) { list.has(signers, admin) })
 }
 
-fn positive_values(topic: TopicState) -> Bool {
-  topic.replication_factor > 0 && topic.retention_period > 0
-}
-
-fn valid_owner_set(next: TopicState) -> Bool {
-  list.length(next.owners) > 0
+fn valid_topic_state(topic: TopicState) -> Bool {
+  list.length(topic.owners) > 0
+    && topic.replication_factor >= 1
+    && topic.replication_factor <= max_replication_factor
+    && topic.retention_period > 0
+    && topic.retention_period <= max_retention_period
+    && bytearray.from_string(bytearray.to_string(topic.name)) == topic.name
+    && list.all(topic.owners, fn(owner) { bytearray.length(owner) == 28 })
+    && list.all(topic.admins, fn(admin) { bytearray.length(admin) == 28 })
+    && list.all(topic.publishers, fn(publisher) { bytearray.length(publisher) == 32 })
+    && list.length(topic.owners) == list.length(list.unique(topic.owners))
+    && list.length(topic.admins) == list.length(list.unique(topic.admins))
+    && list.length(topic.publishers) == list.length(list.unique(topic.publishers))
 }
 
 fn irreversible_deletion(current: TopicState, next: TopicState, action: TopicAction) -> Bool {

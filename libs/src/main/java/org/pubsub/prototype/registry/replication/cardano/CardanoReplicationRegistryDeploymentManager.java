@@ -38,14 +38,16 @@ public final class CardanoReplicationRegistryDeploymentManager {
         Map<String, String> values = new LinkedHashMap<>();
         values.put(ReplicationRegistryEnvironment.VALIDATOR_ADDRESS, address);
         values.put(ReplicationRegistryEnvironment.SCRIPT_FILE, script.toString());
-        values.put(ReplicationRegistryEnvironment.STATE_FILE, config.stateFile().toString());
         CardanoEnvironmentFile.write(config.deploymentFile(), values);
         return cached;
     }
 
     public synchronized ReplicationRegistryDeployment read() {
         if (cached != null) return cached;
-        if (!Files.exists(config.deploymentFile())) return initialize();
+        if (!Files.exists(config.deploymentFile())) {
+            throw new IllegalStateException("Trusted replication registry deployment metadata is missing: "
+                    + config.deploymentFile());
+        }
         Map<String, String> values = CardanoEnvironmentFile.readRequired(
                 config.deploymentFile(), ReplicationRegistryEnvironment.VALIDATOR_ADDRESS);
         cached = new ReplicationRegistryDeployment(values.get(ReplicationRegistryEnvironment.VALIDATOR_ADDRESS));

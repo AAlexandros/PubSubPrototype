@@ -1,14 +1,16 @@
 # Pub/Sub node architecture
 
-Arrows show calls or callbacks. Responses are omitted. Outgoing peer messages
-pass through Peer Transport; incoming messages return through Transport Listener.
-Each node queries Cardano independently and publishes local registry views.
+Arrows show calls, callbacks, or registry dependencies. Responses are omitted.
+Outgoing peer messages pass through Peer Transport; incoming messages return
+through Transport Listener. Registry arrows to Cardano CLI summarize each
+service's dependency; the services consume locally refreshed registry views.
 
 ```mermaid
 flowchart TB
     LOCAL["Local Application"]
     ADMIN["Topic owner or administrator"]
     REGISTRY_TOOLS["Registry administration tools"]
+    CARDANO_CLI["Cardano CLI"]
     CARDANO["Cardano Topic and Replication Registries"]
     REPLICATION["Replication Servers"]
     PEERS["Remote Pub/Sub Nodes"]
@@ -16,7 +18,6 @@ flowchart TB
     subgraph NODE["Pub/Sub Node"]
         direction TB
 
-        REG["Local Topic and Membership Views"]
         SAMPLING["Peer Sampling"]
         NAV["Navigation"]
         DIS["Dissemination"]
@@ -24,11 +25,6 @@ flowchart TB
         STORAGE["Event Storage"]
         TRANSPORT["Peer Transport"]
         LISTENER["Transport Listener"]
-
-        NAV -->|"Read active topic IDs"| REG
-        DIS -->|"Read active topic IDs"| REG
-        EVENT -->|"Read topic policy"| REG
-        STORAGE -->|"Read topic policy for recovery"| REG
 
         NAV -->|"Read peer sample"| SAMPLING
         DIS -->|"Read topic candidates"| NAV
@@ -54,14 +50,19 @@ flowchart TB
     LOCAL -->|"Request recovery"| STORAGE
 
     ADMIN -->|"Add or remove publisher"| REGISTRY_TOOLS
-    REGISTRY_TOOLS -->|"Submit transaction and query confirmed state"| CARDANO
-    REG -->|"Poll confirmed UTxOs through read-only socket"| CARDANO
+    REGISTRY_TOOLS -->|"Submit transaction and query confirmed state"| CARDANO_CLI
+    NAV -->|"Observe active topics via Topic Registry"| CARDANO_CLI
+    DIS -->|"Observe active topics via Topic Registry"| CARDANO_CLI
+    EVENT -->|"Read topic policy via Topic Registry"| CARDANO_CLI
+    STORAGE -->|"Read topic policy for recovery via Topic Registry"| CARDANO_CLI
+    STORAGE -->|"Observe active servers via Replication Registry"| CARDANO_CLI
+    CARDANO_CLI -->|"Read confirmed UTxOs through node socket; submit transactions"| CARDANO
     STORAGE -->|"Store events, query progress, fetch events"| REPLICATION
     TRANSPORT <-->|"P2P messages"| PEERS
 
     classDef internal fill:#e8f0fe,stroke:#4667a6,color:#172b4d
     classDef external fill:#f2e8fa,stroke:#8464a5,color:#3f285f
 
-    class REG,SAMPLING,NAV,DIS,EVENT,STORAGE,TRANSPORT,LISTENER internal
-    class LOCAL,ADMIN,REGISTRY_TOOLS,CARDANO,REPLICATION,PEERS external
+    class SAMPLING,NAV,DIS,EVENT,STORAGE,TRANSPORT,LISTENER internal
+    class LOCAL,ADMIN,REGISTRY_TOOLS,CARDANO_CLI,CARDANO,REPLICATION,PEERS external
 ```

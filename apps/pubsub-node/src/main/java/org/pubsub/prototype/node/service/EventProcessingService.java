@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Base64;
+import java.util.function.Predicate;
 
 /**
  * Processes events published through this node or received from peers.
@@ -34,6 +35,7 @@ public final class EventProcessingService {
     private EventStorageService eventStorageService;
     private final LocalEventCreator eventCreator;
     private final EventValidator validator;
+    private Predicate<String> subscribed = ignored -> false;
 
     public EventProcessingService(NodeIdentity identity, Path runtimeDir, TopicStateProvider topics) {
         this(identity, runtimeDir, new EventValidator(topics, new EventDeduplicator(10_000)));
@@ -54,6 +56,10 @@ public final class EventProcessingService {
 
     public void attachEventStorage(EventStorageService eventStorage) {
         this.eventStorageService = eventStorage;
+    }
+
+    public void attachSubscriptionCheck(Predicate<String> subscribed) {
+        this.subscribed = subscribed;
     }
 
     /**
@@ -82,10 +88,11 @@ public final class EventProcessingService {
             LOG.info("EVENT_PUBLISHED eventId={} topicId={} publisherKeyId={} sequenceNumber={}",
                     event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber());
             if (result.accepted()) {
+                if (subscribed.test(event.topicId()))
+                    eventStorageService.storeLocalSubscriberEvent(event, "LOCAL_PUBLISH");
+                eventStorageService.queueEventForRemoteStorage(event);
                 LOG.info("EVENT_ACCEPTED eventId={} topicId={} publisherKeyId={} sequenceNumber={} peerNodeId=local",
                         event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber());
-                eventStorageService.saveLocalRecoveryProgress(event);
-                eventStorageService.queueEventForRemoteStorage(event);
             }
             if (forceBroadcast) disseminationService.broadcastEventToConnectedPeers(event);
             else disseminationService.sendEventToTopicPeers(event, null);
@@ -106,14 +113,17 @@ public final class EventProcessingService {
                 result.accepted(), result.reason());
         String publisherKeyId = result.publisherKeyId();
         if (result.accepted()) {
+            if (subscribed.test(event.topicId()))
+                eventStorageService.storeLocalSubscriberEvent(event, "LIVE");
             LOG.info("EVENT_ACCEPTED eventId={} topicId={} publisherKeyId={} sequenceNumber={} peerNodeId={}",
                     event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber(), peerNodeId.value());
             // The original publisher is responsible for submitting the event for storage.
-            eventStorageService.saveLocalRecoveryProgress(event);
             disseminationService.sendEventToTopicPeers(event, peerNodeId);
             LOG.info("EVENT_FORWARDED eventId={} topicId={} publisherKeyId={} sequenceNumber={} peerNodeId={}",
                     event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber(), peerNodeId.value());
         } else if (result.sequenceStatus() == EventSequenceStatus.DUPLICATE) {
+            if (subscribed.test(event.topicId()))
+                eventStorageService.storeLocalSubscriberEvent(event, "LIVE");
             LOG.info("EVENT_DUPLICATE eventId={} topicId={} publisherKeyId={} sequenceNumber={} peerNodeId={}",
                     event.eventId(), event.topicId(), publisherKeyId, event.sequenceNumber(), peerNodeId.value());
         } else {

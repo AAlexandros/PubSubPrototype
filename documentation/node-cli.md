@@ -17,7 +17,10 @@ node scripts/pubsub-node.mjs <command> --node <1..50> [options]
 | `inject` | `--file <event.json>` | Submit a signed event envelope to the selected node. The file may contain the envelope directly or under an `envelope` property. |
 | `subscribe` | `--topic <id>` | Subscribe the node to a topic. |
 | `unsubscribe` | `--topic <id>` | Remove the node's topic subscription. |
-| `recover` | `--topic <id>` | Recover stored events for a topic. |
+| `events` | none | List this node's local events. Optional `--topic`, `--publisher`, `--offset`, and `--limit` filter and paginate the result. |
+| `event` | `--event <id>` or `--topic <id> --publisher <id> --sequence <n>` | Read one complete local envelope. |
+| `catch-up-status` | none | Inspect automatic catch-up and unresolved gaps. |
+| `recover` | `--topic <id>` | Diagnostic compatibility command; normal restart recovery is automatic. |
 | `status` | — | Show peer-sampling, navigation, subscriptions, and recovery state. |
 | `publisher-key-id` | — | Show the node's event publisher key ID. |
 | `peer-view` | — | Show the peer-sampling view. |
@@ -37,7 +40,7 @@ Publishing options:
 ## Publication paths
 
 Normal `publish` creates and stores a signed event, then validates it. If
-accepted, the node records delivery locally, queues persistence, and sends
+accepted and locally subscribed, the node stores the complete envelope before advancing its delivery cursor. It queues replication persistence and sends
 the event to peers selected for the topic. If no topic peers are known, the
 dissemination target count is zero and no peer message is sent. If rejected,
 the request fails.
@@ -75,3 +78,25 @@ node scripts/pubsub-node.mjs inject --node 2 --file event.json
 The CLI is the supported local interface for users and shell scripts. The
 node's HTTP routes are its adapter implementation. They do not replace the
 Netty peer protocol, which nodes use to communicate with one another.
+
+## Local subscriber history
+
+`events` returns a bounded page (default 100, maximum 500) ordered by topic ID,
+publisher key ID, then sequence number. Its response has `events`, `offset`,
+`limit`, and `hasMore` fields. `event` returns the complete stored envelope,
+including its Base64 payload; an absent local event returns 404. These commands
+read only the selected node's persistent volume. The equivalent HTTP routes are
+`GET /v1/events`, `GET /v1/events/{eventId}`, and
+`GET /v1/topics/{topicId}/events`.
+
+```bash
+node scripts/pubsub-node.mjs events --node 3 --topic <topic-id> --limit 50
+node scripts/pubsub-node.mjs event --node 3 --event <event-id>
+node scripts/pubsub-node.mjs event --node 3 --topic <topic-id> --publisher <key-id> --sequence 5
+node scripts/pubsub-node.mjs catch-up-status --node 3
+```
+
+After a restart, the node automatically checks restored active subscriptions
+against replication publisher progress and stores recoverable missing events.
+Local event files are retained without automatic pruning. Replication-server
+topic retention still limits how long an offline node can recover a gap.

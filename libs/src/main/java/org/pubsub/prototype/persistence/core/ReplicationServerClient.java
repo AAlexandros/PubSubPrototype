@@ -85,6 +85,7 @@ public final class ReplicationServerClient implements AutoCloseable {
     public List<PublisherProgress> fetchLatestSequencesByPublisher(String topicId, long sinceTimestamp) {
         requireNonNegative(sinceTimestamp, SINCE_TIMESTAMP_FIELD);
         Map<String, PublisherProgress> merged = new LinkedHashMap<>();
+        int successful = 0;
         for (ReplicationServer server : membership.activeServers()) {
             try {
                 for (PublisherProgress progress : httpClient.publisherProgress(server, topicId, false, sinceTimestamp)) {
@@ -95,10 +96,12 @@ public final class ReplicationServerClient implements AutoCloseable {
                                     || (left.latestSequenceNumber() == right.latestSequenceNumber()
                                             && left.latestTimestamp() >= right.latestTimestamp()) ? left : right);
                 }
+                successful++;
             } catch (RuntimeException ignored) {
                 // Try another entry server.
             }
         }
+        if (successful == 0) throw new IllegalStateException("No replication server returned publisher progress");
         return merged.values().stream().sorted(Comparator.comparing(PublisherProgress::publisherKeyId)).toList();
     }
 

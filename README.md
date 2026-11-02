@@ -5,7 +5,7 @@ Cardano provides the control plane for topic and replication-server registries;
 live event payloads travel between Pub/Sub nodes and are stored by independent
 replication servers for later recovery.
 
-The current implementation is **Phase 0.9**: a local, reproducible testbed with
+The current implementation includes **Phase 0.11** subscriber-local event history and automatic restart catch-up, alongside the Phase 0.9 local, reproducible testbed with
 3-50 real Pub/Sub JVMs, three replication servers, a Cardano devnet, fault
 injection, and JSONL/Parquet telemetry.
 
@@ -114,12 +114,19 @@ local requests.
 node scripts/pubsub-node.mjs status --node 1
 node scripts/pubsub-node.mjs subscribe --node 2 --topic <topic-id>
 node scripts/pubsub-node.mjs publish --node 1 --topic <topic-id> --payload "hello"
-node scripts/pubsub-node.mjs recover --node 2 --topic <topic-id>
+node scripts/pubsub-node.mjs events --node 2 --topic <topic-id>
+node scripts/pubsub-node.mjs event --node 2 --event <event-id>
+node scripts/pubsub-node.mjs catch-up-status --node 2
 ```
 
 See the [node command reference](documentation/node-cli.md) for all commands
 and options. Node-to-node traffic continues to use the Netty transport on port
 `7000`; the local command adapter is not a peer protocol.
+
+Subscribed nodes persist complete event envelopes on their own node volume and
+automatically catch up from replication servers after restart. User event reads
+come from that local store. Subscriber-local files have no automatic pruning;
+replication-server topic retention bounds how long missed events remain recoverable.
 
 To discard generated runtime state and Docker volumes while retaining
 experiment results:
@@ -212,5 +219,8 @@ local state you need to keep. Historical acceptance entrypoints remain under
 - [Phase 0.9 specification](specs/phase-0.9.md) and
   [implementation report](implementation-reports/phase-0.9-implementation-report.md) -
   requirements, scope, and validation evidence.
+- [Phase 0.11 specification](specs/phase-0.11.md) and
+  [implementation report](implementation-reports/phase-0.11-implementation-report.md) -
+  local subscriber history and automatic catch-up.
 - [Modernization plan](specs/modernization-refactor-plan.md) - current
   structural decisions and intentionally deferred migrations.

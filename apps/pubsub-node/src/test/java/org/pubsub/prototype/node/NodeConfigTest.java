@@ -3,6 +3,7 @@ package org.pubsub.prototype.node;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.node.config.NodeConfig;
+import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -17,6 +18,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class NodeConfigTest {
     @TempDir
     Path tempDir;
+
+    @Test
+    void phase07DeploymentConfigsMatchCurrentSchema() {
+        for (int index = 1; index <= 3; index++) {
+            NodeConfig config = NodeConfig.load(Path.of("../../ops/config/phase-0.7/node-" + index + ".yaml"));
+
+            assertEquals("node-" + index, config.node().name);
+            assertEquals("/replication-registry", config.registry().replicationRuntimeDir);
+            assertEquals(CardanoCliBackend.HOST, config.registry().cliBackend);
+            assertEquals(30_000L, config.registry().maximumAgeMs);
+        }
+    }
 
     @Test
     void loadsTypedConfiguration() throws IOException {

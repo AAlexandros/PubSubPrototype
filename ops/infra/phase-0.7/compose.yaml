@@ -51,10 +51,14 @@ services:
       context: ../../..
       dockerfile: apps/pubsub-node/Dockerfile
     command: ["/config/node-1.yaml"]
+    environment:
+      CARDANO_NETWORK_MAGIC: ${CARDANO_NETWORK_MAGIC:-42}
+      CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock
     volumes:
       - ../../config/phase-0.7/node-1.yaml:/config/node-1.yaml:ro
       - ../devnet/runtime/registry:/registry:ro
       - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - ../devnet/runtime/testnet/socket:/node-socket:ro
       - pubsub-node-1-identity-0-7:/data/identity
     ports: ["7001:7000", "127.0.0.1:8001:8000"]
   pubsub-node-2:
@@ -64,6 +68,7 @@ services:
       - ../../config/phase-0.7/node-2.yaml:/config/node-2.yaml:ro
       - ../devnet/runtime/registry:/registry:ro
       - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - ../devnet/runtime/testnet/socket:/node-socket:ro
       - pubsub-node-2-identity-0-7:/data/identity
     ports: ["7002:7000", "127.0.0.1:8002:8000"]
   pubsub-node-3:
@@ -73,6 +78,7 @@ services:
       - ../../config/phase-0.7/node-3.yaml:/config/node-3.yaml:ro
       - ../devnet/runtime/registry:/registry:ro
       - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - ../devnet/runtime/testnet/socket:/node-socket:ro
       - pubsub-node-3-identity-0-7:/data/identity
     ports: ["7003:7000", "127.0.0.1:8003:8000"]
 

@@ -185,6 +185,7 @@ Event stage observations.
 | `sequenceNumber` | long | count | Publisher sequence number | yes | pubsub-node |
 | `peerNodeId` | string | identifier | Related peer | yes | pubsub-node |
 | `stage` | string | enum | Lifecycle stage | no | pubsub-node |
+| `source` | string | enum | LIVE, LOCAL_PUBLISH, or CATCH_UP delivery source | yes | pubsub-node |
 | `reason` | string | text | Rejection or duplicate detail | yes | pubsub-node |
 
 ## `protocol_cycles`
@@ -222,4 +223,3 @@ Explicit fault injections and recoveries.
 | `faultType` | string | enum | STOP, START, RESTART, MEMBERSHIP_CHANGE, or REPLICATION_FACTOR_CHANGE | no | scenario |
 | `action` | string | enum | INJECTED or CLEARED | no | experiment-controller |
 | `details` | string | JSON/text | Fault parameters | yes | scenario |
-

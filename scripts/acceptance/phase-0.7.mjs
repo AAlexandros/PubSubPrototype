@@ -57,6 +57,8 @@ if (mode === 'prepare-devnet') {
   }
 } else if (mode === 'server-configs') {
   const [rawRuntime, ids] = args;
+  if (!ids || ids.split(',').length !== 3 || ids.split(',').some(id => !/^[0-9a-f]{64}$/.test(id)))
+    throw Error('server-configs requires three 64-character lowercase hexadecimal server IDs');
   const runtime = native(rawRuntime);
   fs.mkdirSync(runtime, {recursive: true});
   ids.split(',').forEach((id, index) => fs.writeFileSync(path.join(runtime, `server-${index + 1}.yaml`), `server:
@@ -73,11 +75,12 @@ registration:
   commitmentStartEpoch: 0
   commitmentEndEpoch: 100000
 registry:
-  membershipPath: /replication-registry/servers.json
+  replicationRuntimeDir: /replication-registry
   pollIntervalMs: 500
+  maximumAgeMs: 30000
   topicRegistryRuntimeDir: /registry
   topicRegistrySigner: node-${index + 1}
-  topicRegistryCliBackend: CACHE_ONLY
+  topicRegistryCliBackend: HOST
 timing:
   connectionTimeoutMs: 1000
   requestTimeoutMs: 3000

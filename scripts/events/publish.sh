@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "$ROOT_DIR/scripts/lib/platform.sh"
 
 usage() {
   cat >&2 <<'USAGE'
@@ -46,4 +47,4 @@ args=(publish --node "$node_index" --topic "$topic_id" --payload "$payload")
 [[ "$base64_payload" == true ]] && args+=(--base64)
 [[ "$force_broadcast" == true ]] && args+=(--force-broadcast)
 [[ "$tamper_signature" == true ]] && args+=(--tamper-signature)
-node "$ROOT_DIR/scripts/pubsub-node.mjs" "${args[@]}"
+pubsub_run_node_file "$ROOT_DIR/scripts/pubsub-node.mjs" "${args[@]}"

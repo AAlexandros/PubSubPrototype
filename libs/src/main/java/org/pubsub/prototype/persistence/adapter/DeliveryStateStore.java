@@ -58,6 +58,26 @@ public final class DeliveryStateStore {
         return deepCopy(state);
     }
 
+    /** Rebuilds the contiguous cursor from durable event files after a restart. */
+    public synchronized void reconcile(NodeEventStore events) {
+        Map<String, Map<String, DeliveryProgress>> rebuilt = new LinkedHashMap<>();
+        events.grouped().forEach((topic, publishers) -> publishers.forEach((publisher, history) -> {
+            long next = 0;
+            long timestamp = 0;
+            for (var event : history) {
+                if (event.sequenceNumber() != next) break;
+                timestamp = event.timestamp();
+                next++;
+            }
+            if (next > 0) rebuilt.computeIfAbsent(topic, ignored -> new LinkedHashMap<>())
+                    .put(publisher, new DeliveryProgress(next - 1, timestamp));
+        }));
+        if (!state.equals(rebuilt)) {
+            write(rebuilt);
+            state = rebuilt;
+        }
+    }
+
     public synchronized long latestDeliveredTimestamp(String topicId) {
         topicId = HexUtils.normalizeSha256(topicId, TOPIC_ID_FIELD);
         return state.getOrDefault(topicId, Map.of()).values().stream()

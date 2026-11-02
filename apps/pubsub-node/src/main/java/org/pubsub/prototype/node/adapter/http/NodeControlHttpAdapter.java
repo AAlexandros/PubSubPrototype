@@ -227,6 +227,48 @@ public final class NodeControlHttpAdapter implements AutoCloseable {
         return json(200, eventStorage.deliveryState());
     }
 
+    @GET
+    @Path("/v1/events/catch-up/status")
+    public Response catchUpStatus() {
+        return json(200, eventStorage.catchUpStatus());
+    }
+
+    /** Reads only this node's persisted subscriber events. */
+    @GET
+    @Path("/v1/events")
+    public Response localEvents(@QueryParam("topicId") String topicId,
+                                @QueryParam("publisherKeyId") String publisherKeyId,
+                                @QueryParam("sequenceNumber") Long sequenceNumber,
+                                @QueryParam("offset") Integer offset,
+                                @QueryParam("limit") Integer limit) {
+        if (sequenceNumber != null) {
+            if (topicId == null || publisherKeyId == null || sequenceNumber < 0)
+                throw new IllegalArgumentException("Sequence lookup requires topicId, publisherKeyId, and nonnegative sequenceNumber");
+            return eventStorage.localEvent(topicId, publisherKeyId, sequenceNumber)
+                    .map(event -> json(200, event))
+                    .orElseGet(() -> json(404, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.NOT_FOUND)));
+        }
+        return json(200, eventStorage.localEvents(topicId, publisherKeyId,
+                offset == null ? 0 : offset, limit == null ? 100 : limit));
+    }
+
+    @GET
+    @Path("/v1/events/{eventId}")
+    public Response localEventById(@PathParam("eventId") String eventId) {
+        return eventStorage.localEvent(eventId)
+                .map(event -> json(200, event))
+                .orElseGet(() -> json(404, Map.of(HttpErrorCodes.ERROR, HttpErrorCodes.NOT_FOUND)));
+    }
+
+    @GET
+    @Path("/v1/topics/{topicId}/events")
+    public Response topicLocalEvents(@PathParam("topicId") String topicId,
+                                     @QueryParam("offset") Integer offset,
+                                     @QueryParam("limit") Integer limit) {
+        return json(200, eventStorage.localEvents(topicId, null,
+                offset == null ? 0 : offset, limit == null ? 100 : limit));
+    }
+
     private static Response json(int status, Object body) {
         return Response.status(status).type(MediaType.APPLICATION_JSON).entity(body).build();
     }

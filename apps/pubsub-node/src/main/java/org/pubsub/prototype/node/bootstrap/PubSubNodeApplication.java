@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Supplier;
 
@@ -57,6 +58,8 @@ public final class PubSubNodeApplication implements AutoCloseable {
 
     // Services
     private final EventStorageService eventStorage;
+    private final EventProcessingService eventService;
+    private final Set<String> restoredSubscriptions;
     private final PeerSamplingProtocolService sampling;
     private final NavigationService navigation;
     private final DisseminationService dissemination;
@@ -72,12 +75,15 @@ public final class PubSubNodeApplication implements AutoCloseable {
     private PubSubNodeApplication(RegistryObserver<List<TopicState>> topics,
             RegistryObserver<List<ReplicationServerState>> membership,
             EventStorageService eventStorage,
+            EventProcessingService eventService, Set<String> restoredSubscriptions,
             PeerSamplingProtocolService sampling, NavigationService navigation,
             DisseminationService dissemination, PubSubTransport transport,
             NodeControlHttpAdapter controlAdapter) {
         this.topics = topics;
         this.membership = membership;
         this.eventStorage = eventStorage;
+        this.eventService = eventService;
+        this.restoredSubscriptions = restoredSubscriptions;
         this.sampling = sampling;
         this.navigation = navigation;
         this.dissemination = dissemination;
@@ -117,7 +123,8 @@ public final class PubSubNodeApplication implements AutoCloseable {
                 .filter(ReplicationServerState::active)
                 .map(ReplicationServerState::endpoint)
                 .toList();
-        EventStorageService eventStorage = new EventStorageService(config.persistence(), topicProvider, activeMembership);
+        EventStorageService eventStorage = new EventStorageService(config.persistence(), topicProvider,
+                activeMembership, identity.nodeId().value());
         eventService.attachEventStorage(eventStorage);
 
         // Initialize the protocol services
@@ -127,6 +134,8 @@ public final class PubSubNodeApplication implements AutoCloseable {
         PeerSamplingProtocolService sampling = new PeerSamplingProtocolService(self, config.sampling());
         // Initialize the navigation service (Layer two).
         NavigationService navigation = createNavigation(config, identity, activeTopicIds, sampling);
+        Set<String> restoredSubscriptions = Set.copyOf(navigation.navigation().subscriptions());
+        eventService.attachSubscriptionCheck(topic -> navigation.navigation().subscriptions().contains(topic));
         // Initialize the dissemination service.
         DisseminationService dissemination = new DisseminationService(
                 identity.nodeId().value(), config.sampling().advertisedHost, config.node().listenPort,
@@ -151,7 +160,8 @@ public final class PubSubNodeApplication implements AutoCloseable {
                         membership.lastObserved().orElse(List.of())));
 
         NodeLog.init(LOG, "COMPONENTS_WIRED");
-        return new PubSubNodeApplication(topics, membership, eventStorage, sampling, navigation,
+        return new PubSubNodeApplication(topics, membership, eventStorage, eventService, restoredSubscriptions,
+                sampling, navigation,
                 dissemination, transport, controlAdapter);
     }
 
@@ -185,6 +195,7 @@ public final class PubSubNodeApplication implements AutoCloseable {
         sampling.start();
         navigation.start();
         dissemination.start();
+        eventStorage.startAutomaticCatchUp(restoredSubscriptions, eventService::validateRecoveredEvent);
 
         NodeLog.init(LOG, "NODE_STARTED registryReady=false");
     }

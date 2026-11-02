@@ -79,7 +79,10 @@ function collectLogs() {
     ['EVENT_PUBLISHED','PUBLISHED'], ['EVENT_RECEIVED','RECEIVED'], ['EVENT_ACCEPTED','ACCEPTED'],
     ['EVENT_FORWARDED','FORWARDED'], ['EVENT_DUPLICATE','DUPLICATE'], ['EVENT_REJECTED','REJECTED'],
     ['EVENT_PERSIST_REQUESTED','PERSIST_SUBMITTED'], ['EVENT_PERSISTED','PERSISTED'],
-    ['RECOVERY_EVENT_FOUND','RECOVERY_FETCHED'], ['RECOVERY_EVENT_DELIVERED','RECOVERY_DELIVERED']
+    ['RECOVERY_EVENT_FOUND','RECOVERY_FETCHED'], ['RECOVERY_EVENT_DELIVERED','RECOVERY_DELIVERED'],
+    ['LOCAL_EVENT_STORED','LOCAL_STORED'], ['LOCAL_EVENT_STORE_DUPLICATE','LOCAL_DUPLICATE'],
+    ['LOCAL_EVENT_STORE_FAILED','LOCAL_STORE_FAILED'], ['CATCH_UP_EVENT_FETCHED','CATCH_UP_FETCHED'],
+    ['CATCH_UP_EVENT_STORED','CATCH_UP_STORED']
   ]);
   let sequence = 0;
   for (const line of logs.split(/\r?\n/)) {
@@ -93,7 +96,8 @@ function collectLogs() {
       nodeId: observedNodeId, topicId: values.topicId, eventId: values.eventId,
       eventKey: values.eventKey || null, publisherKeyId: values.publisherKeyId || null,
       sequenceNumber: values.sequenceNumber === undefined ? null : Number(values.sequenceNumber),
-      peerNodeId: values.peerNodeId || null, stage: stageNames.get(marker), reason: values.reason || null
+      peerNodeId: values.peerNodeId || null, stage: stageNames.get(marker),
+      source: values.source || (marker.startsWith('CATCH_UP_') ? 'CATCH_UP' : null), reason: values.reason || null
     });
     if (line.includes('EVENT_DISSEMINATED') && values.nodeId && values.peerNodeId) emit('message_transmissions', {
       fromNodeId: values.nodeId, toNodeId: values.peerNodeId, protocolLayer: 'DISSEMINATION', messageType: 'EVENT',
@@ -227,7 +231,7 @@ try {
     const before = performance.now();
     const value = await request(nodeApiUrl(1, API_PATHS.EVENT_PUBLISH), {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({topicId,payload})});
     const duration = performance.now() - before;
-    emit('event_lifecycle', {nodeId:null, topicId, eventId:value.eventId, eventKey:null, publisherKeyId:null, sequenceNumber:Number(value.sequenceNumber), peerNodeId:'local', stage:'PUBLISHED', reason:null});
+    emit('event_lifecycle', {nodeId:null, topicId, eventId:value.eventId, eventKey:null, publisherKeyId:null, sequenceNumber:Number(value.sequenceNumber), peerNodeId:'local', stage:'PUBLISHED', source:null, reason:null});
     emit('persistence_operations', {nodeId:null, serverId:null, operation:'STORE', topicId, eventId:value.eventId, eventKey:null, durationMs:duration, success:true, recordCount:1});
     if (Date.now() >= nextSample) { await sample(); nextSample = Date.now() + 1000; }
     await sleep(intervalMs);

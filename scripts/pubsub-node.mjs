@@ -12,7 +12,10 @@ Commands:
   inject           --file <event.json>
   subscribe        --topic <id>
   unsubscribe       --topic <id>
-  recover           --topic <id>
+  events           [--topic <id>] [--publisher <key-id>] [--offset <n>] [--limit <1..500>]
+  event            --event <event-id> | --topic <id> --publisher <key-id> --sequence <n>
+  catch-up-status
+  recover           --topic <id> (diagnostic compatibility only)
   publisher-key-id
   status
   peer-view
@@ -55,6 +58,9 @@ const endpoint = {
   subscribe: ['/v1/subscriptions', 'POST'],
   unsubscribe: ['/v1/subscriptions', 'DELETE'],
   recover: ['/v1/events/recover', 'POST'],
+  events: ['/v1/events', 'GET'],
+  event: ['/v1/events', 'GET'],
+  'catch-up-status': ['/v1/events/catch-up/status', 'GET'],
   'publisher-key-id': ['/v1/events/publisher-key-id', 'GET'],
   status: ['/v1/peer-sampling/view', 'GET'],
   'peer-view': ['/v1/peer-sampling/view', 'GET'],
@@ -88,6 +94,23 @@ if (command === 'publish') {
   route += `/${encodeURIComponent(topic)}`;
 } else if (command === 'dissemination-view' && topic) {
   route += `/${encodeURIComponent(topic)}`;
+} else if (command === 'events') {
+  const query = new URLSearchParams();
+  if (topic) query.set('topicId', topic);
+  if (values.has('--publisher')) query.set('publisherKeyId', values.get('--publisher'));
+  if (values.has('--offset')) query.set('offset', values.get('--offset'));
+  if (values.has('--limit')) query.set('limit', values.get('--limit'));
+  if (query.size) route += `?${query}`;
+} else if (command === 'event') {
+  if (values.has('--event')) {
+    route += `/${encodeURIComponent(values.get('--event'))}`;
+  } else {
+    if (!topic || !values.has('--publisher') || !values.has('--sequence'))
+      throw Error('event requires --event or --topic, --publisher, and --sequence');
+    const query = new URLSearchParams({topicId: topic,
+      publisherKeyId: values.get('--publisher'), sequenceNumber: values.get('--sequence')});
+    route += `?${query}`;
+  }
 }
 
 const response = await fetch(new URL(route, `${baseUrl.replace(/\/$/, '')}/`), {

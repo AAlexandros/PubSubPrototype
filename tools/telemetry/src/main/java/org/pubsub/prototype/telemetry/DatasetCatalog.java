@@ -51,6 +51,7 @@ final class DatasetCatalog {
                 f("sequenceNumber", Type.LONG, "count", "Publisher sequence number", true, "pubsub-node"),
                 f("peerNodeId", Type.STRING, "identifier", "Related peer", true, "pubsub-node"),
                 f("stage", Type.STRING, "enum", "Lifecycle stage", false, "pubsub-node"),
+                f("source", Type.STRING, "enum", "LIVE, LOCAL_PUBLISH, or CATCH_UP delivery source", true, "pubsub-node"),
                 f("reason", Type.STRING, "text", "Rejection or duplicate detail", true, "pubsub-node")
         ));
         add(all, TelemetryConstants.Dataset.MESSAGE_TRANSMISSIONS, "Actual protocol message sends", observations(

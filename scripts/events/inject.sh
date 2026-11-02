@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "$ROOT_DIR/scripts/lib/platform.sh"
 
 if [[ $# -ne 2 ]]; then
   echo "Usage: inject.sh <node> <event-json-file>" >&2
@@ -14,4 +15,4 @@ case "$1" in
   *) echo "Unknown node: $1" >&2; exit 2 ;;
 esac
 
-node "$ROOT_DIR/scripts/pubsub-node.mjs" inject --node "$node_index" --file "$2"
+pubsub_run_node_file "$ROOT_DIR/scripts/pubsub-node.mjs" inject --node "$node_index" --file "$2"

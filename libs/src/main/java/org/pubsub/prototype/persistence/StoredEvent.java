@@ -5,6 +5,7 @@ import org.pubsub.prototype.util.HexUtils;
 
 import java.time.Instant;
 import org.pubsub.prototype.constants.PersistenceConstants;
+import static org.pubsub.prototype.util.validation.Validators.require;
 import static org.pubsub.prototype.util.validation.Validators.requireNonNull;
 import static org.pubsub.prototype.util.validation.Validation.start;
 
@@ -14,9 +15,9 @@ import static org.pubsub.prototype.util.validation.Validation.start;
  * @param eventKey DHT lookup key derived from the topic ID, publisher key ID, and sequence number
  * @param eventEnvelope the published event and its protocol fields
  * @param storedAt wall-clock time recorded when the event was stored
- * @param topicRetentionPeriod the topic's retention period in epochs when the event was stored
+ * @param topicRetentionPeriod the current topic retention period applied to this record, in epochs
  * @param storedAtEpoch the epoch when the event was stored
- * @param expiresAfterEpoch the first epoch at which the event is expired
+ * @param expiresAfterEpoch the first expired epoch, recalculated when the topic period changes
  */
 public record StoredEvent(
                 String eventKey,
@@ -38,5 +39,9 @@ public record StoredEvent(
                                         PersistenceConstants.EXPIRES_AFTER_EPOCH_FIELD + " must not precede "
                                                         + PersistenceConstants.STORED_AT_EPOCH_FIELD)
                         .throwIfInvalid();
+                require(storedAtEpoch <= Long.MAX_VALUE - topicRetentionPeriod,
+                                PersistenceConstants.EXPIRES_AFTER_EPOCH_FIELD + " exceeds the epoch range");
+                require(expiresAfterEpoch == storedAtEpoch + topicRetentionPeriod,
+                                PersistenceConstants.EXPIRES_AFTER_EPOCH_FIELD + " does not match the retention period");
         }
 }

@@ -33,9 +33,9 @@ import org.pubsub.prototype.http.JsonHttp;
 import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.StoredEvent;
 import org.pubsub.prototype.persistence.maintenance.ReplicaRepairRequest;
-import org.pubsub.prototype.registry.replication.ReplicationMembership;
+import org.pubsub.prototype.registry.replication.ReplicationMembershipProvider;
 import org.pubsub.prototype.registry.RegistryUnavailableException;
-import org.pubsub.prototype.registry.replication.ReplicationServer;
+import org.pubsub.prototype.registry.replication.ReplicationServerEndpoint;
 import org.pubsub.prototype.registry.topic.TopicState;
 import org.pubsub.prototype.replication.adapter.http.exception.PersistenceUnavailableException;
 import org.pubsub.prototype.replication.service.ReplicaMaintenanceService;
@@ -88,8 +88,8 @@ public final class ReplicationHttpAdapter implements AutoCloseable {
     private final HttpServer server;
     private final ExecutorService executor;
     private final ReplicationService service;
-    private final ReplicationMembership membership;
-    private final ReplicationServer self;
+    private final ReplicationMembershipProvider membership;
+    private final ReplicationServerEndpoint self;
     private final ReplicaMaintenanceService maintenance;
     private final Authenticator<EventEnvelope, TopicState> eventAuthenticator;
     private final Authenticator<PublisherProgressAuthenticator.Request, TopicState> progressAuthenticator;
@@ -109,8 +109,8 @@ public final class ReplicationHttpAdapter implements AutoCloseable {
      * @param workerThreads number of concurrent HTTP request workers
      * @throws IOException if the HTTP listener cannot be created
      */
-    public ReplicationHttpAdapter(String host, int port, ReplicationServer self, ReplicationService service,
-                                 ReplicationMembership membership, ReplicaMaintenanceService maintenance,
+    public ReplicationHttpAdapter(String host, int port, ReplicationServerEndpoint self, ReplicationService service,
+                                 ReplicationMembershipProvider membership, ReplicaMaintenanceService maintenance,
                                  Authenticator<EventEnvelope, TopicState> eventAuthenticator,
                                  Authenticator<PublisherProgressAuthenticator.Request, TopicState> progressAuthenticator,
                                  int workerThreads, Supplier<Map<String, Object>> registryStatus) throws IOException {
@@ -124,7 +124,7 @@ public final class ReplicationHttpAdapter implements AutoCloseable {
         Authenticator<HttpRequestAuthenticator.Request, String> replicaAuthenticator = self == null || membership == null
                 ? request -> { throw new SecurityException("replication authentication unavailable"); }
                 : new HttpRequestAuthenticator(() -> membership.activeServers().stream()
-                        .map(ReplicationServer::serverId).collect(java.util.stream.Collectors.toSet()),
+                        .map(ReplicationServerEndpoint::serverId).collect(java.util.stream.Collectors.toSet()),
                         self.serverId(), Clock.systemUTC());
         ResourceConfig routes = new ResourceConfig()
                 .register(this)
@@ -164,7 +164,7 @@ public final class ReplicationHttpAdapter implements AutoCloseable {
         EventEnvelope event = read(body, EventEnvelope.class);
         eventAuthenticator.authenticate(event);
         try {
-            return json(201, service.persist(event));
+            return json(201, service.persistEvent(event));
         } catch (RuntimeException ex) {
             if (ex instanceof IllegalArgumentException) throw ex;
             throw new PersistenceUnavailableException(ex);
@@ -185,7 +185,7 @@ public final class ReplicationHttpAdapter implements AutoCloseable {
                           @QueryParam(ApiParameters.TOPIC_ID) String topicId) {
         String key = HexUtils.normalizeSha256(eventKey, PersistenceConstants.EVENT_KEY_FIELD);
         String topic = HexUtils.normalizeSha256(topicId, PersistenceConstants.TOPIC_ID_FIELD);
-        return service.lookup(topic, key).map(found -> json(200, found))
+        return service.lookupEvent(topic, key).map(found -> json(200, found))
                 .orElseGet(() -> json(404, Map.of(HttpErrorCodes.ERROR, "event_not_found", ApiFields.EVENT_KEY, key)));
     }
 
@@ -202,8 +202,7 @@ public final class ReplicationHttpAdapter implements AutoCloseable {
     public Response storeReplica(InputStream body) throws IOException {
         StoredEvent event = read(body, StoredEvent.class);
         eventAuthenticator.authenticate(event.eventEnvelope());
-        service.storeReplica(event);
-        return json(201, event);
+        return json(201, service.storeReplica(event));
     }
 
     /**
@@ -217,7 +216,7 @@ public final class ReplicationHttpAdapter implements AutoCloseable {
     @Path(ApiPaths.REPLICATION_EVENTS + "/{eventKey}")
     public Response replicaEvent(@PathParam("eventKey") String eventKey) {
         String key = HexUtils.normalizeSha256(eventKey, PersistenceConstants.EVENT_KEY_FIELD);
-        return service.lookupLocal(key).map(found -> json(200, found))
+        return service.lookupEventLocally(key).map(found -> json(200, found))
                 .orElseGet(() -> json(404, Map.of(HttpErrorCodes.ERROR, "event_not_found", ApiFields.EVENT_KEY, key)));
     }
 

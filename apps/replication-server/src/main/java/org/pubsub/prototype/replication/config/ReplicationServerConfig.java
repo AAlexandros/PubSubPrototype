@@ -1,7 +1,7 @@
 package org.pubsub.prototype.replication.config;
 
 import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
-import org.pubsub.prototype.registry.replication.ReplicationServer;
+import org.pubsub.prototype.registry.replication.ReplicationServerEndpoint;
 import org.pubsub.prototype.util.HexUtils;
 import org.pubsub.prototype.util.files.YamlFiles;
 import org.pubsub.prototype.util.validation.Validation;
@@ -68,8 +68,8 @@ public record ReplicationServerConfig(String serverId, String listenHost, String
                 .throwIfInvalid();
     }
 
-    public ReplicationServer self() {
-        return new ReplicationServer(serverId, advertisedHost, port);
+    public ReplicationServerEndpoint self() {
+        return new ReplicationServerEndpoint(serverId, advertisedHost, port);
     }
 
     /** Loads and validates the replication-server configuration from YAML. */

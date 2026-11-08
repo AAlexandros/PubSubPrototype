@@ -11,6 +11,16 @@ import static org.pubsub.prototype.constants.PersistenceConstants.TOPIC_LOGS_FIE
 import static org.pubsub.prototype.util.validation.Validators.requireNonBlank;
 import static org.pubsub.prototype.util.validation.Validators.requireNonNull;
 
+/**
+ * Metadata snapshot of the event and topic-log replicas held by one replication server.
+ * Peers use it to determine which records they should fetch or keep during replica
+ * maintenance; it does not contain event payloads.
+ *
+ * @param serverId ID of the server that produced this inventory
+ * @param membershipVersion version of the replication membership used for this snapshot
+ * @param events metadata for locally stored event replicas
+ * @param topicLogs publisher progress metadata for locally stored topic logs
+ */
 public record ReplicaInventory(
         String serverId,
         String membershipVersion,

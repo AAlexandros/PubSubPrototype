@@ -26,7 +26,8 @@ class FileEventStoreMaintenanceTest {
     @Test
     void topicProgressMergesMonotonicallyAndCanBeReleased() throws Exception {
         KeyPair publisher = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
-        FileEventStore store = new FileEventStore(temp, Clock.systemUTC(), () -> 1);
+        FileEventStore store = new FileEventStore(temp, Clock.systemUTC(), () -> 1,
+                id -> java.util.Optional.empty());
         assertTrue(store.updateProgress(TOPIC, progress(publisher, 4, 100)));
         assertFalse(store.updateProgress(TOPIC, progress(publisher, 3, 200)));
         assertFalse(store.updateProgress(TOPIC, progress(publisher, 4, 99)));
@@ -46,7 +47,8 @@ class FileEventStoreMaintenanceTest {
 
     @Test
     void persistentServerIdentityRejectsAReconfiguredVolume() {
-        FileEventStore store = new FileEventStore(temp, Clock.systemUTC(), () -> 1);
+        FileEventStore store = new FileEventStore(temp, Clock.systemUTC(), () -> 1,
+                id -> java.util.Optional.empty());
         store.ensureServerIdentity(SERVER);
         store.ensureServerIdentity(SERVER);
         assertThrows(IllegalStateException.class, () -> store.ensureServerIdentity("40".repeat(32)));

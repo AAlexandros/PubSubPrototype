@@ -4,8 +4,8 @@ import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.StoredEvent;
 import org.pubsub.prototype.persistence.adapter.ReplicationHttpClient;
-import org.pubsub.prototype.registry.replication.ReplicationMembership;
-import org.pubsub.prototype.registry.replication.ReplicationServer;
+import org.pubsub.prototype.registry.replication.ReplicationMembershipProvider;
+import org.pubsub.prototype.registry.replication.ReplicationServerEndpoint;
 
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -19,7 +19,7 @@ import static org.pubsub.prototype.util.validation.Validators.requireNonNegative
 
 /**
  * Sends a Pub/Sub node's storage and recovery requests to replication servers.
- * It gets server addresses from {@link ReplicationMembership} and makes HTTP
+ * It gets server addresses from {@link ReplicationMembershipProvider} and makes HTTP
  * requests through {@link ReplicationHttpClient}. For storage, it submits an
  * {@link EventEnvelope} to one server; that server chooses where copies are kept.
  * For recovery, it finds stored events and reads the latest sequence reported
@@ -27,11 +27,11 @@ import static org.pubsub.prototype.util.validation.Validators.requireNonNegative
  * and closes it when this client is closed.
  */
 public final class ReplicationServerClient implements AutoCloseable {
-    private final ReplicationMembership membership;
+    private final ReplicationMembershipProvider membership;
     private final ReplicationHttpClient httpClient;
     private final AtomicInteger nextServerIndex = new AtomicInteger();
 
-    public ReplicationServerClient(ReplicationMembership membership, ReplicationHttpClient httpClient) {
+    public ReplicationServerClient(ReplicationMembershipProvider membership, ReplicationHttpClient httpClient) {
         this.membership = membership;
         this.httpClient = httpClient;
     }
@@ -41,7 +41,7 @@ public final class ReplicationServerClient implements AutoCloseable {
      * if the request fails; throws if no server accepts it.
      */
     public StoredEvent submitEventForStorage(EventEnvelope envelope) {
-        List<ReplicationServer> servers = membership.activeServers();
+        List<ReplicationServerEndpoint> servers = membership.activeServers();
         if (servers.isEmpty())
             throw new IllegalStateException("no active replication servers");
         RuntimeException last = null;
@@ -62,7 +62,7 @@ public final class ReplicationServerClient implements AutoCloseable {
      * responds.
      */
     public Optional<StoredEvent> findStoredEvent(String topicId, String eventKey) {
-        List<ReplicationServer> servers = membership.activeServers();
+        List<ReplicationServerEndpoint> servers = membership.activeServers();
         if (servers.isEmpty())
             return Optional.empty();
         int start = Math.floorMod(nextServerIndex.getAndIncrement(), servers.size());
@@ -86,7 +86,7 @@ public final class ReplicationServerClient implements AutoCloseable {
         requireNonNegative(sinceTimestamp, SINCE_TIMESTAMP_FIELD);
         Map<String, PublisherProgress> merged = new LinkedHashMap<>();
         int successful = 0;
-        for (ReplicationServer server : membership.activeServers()) {
+        for (ReplicationServerEndpoint server : membership.activeServers()) {
             try {
                 for (PublisherProgress progress : httpClient.publisherProgress(server, topicId, false, sinceTimestamp)) {
                     if (!topicId.equals(progress.topicId()))

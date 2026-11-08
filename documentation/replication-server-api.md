@@ -22,9 +22,33 @@ lowercase.
 
 For protected routes, the receiver verifies the sender's signature, current
 membership, intended receiver, HTTP method, raw path and query, body hash,
-timestamp, and nonce. The request signature is rejected when it is older than
-one minute or its nonce has already been used for that receiver. The
+timestamp, and nonce. The request signature is rejected when its timestamp is
+more than one minute from the receiver's clock or its nonce has already been
+used for that receiver. The
 `ReplicaRequestFilter` enforces this before the endpoint runs.
+
+The sender loads its Cardano Ed25519 signing and verification keys once with
+`ReplicationHttpRequestSignatures.loadSignerFromCardanoKeys`. For each internal
+request, `RequestSigner.createSignatureHeaders` generates a fresh timestamp and
+16-byte nonce and signs this UTF-8 payload (fields separated by newline):
+
+```text
+pubsub-http-v1
+HTTP method
+raw path and query
+lowercase hexadecimal SHA-256 of the exact request body bytes
+receiver server ID
+timestamp in Unix milliseconds
+URL-safe base64 nonce
+```
+
+The request carries `X-PubSub-Signer-Id`, `X-PubSub-Public-Key`,
+`X-PubSub-Timestamp`, `X-PubSub-Nonce`, and `X-PubSub-Signature` headers. The
+signature is base64 Ed25519; the public key is hexadecimal Cardano CBOR and its
+SHA-256 hash must match the signer ID. The receiver verifies the signature and
+active membership, then `HttpRequestAuthenticator` rejects a nonce already
+accepted from that signer. Internal requests are not retried with the same
+signed headers because a retry would reuse the nonce.
 
 ## Client API — `/v1/client`
 
@@ -81,7 +105,9 @@ publisher-progress lookups are also readable without a caller signature.
   `publisherPublicKey`, `sequenceNumber`, `timestamp`, Base64 `payload`, event
   `signature`, `eventId`, and `progressSignature`.
 - `StoredEvent` carries `eventKey`, `eventEnvelope`, `storedAt`,
-  `topicRetentionPeriod`, `storedAtEpoch`, and `expiresAfterEpoch`.
+  `topicRetentionPeriod`, `storedAtEpoch`, and `expiresAfterEpoch`. The server
+  recalculates the period and expiry from current chain topic state when storing
+  or reading a replica; the supplied period and expiry do not set local retention.
 - `PublisherProgress` carries `topicId`, publisher key information, latest
   sequence and timestamp, and the publisher's signature over that progress.
 - `ReplicaRepairRequest` carries `recordType` (`EVENT` or `TOPIC_LOG`),

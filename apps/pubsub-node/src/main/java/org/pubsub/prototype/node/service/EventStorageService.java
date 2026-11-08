@@ -4,7 +4,7 @@ import org.pubsub.prototype.event.EventCrypto;
 import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.event.TopicStateProvider;
 import org.pubsub.prototype.node.config.NodeConfig;
-import org.pubsub.prototype.node.util.AsyncUtil;
+import org.pubsub.prototype.util.AsyncUtil;
 import org.pubsub.prototype.node.util.NodeLog;
 import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.RecoveryResult;
@@ -16,7 +16,7 @@ import org.pubsub.prototype.persistence.adapter.ReplicationHttpClient;
 import org.pubsub.prototype.persistence.core.EventKeys;
 import org.pubsub.prototype.persistence.core.ReplicationServerClient;
 import org.pubsub.prototype.persistence.core.PersistenceEventValidator;
-import org.pubsub.prototype.registry.replication.ReplicationMembership;
+import org.pubsub.prototype.registry.replication.ReplicationMembershipProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,7 +60,7 @@ public final class EventStorageService implements AutoCloseable {
     private final NodeEventStore localEvents;
     private final PersistenceEventValidator recoveryValidator;
     private final TopicStateProvider topics;
-    private final ReplicationMembership membership;
+    private final ReplicationMembershipProvider membership;
     private final String nodeId;
     private final ScheduledExecutorService catchUpExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread thread = new Thread(r, "event-catch-up");
@@ -76,12 +76,12 @@ public final class EventStorageService implements AutoCloseable {
      * Each active registration supplies the host and port used for HTTP requests.
      */
     public EventStorageService(NodeConfig.PersistenceSection config, TopicStateProvider topics,
-                               ReplicationMembership membership) {
+                               ReplicationMembershipProvider membership) {
         this(config, topics, membership, "unknown");
     }
 
     public EventStorageService(NodeConfig.PersistenceSection config, TopicStateProvider topics,
-                               ReplicationMembership membership, String nodeId) {
+                               ReplicationMembershipProvider membership, String nodeId) {
         Path deliveryStatePath = Path.of(config.deliveryStatePath);
         Duration connectionTimeout = Duration.ofMillis(config.connectionTimeoutMs);
         Duration requestTimeout = Duration.ofMillis(config.requestTimeoutMs);

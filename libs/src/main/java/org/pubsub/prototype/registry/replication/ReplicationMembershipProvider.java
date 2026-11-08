@@ -15,9 +15,9 @@ import static org.pubsub.prototype.constants.CryptoConstants.SHA_256_ALGORITHM;
  * has a server ID, host, and port; the list can change between calls.
  */
 @FunctionalInterface
-public interface ReplicationMembership {
+public interface ReplicationMembershipProvider {
     /** Returns an immutable snapshot of the active servers and their addresses. */
-    List<ReplicationServer> activeServers();
+    List<ReplicationServerEndpoint> activeServers();
 
     /**
      * Returns a SHA-256 hash of the current server list. The hash includes each
@@ -25,8 +25,13 @@ public interface ReplicationMembership {
      * no effect. Callers compare hashes to detect a membership change.
      */
     default String version() {
-        String canonical = activeServers().stream()
-                .sorted(java.util.Comparator.comparing(ReplicationServer::serverId))
+        return versionOf(activeServers());
+    }
+
+    /** Returns the canonical membership version for a previously read snapshot. */
+    static String versionOf(List<ReplicationServerEndpoint> servers) {
+        String canonical = servers.stream()
+                .sorted(java.util.Comparator.comparing(ReplicationServerEndpoint::serverId))
                 .map(server -> server.serverId() + "@" + server.host() + ":" + server.port())
                 .collect(Collectors.joining("\n"));
         try {

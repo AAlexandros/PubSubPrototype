@@ -6,7 +6,7 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import org.pubsub.prototype.auth.Authenticator;
 import org.pubsub.prototype.auth.HttpRequestAuthenticator;
-import org.pubsub.prototype.auth.SignedHttpRequest;
+import org.pubsub.prototype.auth.ReplicationHttpRequestSignatures;
 import org.pubsub.prototype.http.ApiPaths;
 import org.pubsub.prototype.http.HttpRequestBodyReader;
 
@@ -31,13 +31,15 @@ public final class ReplicaRequestFilter implements ContainerRequestFilter {
         String query = context.getUriInfo().getRequestUri().getRawQuery();
         if (query != null) path += "?" + query;
         try {
-            SignedHttpRequest.Headers signed = new SignedHttpRequest.Headers(
-                    context.getHeaderString(SignedHttpRequest.ID_HEADER),
-                    context.getHeaderString(SignedHttpRequest.KEY_HEADER),
-                    Long.parseLong(context.getHeaderString(SignedHttpRequest.TIME_HEADER)),
-                    context.getHeaderString(SignedHttpRequest.NONCE_HEADER),
-                    context.getHeaderString(SignedHttpRequest.SIGNATURE_HEADER));
-            authenticator.authenticate(new HttpRequestAuthenticator.Request(context.getMethod(), path, body, signed));
+            ReplicationHttpRequestSignatures.SignatureHeaders signatureHeaders =
+                    new ReplicationHttpRequestSignatures.SignatureHeaders(
+                            context.getHeaderString(ReplicationHttpRequestSignatures.SERVER_ID_HEADER),
+                            context.getHeaderString(ReplicationHttpRequestSignatures.PUBLIC_KEY_HEADER),
+                            Long.parseLong(context.getHeaderString(ReplicationHttpRequestSignatures.TIMESTAMP_HEADER)),
+                            context.getHeaderString(ReplicationHttpRequestSignatures.NONCE_HEADER),
+                            context.getHeaderString(ReplicationHttpRequestSignatures.SIGNATURE_HEADER));
+            authenticator.authenticate(new HttpRequestAuthenticator.Request(
+                    context.getMethod(), path, body, signatureHeaders));
         } catch (RuntimeException ex) {
             throw new SecurityException("invalid replication caller", ex);
         }

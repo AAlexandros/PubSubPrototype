@@ -20,7 +20,7 @@ import org.pubsub.prototype.registry.topic.cardano.CardanoTopicRegistry;
 import org.pubsub.prototype.registry.topic.TopicState;
 import org.pubsub.prototype.registry.RegistryObserver;
 import org.pubsub.prototype.registry.RegistryDiagnostics;
-import org.pubsub.prototype.registry.replication.ReplicationMembership;
+import org.pubsub.prototype.registry.replication.ReplicationMembershipProvider;
 import org.pubsub.prototype.registry.replication.ReplicationServerState;
 import org.pubsub.prototype.registry.replication.cardano.CardanoReplicationRegistry;
 import org.pubsub.prototype.registry.replication.cardano.CardanoReplicationRegistryConfig;
@@ -68,8 +68,7 @@ public final class PubSubNodeApplication implements AutoCloseable {
     private final CountDownLatch stopped = new CountDownLatch(1);
 
     // Creates an HTTP API for sending commands to this node and inspecting its
-    // state.
-    // The testbed exposes this port on the host's loopback interface.
+    // state. The testbed exposes this port on the host's loopback interface.
     private final NodeControlHttpAdapter controlAdapter;
 
     private PubSubNodeApplication(RegistryObserver<List<TopicState>> topics,
@@ -119,7 +118,7 @@ public final class PubSubNodeApplication implements AutoCloseable {
         EventProcessingService eventService = new EventProcessingService(identity, config.identityPath(),
                 eventValidator);
         // Initialize event storage and recovery.
-        ReplicationMembership activeMembership = () -> membership.requireFresh().stream()
+        ReplicationMembershipProvider activeMembership = () -> membership.requireFresh().stream()
                 .filter(ReplicationServerState::active)
                 .map(ReplicationServerState::endpoint)
                 .toList();

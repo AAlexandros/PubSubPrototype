@@ -1,5 +1,12 @@
 package org.pubsub.prototype.replication.service;
 
+import static org.pubsub.prototype.constants.PersistenceConstants.SINCE_TIMESTAMP_FIELD;
+import static org.pubsub.prototype.util.validation.Validators.require;
+import static org.pubsub.prototype.util.validation.Validators.requireNonNegative;
+
+import java.util.List;
+import java.util.Optional;
+
 import org.pubsub.prototype.auth.Authenticator;
 import org.pubsub.prototype.auth.PublisherProgressAuthenticator;
 import org.pubsub.prototype.event.EventCrypto;
@@ -12,27 +19,21 @@ import org.pubsub.prototype.persistence.adapter.ReplicationHttpClient;
 import org.pubsub.prototype.persistence.core.DhtAssignment;
 import org.pubsub.prototype.persistence.core.EventKeys;
 import org.pubsub.prototype.persistence.core.PersistenceEventValidator;
-import org.pubsub.prototype.registry.replication.ReplicationMembership;
-import org.pubsub.prototype.registry.replication.ReplicationServer;
+import org.pubsub.prototype.registry.replication.ReplicationMembershipProvider;
+import org.pubsub.prototype.registry.replication.ReplicationServerEndpoint;
 import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.registry.topic.TopicState;
 import org.pubsub.prototype.replication.health.PeerFailureDetector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
-import java.util.Optional;
-
-import static org.pubsub.prototype.constants.PersistenceConstants.SINCE_TIMESTAMP_FIELD;
-import static org.pubsub.prototype.util.validation.Validators.require;
-import static org.pubsub.prototype.util.validation.Validators.requireNonNegative;
-
 /**
  * Validates and routes event writes, event lookups, and publisher-progress
  * operations across replication servers. It also validates records stored or
  * fetched through the internal replica APIs.
  *
- * <p>An event is assigned by its event key; a topic's publisher-progress log is
+ * <p>
+ * An event is assigned by its event key; a topic's publisher-progress log is
  * assigned by its topic ID, so the two records can have different responsible
  * servers. Placement uses the topic's replication factor and active membership,
  * excluding peers confirmed down by the shared failure detector. Any server
@@ -40,33 +41,46 @@ import static org.pubsub.prototype.util.validation.Validators.requireNonNegative
  */
 public final class ReplicationService {
 
+    // Default logger
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationService.class);
+
     // Also try one nearby server when membership views briefly differ.
     private static final int LOOKUP_EXTRA_CANDIDATES = 1;
 
-    private final ReplicationServer localServer;
-    private final ReplicationMembership membership;
-    private final PersistenceEventValidator validator;
-    private final Authenticator<PublisherProgressAuthenticator.Request, TopicState> progressAuthenticator;
-    private final TopicStateProvider topics;
-    private final FileEventStore store;
-    private final ReplicationHttpClient httpClient;
-    private final PeerFailureDetector failureDetector;
+    // The identity and advertised address of the replication-server instance
+    // running this service
+    private final ReplicationServerEndpoint localServer;
 
-    /** Uses the same membership, topic source, and failure state as replica maintenance. */
-    public ReplicationService(ReplicationServer self, ReplicationMembership membership,
+    // Resolve topic state and active replication servers from the current registry views.
+    private final TopicStateProvider topicStateProvider;
+    private final ReplicationMembershipProvider replicationMembershipProvider;
+    // Send requests to other replication servers over HTTP.
+    private final ReplicationHttpClient httpClient;
+
+    private final FileEventStore store;
+    private final PeerFailureDetector failureDetector;
+    private final Authenticator<PublisherProgressAuthenticator.Request, TopicState> progressAuthenticator;
+    private final PersistenceEventValidator validator;
+
+    /**
+     * Uses the same membership, topic source, and failure state as replica
+     * maintenance.
+     */
+    public ReplicationService(ReplicationServerEndpoint self, ReplicationMembershipProvider membership,
             PersistenceEventValidator validator,
             TopicStateProvider topics, FileEventStore store, ReplicationHttpClient httpClient,
             PeerFailureDetector failureDetector) {
         this.localServer = self;
-        this.membership = membership;
+        this.replicationMembershipProvider = membership;
         this.validator = validator;
-        this.topics = topics;
+        this.topicStateProvider = topics;
         this.progressAuthenticator = new PublisherProgressAuthenticator(topics);
         this.store = store;
         this.httpClient = httpClient;
         this.failureDetector = failureDetector;
     }
+
+    // Operations that require remote communication with other replication servers
 
     /**
      * Validates a published event, stores it on its responsible servers, then
@@ -74,23 +88,22 @@ public final class ReplicationService {
      *
      * @return the event record sent to the event servers
      */
-    public StoredEvent persist(EventEnvelope event) {
+    public StoredEvent persistEvent(EventEnvelope event) {
         String eventKey = EventKeys.eventKey(event);
         String publisher = EventCrypto.publisherKeyId(event);
         LOG.info(
                 "EVENT_PERSIST_REQUESTED eventKey={} eventId={} topicId={} publisherKeyId={} sequenceNumber={} serverId={}",
                 eventKey, event.eventId(), event.topicId(), publisher, event.sequenceNumber(), localServer.serverId());
-              
+
         TopicState topic = validator.validate(event);
-        List<ReplicationServer> servers = activeHealthyServers();
-        List<ReplicationServer> targetServers = DhtAssignment.responsibleServers(eventKey, servers,
+        List<ReplicationServerEndpoint> servers = activeHealthyServers();
+        List<ReplicationServerEndpoint> targetServers = DhtAssignment.responsibleServers(eventKey, servers,
                 topic.replicationFactor());
         if (targetServers.isEmpty())
             throw new IllegalStateException("no active replication servers");
 
-
-        StoredEvent record = store.newRecord(event, topic);
-        for (ReplicationServer targetServer : targetServers) {
+        StoredEvent record = store.createEventRecord(event, topic);
+        for (ReplicationServerEndpoint targetServer : targetServers) {
             if (targetServer.serverId().equals(localServer.serverId()))
                 storeReplica(record);
             else
@@ -105,43 +118,37 @@ public final class ReplicationService {
         return record;
     }
 
-    /** Validates an incoming event replica before writing it to local storage. */
-    public void storeReplica(StoredEvent record) {
-        validator.validate(record.eventEnvelope());
-        store.storeReplica(record);
-        EventEnvelope event = record.eventEnvelope();
-        LOG.info(
-                "EVENT_REPLICA_STORED eventKey={} eventId={} topicId={} publisherKeyId={} sequenceNumber={} serverId={}",
-                record.eventKey(), event.eventId(), event.topicId(), EventCrypto.publisherKeyId(event),
-                event.sequenceNumber(), localServer.serverId());
-    }
-
     /**
-     * Looks up an event among its responsible servers and up to LOOKUP_EXTRA_CANDIDATES extra nearby servers.
+     * Looks up an event among its responsible servers and up to
+     * LOOKUP_EXTRA_CANDIDATES extra nearby servers.
+     *
      * A returned record must match the requested key and topic; its event ID,
      * signature, and publisher authorization are checked before it is returned.
      * Failed or invalid candidates are skipped.
      *
      * @return a valid event, or empty if none of the candidates supplies one
      */
-    public Optional<StoredEvent> lookup(String topicId, String eventKey) {
+    public Optional<StoredEvent> lookupEvent(String topicId, String eventKey) {
         LOG.info("EVENT_LOOKUP_REQUESTED eventKey={} serverId={}", eventKey, localServer.serverId());
         TopicState topic = topicState(topicId);
-        List<ReplicationServer> servers = activeHealthyServers();
-        if (servers.isEmpty()) return Optional.empty();
-        // Search the R responsible replicas, then one nearby server for brief membership-view differences.
+        List<ReplicationServerEndpoint> servers = activeHealthyServers();
+        if (servers.isEmpty())
+            return Optional.empty();
+        // Search the R responsible replicas, then one nearby server for brief
+        // membership-view differences.
         int candidates = Math.min(servers.size(), topic.replicationFactor() + LOOKUP_EXTRA_CANDIDATES);
-        for (ReplicationServer candidate : DhtAssignment.responsibleServers(eventKey, servers, candidates)) {
+        for (ReplicationServerEndpoint candidate : DhtAssignment.responsibleServers(eventKey, servers, candidates)) {
             try {
                 Optional<StoredEvent> found = candidate.serverId().equals(localServer.serverId())
-                        ? store.get(eventKey)
+                        ? store.findUnexpiredEventOrDeleteExpiredFile(eventKey)
                         : httpClient.lookupLocal(candidate, eventKey);
                 if (found.isPresent()) {
                     StoredEvent event = found.orElseThrow();
                     EventEnvelope envelope = event.eventEnvelope();
                     if (!eventKey.equals(event.eventKey())
                             || !eventKey.equals(EventKeys.eventKey(envelope))
-                            || !topicId.equals(envelope.topicId())) continue;
+                            || !topicId.equals(envelope.topicId()))
+                        continue;
                     validator.validate(envelope);
                     LOG.info(
                             "EVENT_LOOKUP_HIT eventKey={} eventId={} topicId={} publisherKeyId={} sequenceNumber={} serverId={}",
@@ -158,13 +165,38 @@ public final class ReplicationService {
         return Optional.empty();
     }
 
-    /** Reads only this server's event store, without routing or event validation. */
-    public Optional<StoredEvent> lookupLocal(String eventKey) {
-        return store.get(eventKey);
+    // Local operations
+
+    /**
+     * Validates an incoming event replica before writing it locally. The event key
+     * must place this server in the topic's current responsible replica set.
+     *
+     * @return the record stored with this server's current topic retention period
+     */
+    public StoredEvent storeReplica(StoredEvent record) {
+        TopicState topic = validator.validate(record.eventEnvelope());
+        require(DhtAssignment.responsibleServers(record.eventKey(), activeHealthyServers(), topic.replicationFactor())
+                        .stream().anyMatch(server -> server.serverId().equals(localServer.serverId())),
+                "server is not responsible for event replica");
+        StoredEvent stored = store.storeEventReplica(record);
+        EventEnvelope event = record.eventEnvelope();
+
+        LOG.info(
+                "EVENT_REPLICA_STORED eventKey={} eventId={} topicId={} publisherKeyId={} sequenceNumber={} serverId={}",
+                record.eventKey(), event.eventId(), event.topicId(), EventCrypto.publisherKeyId(event),
+                event.sequenceNumber(), localServer.serverId());
+        return stored;
+    }
+
+    /**
+     * Reads only this server's event store, without routing or event validation.
+     */
+    public Optional<StoredEvent> lookupEventLocally(String eventKey) {
+        return store.findUnexpiredEventOrDeleteExpiredFile(eventKey);
     }
 
     /** Returns all publisher progress for the topic. */
-    public List<PublisherProgress> publisherProgress(String topicId) {
+    public List<PublisherProgress> listPublisherProgress(String topicId) {
         return publisherProgress(topicId, 0);
     }
 
@@ -172,7 +204,7 @@ public final class ReplicationService {
      * Reads the first nonempty responsible topic log and returns publishers whose
      * latest event timestamp is greater than {@code sinceTimestamp}. A value of
      * zero disables the filter, including entries at timestamp zero. The topic
-     * must exist and be active. 
+     * must exist and be active.
      * 
      * Each returned entry carries its publisher's signature.
      */
@@ -180,7 +212,7 @@ public final class ReplicationService {
         requireNonNegative(sinceTimestamp, SINCE_TIMESTAMP_FIELD);
         String key = EventKeys.topicLogKey(topicId);
         TopicState topic = topicState(topicId);
-        for (ReplicationServer candidate : DhtAssignment.responsibleServers(key, activeHealthyServers(),
+        for (ReplicationServerEndpoint candidate : DhtAssignment.responsibleServers(key, activeHealthyServers(),
                 topic.replicationFactor())) {
             try {
                 List<PublisherProgress> values = candidate.serverId().equals(localServer.serverId())
@@ -221,23 +253,24 @@ public final class ReplicationService {
 
     /** Gets the current topic state and rejects unknown or inactive topics. */
     TopicState topicState(String topicId) {
-        TopicState topic = topics.findTopicState(new TopicId(topicId))
+        TopicState topic = topicStateProvider.findTopicState(new TopicId(topicId))
                 .orElseThrow(() -> new IllegalArgumentException("unknown topic"));
         require(topic.active(), "inactive topic");
         return topic;
     }
 
     /** Builds the current routing view, excluding peers confirmed down. */
-    private List<ReplicationServer> activeHealthyServers() {
+    private List<ReplicationServerEndpoint> activeHealthyServers() {
         var confirmedDown = failureDetector.confirmedDown();
-        return membership.activeServers().stream()
+        return replicationMembershipProvider.activeServers().stream()
                 .filter(server -> !confirmedDown.contains(server.serverId())).toList();
     }
 
     /** Sends one publisher update to the servers responsible for the topic log. */
     private void replicatePublisherProgress(String topicId, int factor, PublisherProgress progress,
-            List<ReplicationServer> servers) {
-        for (ReplicationServer targetServer : DhtAssignment.responsibleServers(EventKeys.topicLogKey(topicId), servers,
+            List<ReplicationServerEndpoint> servers) {
+        for (ReplicationServerEndpoint targetServer : DhtAssignment.responsibleServers(EventKeys.topicLogKey(topicId),
+                servers,
                 factor)) {
             if (targetServer.serverId().equals(localServer.serverId()))
                 storeProgressReplica(topicId, progress);

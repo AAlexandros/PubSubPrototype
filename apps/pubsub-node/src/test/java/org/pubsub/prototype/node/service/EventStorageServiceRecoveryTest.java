@@ -12,7 +12,7 @@ import org.pubsub.prototype.persistence.StoredEvent;
 import org.pubsub.prototype.persistence.adapter.DeliveryStateStore;
 import org.pubsub.prototype.persistence.adapter.NodeEventStore;
 import org.pubsub.prototype.persistence.core.EventKeys;
-import org.pubsub.prototype.registry.replication.ReplicationServerState;
+import org.pubsub.prototype.registry.replication.ReplicationServerEndpoint;
 import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.registry.topic.TopicState;
 import org.pubsub.prototype.util.files.JsonSupport;
@@ -58,9 +58,9 @@ class EventStorageServiceRecoveryTest {
         try {
             var topicProvider = (org.pubsub.prototype.event.TopicStateProvider) id -> Optional.of(new TopicState(
                     new TopicId(TOPIC), "test", List.of("owner"), List.of(), List.of(), 1, 10, true));
-            var members = (org.pubsub.prototype.registry.replication.ReplicationMembership) () -> List.of(
-                    new ReplicationServerState("aa".repeat(32), "operator-1", "127.0.0.1",
-                            fake.getAddress().getPort(), 0, 100, true).endpoint());
+            var members = (org.pubsub.prototype.registry.replication.ReplicationMembershipProvider) () -> List.of(
+                    new ReplicationServerEndpoint("aa".repeat(32), "127.0.0.1",
+                            fake.getAddress().getPort()));
             try (EventStorageService unsubscribed = new EventStorageService(config(temp.resolve("unsubscribed/delivery.json")),
                     topicProvider, members)) {
                 unsubscribed.startAutomaticCatchUp(Set.of(), ignored -> fail("unsubscribed event"));
@@ -140,8 +140,8 @@ class EventStorageServiceRecoveryTest {
             new NodeEventStore(temp.resolve("gap/events")).store(events.get(0));
             try (EventStorageService storage = new EventStorageService(config, id -> Optional.of(new TopicState(
                     new TopicId(TOPIC), "test", List.of("owner"), List.of(), List.of(), 1, 10, true)),
-                    () -> List.of(new ReplicationServerState("aa".repeat(32), "operator-1", "127.0.0.1",
-                            fake.getAddress().getPort(), 0, 100, true).endpoint()))) {
+                    () -> List.of(new ReplicationServerEndpoint("aa".repeat(32), "127.0.0.1",
+                            fake.getAddress().getPort())))) {
                 assertEquals(0, storage.recover(TOPIC, event -> fail("event after gap delivered")).deliveredCount());
                 assertEquals(0, new DeliveryStateStore(Path.of(config.deliveryStatePath))
                         .progress(TOPIC, publisherId).lastDeliveredSequenceNumber());
@@ -183,8 +183,8 @@ class EventStorageServiceRecoveryTest {
         }
         fake.start();
         try {
-            List<ReplicationServerState> members = List.of(new ReplicationServerState(
-                    "aa".repeat(32), "operator-1", "127.0.0.1", fake.getAddress().getPort(), 0, 100, true));
+            List<ReplicationServerEndpoint> members = List.of(new ReplicationServerEndpoint(
+                    "aa".repeat(32), "127.0.0.1", fake.getAddress().getPort()));
             Path stateFile = temp.resolve("delivery.json");
             new NodeEventStore(temp.resolve("events")).store(events.get(0));
             DeliveryStateStore initial = new DeliveryStateStore(stateFile);
@@ -200,7 +200,7 @@ class EventStorageServiceRecoveryTest {
             try (EventStorageService storage = new EventStorageService(config, id ->
                     java.util.Optional.of(new TopicState(new TopicId(TOPIC), "test", List.of("owner"),
                             List.of(), List.of(), 1, 10, true)),
-                    () -> members.stream().map(ReplicationServerState::endpoint).toList())) {
+                    () -> members)) {
                 assertEquals(2, storage.recover(
                         TOPIC, event -> delivered.add(event.sequenceNumber())).deliveredCount());
                 assertEquals("topicId=" + TOPIC, eventLookupQuery.get());
@@ -209,7 +209,7 @@ class EventStorageServiceRecoveryTest {
             try (EventStorageService restarted = new EventStorageService(config, id ->
                     java.util.Optional.of(new TopicState(new TopicId(TOPIC), "test", List.of("owner"),
                             List.of(), List.of(), 1, 10, true)),
-                    () -> members.stream().map(ReplicationServerState::endpoint).toList())) {
+                    () -> members)) {
                 assertEquals(0, restarted.recover(
                         TOPIC, event -> fail("duplicate delivery")).deliveredCount());
             }

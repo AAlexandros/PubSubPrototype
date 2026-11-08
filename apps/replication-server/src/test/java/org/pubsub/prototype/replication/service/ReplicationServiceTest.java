@@ -4,17 +4,18 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pubsub.prototype.event.EventCrypto;
-import org.pubsub.prototype.auth.SignedHttpRequest;
+import org.pubsub.prototype.auth.ReplicationHttpRequestSignatures;
 import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.event.TopicStateProvider;
 import org.pubsub.prototype.persistence.adapter.FileEventStore;
 import org.pubsub.prototype.persistence.adapter.ReplicationHttpClient;
+import org.pubsub.prototype.persistence.core.DhtAssignment;
 import org.pubsub.prototype.persistence.core.EventKeys;
 import org.pubsub.prototype.persistence.core.PersistenceEventValidator;
 import org.pubsub.prototype.persistence.maintenance.ReplicaRecordType;
 import org.pubsub.prototype.persistence.maintenance.ReplicaRepairRequest;
-import org.pubsub.prototype.registry.replication.ReplicationMembership;
-import org.pubsub.prototype.registry.replication.ReplicationServer;
+import org.pubsub.prototype.registry.replication.ReplicationMembershipProvider;
+import org.pubsub.prototype.registry.replication.ReplicationServerEndpoint;
 import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.registry.topic.TopicState;
 import org.pubsub.prototype.replication.health.PeerFailureDetector;
@@ -46,7 +47,7 @@ class ReplicationServiceTest {
         TopicState topic = new TopicState(new TopicId(topicId), "topic", List.of("owner"),
                 List.of(), List.of(), 1, 5, true);
         List<HttpServer> listeners = new ArrayList<>();
-        List<ReplicationServer> members = new ArrayList<>();
+        List<ReplicationServerEndpoint> members = new ArrayList<>();
         AtomicInteger probes = new AtomicInteger();
         try {
             for (int i = 1; i <= 4; i++) {
@@ -58,19 +59,19 @@ class ReplicationServiceTest {
                 });
                 listener.start();
                 listeners.add(listener);
-                members.add(new ReplicationServer(String.format("%02x", i).repeat(32),
+                members.add(new ReplicationServerEndpoint(String.format("%02x", i).repeat(32),
                         "127.0.0.1", listener.getAddress().getPort()));
             }
-            ReplicationServer self = new ReplicationServer("ff".repeat(32), "127.0.0.1", 9999);
-            SignedHttpRequest requestSigner = testRequestSigner();
+            ReplicationServerEndpoint self = new ReplicationServerEndpoint("ff".repeat(32), "127.0.0.1", 9999);
+            ReplicationHttpRequestSignatures.RequestSigner requestSigner = testRequestSigner();
             try (ReplicationHttpClient http = new ReplicationHttpClient(
                     Duration.ofSeconds(1), Duration.ofSeconds(1), 0, requestSigner)) {
                 TopicStateProvider topics = id -> Optional.of(topic);
                 ReplicationService service = new ReplicationService(self, () -> members,
                         new PersistenceEventValidator(topics), topics,
-                        new FileEventStore(temp, Clock.systemUTC(), () -> 1), http,
+                        new FileEventStore(temp, Clock.systemUTC(), () -> 1, topics), http,
                         new PeerFailureDetector(3));
-                assertTrue(service.lookup(topicId, "ab".repeat(32)).isEmpty());
+                assertTrue(service.lookupEvent(topicId, "ab".repeat(32)).isEmpty());
                 assertEquals(2, probes.get());
             }
         } finally {
@@ -78,7 +79,7 @@ class ReplicationServiceTest {
         }
     }
 
-    private SignedHttpRequest testRequestSigner() throws Exception {
+    private ReplicationHttpRequestSignatures.RequestSigner testRequestSigner() throws Exception {
         var keys = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         byte[] encodedPublic = keys.getPublic().getEncoded();
         byte[] verification = cardanoKey(Arrays.copyOfRange(encodedPublic,
@@ -88,7 +89,8 @@ class ReplicationServiceTest {
         Path signingFile = temp.resolve("request.skey");
         Files.writeString(verificationFile, "{\"cborHex\":\"" + HexFormat.of().formatHex(verification) + "\"}");
         Files.writeString(signingFile, "{\"cborHex\":\"" + HexFormat.of().formatHex(signing) + "\"}");
-        return SignedHttpRequest.load(signingFile, verificationFile, EventCrypto.sha256Hex(verification));
+        return ReplicationHttpRequestSignatures.loadSignerFromCardanoKeys(
+                signingFile, verificationFile, EventCrypto.sha256Hex(verification));
     }
 
     private static byte[] cardanoKey(byte[] raw) {
@@ -110,29 +112,62 @@ class ReplicationServiceTest {
                 EventCrypto.eventId(unsigned))
                 .withProgressSignature(EventCrypto.signProgress(unsigned, keyPair.getPrivate()));
         TopicState topic = new TopicState(new TopicId(topicId), "topic", List.of("owner"), List.of(), List.of(), 1, 5, true);
-        ReplicationServer self = new ReplicationServer("20".repeat(32), "localhost", 9999);
-        FileEventStore store = new FileEventStore(temp, Clock.systemUTC(), () -> 1);
+        ReplicationServerEndpoint self = new ReplicationServerEndpoint("20".repeat(32), "localhost", 9999);
+        FileEventStore store = new FileEventStore(temp, Clock.systemUTC(), () -> 1,
+                id -> Optional.of(topic));
         try (ReplicationHttpClient http = new ReplicationHttpClient(Duration.ofMillis(10), Duration.ofMillis(10), 0)) {
             TopicStateProvider topics = id -> Optional.of(topic);
             ReplicationService service = new ReplicationService(self, () -> List.of(self),
                     new PersistenceEventValidator(topics), topics, store, http,
                     new PeerFailureDetector(3));
-            assertEquals(EventKeys.eventKey(event), service.persist(event).eventKey());
-            assertEquals(event, service.lookup(topicId, EventKeys.eventKey(event)).orElseThrow().eventEnvelope());
-            assertEquals(4, service.publisherProgress(topicId).getFirst().latestSequenceNumber());
+            assertEquals(EventKeys.eventKey(event), service.persistEvent(event).eventKey());
+            assertEquals(event, service.lookupEvent(topicId, EventKeys.eventKey(event)).orElseThrow().eventEnvelope());
+            assertEquals(4, service.listPublisherProgress(topicId).getFirst().latestSequenceNumber());
             assertEquals(1, service.publisherProgress(topicId, 98).size());
             assertTrue(service.publisherProgress(topicId, 99).isEmpty());
-            service.persist(event);
+            service.persistEvent(event);
             assertEquals(1, store.eventKeys().size());
+        }
+    }
+
+    @Test
+    void rejectsEventReplicaOutsideLocalResponsibility() throws Exception {
+        String topicId = "10".repeat(32);
+        var keyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        EventEnvelope unsigned = EventEnvelope.unsigned(topicId,
+                Base64.getEncoder().encodeToString(keyPair.getPublic().getEncoded()), 4, 99,
+                Base64.getEncoder().encodeToString("test".getBytes(StandardCharsets.UTF_8)));
+        EventEnvelope event = unsigned.withSignatureAndEventId(EventCrypto.sign(unsigned, keyPair.getPrivate()),
+                EventCrypto.eventId(unsigned))
+                .withProgressSignature(EventCrypto.signProgress(unsigned, keyPair.getPrivate()));
+        TopicState topic = new TopicState(new TopicId(topicId), "topic", List.of("owner"),
+                List.of(), List.of(), 1, 5, true);
+        ReplicationServerEndpoint first = new ReplicationServerEndpoint("20".repeat(32), "localhost", 9999);
+        ReplicationServerEndpoint second = new ReplicationServerEndpoint("80".repeat(32), "localhost", 9998);
+        List<ReplicationServerEndpoint> members = List.of(first, second);
+        ReplicationServerEndpoint responsible = DhtAssignment.responsibleServers(EventKeys.eventKey(event), members, 1)
+                .getFirst();
+        ReplicationServerEndpoint self = responsible.equals(first) ? second : first;
+        FileEventStore store = new FileEventStore(temp, Clock.systemUTC(), () -> 1,
+                id -> Optional.of(topic));
+        try (ReplicationHttpClient http = new ReplicationHttpClient(Duration.ofMillis(10), Duration.ofMillis(10), 0)) {
+            TopicStateProvider topics = id -> Optional.of(topic);
+            ReplicationService service = new ReplicationService(self, () -> members,
+                    new PersistenceEventValidator(topics), topics, store, http, new PeerFailureDetector(3));
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.storeReplica(store.createEventRecord(event, topic)));
+            assertTrue(store.eventKeys().isEmpty());
         }
     }
 
     @Test
     void duplicateFailureRepairNotificationsShareOneQueueEntry() {
         String topicId = "10".repeat(32);
-        ReplicationServer self = new ReplicationServer("20".repeat(32), "localhost", 9999);
-        FileEventStore store = new FileEventStore(temp, Clock.systemUTC(), () -> 1);
-        var membership = (org.pubsub.prototype.registry.replication.ReplicationMembership) () -> List.of(self);
+        ReplicationServerEndpoint self = new ReplicationServerEndpoint("20".repeat(32), "localhost", 9999);
+        FileEventStore store = new FileEventStore(temp, Clock.systemUTC(), () -> 1,
+                id -> Optional.empty());
+        var membership = (org.pubsub.prototype.registry.replication.ReplicationMembershipProvider) () -> List.of(self);
         TopicState topic = new TopicState(new TopicId(topicId), "topic", List.of("owner"), List.of(),
                 List.of(), 1, 5, true);
         try (ReplicationHttpClient http = new ReplicationHttpClient(Duration.ofMillis(10), Duration.ofMillis(10), 0)) {
@@ -141,7 +176,7 @@ class ReplicationServiceTest {
             ReplicationService service = new ReplicationService(self, membership,
                     new PersistenceEventValidator(topics), topics, store, http, failures);
             ReplicaMaintenanceService maintenance = new ReplicaMaintenanceService(self, membership, service, store,
-                    http, () -> List.of(topic), failures, Duration.ofMillis(10));
+                    http, () -> List.of(topic), failures, Duration.ofMillis(10), 1000, 1000);
             ReplicaRepairRequest request = new ReplicaRepairRequest(ReplicaRecordType.TOPIC_LOG,
                     EventKeys.topicLogKey(topicId), topicId, List.of(self.serverId()), List.of());
 

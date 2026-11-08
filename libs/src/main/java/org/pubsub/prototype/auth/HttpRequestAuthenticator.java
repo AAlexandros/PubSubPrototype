@@ -6,33 +6,39 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
-/** Verifies signed HTTP requests and rejects a nonce already used at this receiver. */
+/**
+ * Authenticates an internal replication request using its signature and the
+ * current server membership. A nonce accepted once at this receiver cannot be
+ * reused while the signed timestamp remains valid.
+ */
 public final class HttpRequestAuthenticator
         implements Authenticator<HttpRequestAuthenticator.Request, String> {
-    private final Supplier<Set<String>> allowedIds;
-    private final String audience;
+    private final Supplier<Set<String>> activeServerIds;
+    private final String receiverServerId;
     private final Clock clock;
     private final Map<String, Long> seenNonces = new ConcurrentHashMap<>();
 
-    public HttpRequestAuthenticator(Supplier<Set<String>> allowedIds, String audience, Clock clock) {
-        this.allowedIds = allowedIds;
-        this.audience = audience;
+    public HttpRequestAuthenticator(Supplier<Set<String>> activeServerIds, String receiverServerId, Clock clock) {
+        this.activeServerIds = activeServerIds;
+        this.receiverServerId = receiverServerId;
         this.clock = clock;
     }
 
     @Override
     public String authenticate(Request request) {
-        SignedHttpRequest.Headers headers = request.headers();
-        if (!SignedHttpRequest.verify(headers, request.method(), request.path(), request.body(), audience,
-                allowedIds.get(), clock))
+        ReplicationHttpRequestSignatures.SignatureHeaders headers = request.signatureHeaders();
+        if (!ReplicationHttpRequestSignatures.verifyRequestSignature(headers, request.method(),
+                request.rawPathAndQuery(), request.body(), receiverServerId, activeServerIds.get(), clock))
             throw new SecurityException("invalid request signature");
         long now = clock.millis();
         seenNonces.entrySet().removeIf(entry -> entry.getValue() < now);
-        if (seenNonces.putIfAbsent(headers.signerId() + ":" + headers.nonce(),
-                headers.timestamp() + SignedHttpRequest.MAX_CLOCK_SKEW_MS) != null)
+        if (seenNonces.putIfAbsent(headers.signerServerId() + ":" + headers.nonce(),
+                headers.timestampMillis() + ReplicationHttpRequestSignatures.MAX_CLOCK_SKEW_MS) != null)
             throw new SecurityException("replayed request");
-        return headers.signerId();
+        return headers.signerServerId();
     }
 
-    public record Request(String method, String path, byte[] body, SignedHttpRequest.Headers headers) { }
+    /** Exact wire request and signature headers to authenticate. */
+    public record Request(String method, String rawPathAndQuery, byte[] body,
+                          ReplicationHttpRequestSignatures.SignatureHeaders signatureHeaders) { }
 }

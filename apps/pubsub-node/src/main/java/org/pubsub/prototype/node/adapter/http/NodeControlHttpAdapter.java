@@ -33,7 +33,7 @@ import org.pubsub.prototype.node.service.DisseminationService;
 import org.pubsub.prototype.node.service.NavigationService;
 import org.pubsub.prototype.node.service.EventStorageService;
 import org.pubsub.prototype.node.service.EventProcessingService;
-import org.pubsub.prototype.node.util.AsyncUtil;
+import org.pubsub.prototype.util.AsyncUtil;
 import org.pubsub.prototype.node.util.NodeLog;
 import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.registry.RegistryUnavailableException;

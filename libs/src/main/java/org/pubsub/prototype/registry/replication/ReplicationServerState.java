@@ -1,5 +1,7 @@
 package org.pubsub.prototype.registry.replication;
 
+import java.util.Objects;
+
 /**
  * A replication-server registration as stored in, or observed from, the registry.
  *
@@ -7,29 +9,38 @@ package org.pubsub.prototype.registry.replication;
  * its configured endpoint and commitment when registering; consumers then obtain states for all
  * servers from the registry.</p>
  *
- * @param serverId the permanent identifier of the replication server
+ * @param endpoint the server's permanent identifier and advertised HTTP address
  * @param operator the Cardano account responsible for and authorized to change this registration
- * @param host the server's advertised network host
- * @param port the server's advertised network port
  * @param commitmentStartEpoch the first Cardano epoch covered by the service commitment
  * @param commitmentEndEpoch the last Cardano epoch covered by the service commitment
  * @param active whether the server is an active member of the replication-server set
  */
 public record ReplicationServerState(
-        String serverId,
+        ReplicationServerEndpoint endpoint,
         String operator,
-        String host,
-        int port,
         long commitmentStartEpoch,
         long commitmentEndEpoch,
         boolean active
 ) {
+    public ReplicationServerState {
+        Objects.requireNonNull(endpoint, "endpoint");
+    }
 
     /**
-     * Returns the endpoint information needed to contact this server.
+     * Returns the registered server identifier.
      */
-    public ReplicationServer endpoint() {
-        return new ReplicationServer(serverId, host, port);
+    public String serverId() {
+        return endpoint.serverId();
+    }
+
+    /** Returns the registered HTTP host. */
+    public String host() {
+        return endpoint.host();
+    }
+
+    /** Returns the registered HTTP port. */
+    public int port() {
+        return endpoint.port();
     }
 
     /**
@@ -37,7 +48,7 @@ public record ReplicationServerState(
      * Authorization of the unregistration is performed by the registry.
      */
     public ReplicationServerState deactivate() {
-        return new ReplicationServerState(serverId, operator, host, port,
+        return new ReplicationServerState(endpoint, operator,
                 commitmentStartEpoch, commitmentEndEpoch, false);
     }
 }

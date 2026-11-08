@@ -17,6 +17,9 @@ that those workflows use. A component can live in `libs` even when only one
 application currently uses it; `ReplicationServerClient`, `DeliveryStateStore`,
 `LocalEventCreator`, and `FileEventStore` are examples. Their callers decide
 when to make requests or update local state.
+Services with periodic work own their schedulers and implement the shared
+`libs` contract `CyclicService`. Node overlay services implement its shared
+extension `CyclicTransportService` for peer messages.
 The topic registry CLI runs from `tools:registry-cli`; its Cardano registry
 implementation remains in `libs`.
 

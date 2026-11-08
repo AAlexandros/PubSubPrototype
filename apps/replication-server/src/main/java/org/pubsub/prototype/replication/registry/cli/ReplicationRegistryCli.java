@@ -1,7 +1,10 @@
 package org.pubsub.prototype.replication.registry.cli;
 
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.pubsub.prototype.cardano.cli.CardanoCliBackend;
 import org.pubsub.prototype.registry.replication.ReplicationServerState;
+import org.pubsub.prototype.registry.replication.ReplicationServerEndpoint;
 import org.pubsub.prototype.registry.replication.cardano.CardanoReplicationRegistry;
 import org.pubsub.prototype.registry.replication.cardano.CardanoReplicationRegistryConfig;
 import org.pubsub.prototype.replication.config.ReplicationServerConfig;
@@ -41,7 +44,9 @@ public final class ReplicationRegistryCli {
                     throw usage();
                 }
                 var registry = registry(Path.of(args[1]), CardanoCliBackend.parse(args[2]), "registry-deployer");
-                System.out.println(JsonSupport.MAPPER.valueToTree(registry.queryServers(args.length == 4)).toPrettyString());
+                ArrayNode states = JsonSupport.MAPPER.createArrayNode();
+                registry.queryServers(args.length == 4).forEach(state -> states.add(stateJson(state)));
+                System.out.println(states.toPrettyString());
             }
             case "register", "unregister" -> registration(args);
             default -> throw usage();
@@ -56,9 +61,10 @@ public final class ReplicationRegistryCli {
                 server.registration().cliBackend(), server.registration().operator());
         if ("register".equals(args[0])) {
             ReplicationServerState state = new ReplicationServerState(
-                    server.serverId(), registry.configuredOperatorId(), server.advertisedHost(), server.port(),
+                    new ReplicationServerEndpoint(server.serverId(), server.advertisedHost(), server.port()),
+                    registry.configuredOperatorId(),
                     server.registration().commitmentStartEpoch(), server.registration().commitmentEndEpoch(), true);
-            System.out.println(JsonSupport.MAPPER.valueToTree(registry.registerServer(state)));
+            System.out.println(stateJson(registry.registerServer(state)));
         } else {
             registry.unregisterServer(server.serverId());
         }
@@ -66,6 +72,19 @@ public final class ReplicationRegistryCli {
 
     private static CardanoReplicationRegistry registry(Path runtimeDir, CardanoCliBackend backend, String signer) {
         return new CardanoReplicationRegistry(new CardanoReplicationRegistryConfig(runtimeDir, signer, backend));
+    }
+
+    /** Keeps the CLI's flat JSON output while the domain state owns an endpoint value. */
+    private static ObjectNode stateJson(ReplicationServerState state) {
+        ObjectNode result = JsonSupport.MAPPER.createObjectNode();
+        result.put("serverId", state.serverId());
+        result.put("operator", state.operator());
+        result.put("host", state.host());
+        result.put("port", state.port());
+        result.put("commitmentStartEpoch", state.commitmentStartEpoch());
+        result.put("commitmentEndEpoch", state.commitmentEndEpoch());
+        result.put("active", state.active());
+        return result;
     }
 
     private static void requireLength(String[] args, int length) {

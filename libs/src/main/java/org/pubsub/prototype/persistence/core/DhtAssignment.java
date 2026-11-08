@@ -1,6 +1,6 @@
 package org.pubsub.prototype.persistence.core;
 
-import org.pubsub.prototype.registry.replication.ReplicationServer;
+import org.pubsub.prototype.registry.replication.ReplicationServerEndpoint;
 import org.pubsub.prototype.util.HexUtils;
 
 import java.math.BigInteger;
@@ -22,20 +22,20 @@ public final class DhtAssignment {
     }
 
     /** Shortest numeric distance in the unsigned 256-bit ring. */
-    public static List<ReplicationServer> responsibleServers(String key, List<ReplicationServer> membership,
+    public static List<ReplicationServerEndpoint> responsibleServers(String key, List<ReplicationServerEndpoint> membership,
                                                               int replicationFactor) {
         BigInteger numericKey = unsigned(key, KEY_FIELD);
         requirePositive(replicationFactor, REPLICATION_FACTOR_FIELD);
-        var unique = new LinkedHashMap<String, ReplicationServer>();
+        var unique = new LinkedHashMap<String, ReplicationServerEndpoint>();
         membership.forEach(server -> unique.merge(server.serverId(), server, (left, right) -> {
             require(left.equals(right), "conflicting endpoints for serverId " + left.serverId());
             return left;
         }));
         return unique.values().stream()
                 .sorted(Comparator
-                        .comparing((ReplicationServer server) ->
+                        .comparing((ReplicationServerEndpoint server) ->
                                 distance(numericKey, unsigned(server.serverId(), SERVER_ID_FIELD)))
-                        .thenComparing(ReplicationServer::serverId))
+                        .thenComparing(ReplicationServerEndpoint::serverId))
                 .limit(Math.min(replicationFactor, unique.size()))
                 .toList();
     }

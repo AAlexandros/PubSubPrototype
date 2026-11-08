@@ -7,7 +7,8 @@ import org.pubsub.prototype.event.EventEnvelope;
 import org.pubsub.prototype.persistence.PublisherProgress;
 import org.pubsub.prototype.persistence.StoredEvent;
 import org.pubsub.prototype.persistence.adapter.FileEventStore;
-import org.pubsub.prototype.registry.replication.ReplicationServer;
+import org.pubsub.prototype.persistence.maintenance.EventReplicaMetadata;
+import org.pubsub.prototype.registry.replication.ReplicationServerEndpoint;
 import org.pubsub.prototype.registry.topic.TopicId;
 import org.pubsub.prototype.registry.topic.TopicState;
 
@@ -46,7 +47,7 @@ class PersistenceCoreTest {
 
     @Test
     void dhtAssignmentIsDeterministicReplicatedAndWraps() {
-        List<ReplicationServer> servers = List.of(server("10"), server("80"), server("f0"));
+        List<ReplicationServerEndpoint> servers = List.of(server("10"), server("80"), server("f0"));
         assertEquals(List.of(server("80"), server("10")),
                 DhtAssignment.responsibleServers("70" + "00".repeat(31), servers, 2));
         assertEquals(List.of(server("f0"), server("10")),
@@ -54,7 +55,7 @@ class PersistenceCoreTest {
         assertEquals(List.of(server("10"), server("f0")),
                 DhtAssignment.responsibleServers("00".repeat(32), List.of(server("f0"), server("10")), 2));
         assertEquals(servers.size(), DhtAssignment.responsibleServers("00".repeat(32), servers, 10).size());
-        List<ReplicationServer> reversed = new ArrayList<>(servers);
+        List<ReplicationServerEndpoint> reversed = new ArrayList<>(servers);
         java.util.Collections.reverse(reversed);
         assertEquals(DhtAssignment.responsibleServers("44".repeat(32), servers, 2),
                 DhtAssignment.responsibleServers("44".repeat(32), reversed, 2));
@@ -67,16 +68,63 @@ class PersistenceCoreTest {
         TopicState topic = topic(2, 3, List.of());
         KeyPair keyPair = keys();
         EventEnvelope event = event(TOPIC, keyPair, 0, 1000);
-        FileEventStore first = new FileEventStore(temp, clock, epoch::get);
-        StoredEvent stored = first.store(event, topic);
+        FileEventStore first = new FileEventStore(temp, clock, epoch::get, id -> java.util.Optional.of(topic));
+        StoredEvent stored = first.createEventRecord(event, topic);
+        first.storeEventReplica(stored);
         assertEquals(8, stored.expiresAfterEpoch());
-        assertTrue(new FileEventStore(temp, clock, epoch::get).get(stored.eventKey()).isPresent());
+        assertTrue(new FileEventStore(temp, clock, epoch::get, id -> java.util.Optional.of(topic))
+                .findUnexpiredEventOrDeleteExpiredFile(stored.eventKey()).isPresent());
         assertTrue(first.updateProgress(TOPIC, PublisherProgress.fromEvent(event(TOPIC, keyPair, 2, 20))));
         assertFalse(first.updateProgress(TOPIC, PublisherProgress.fromEvent(event(TOPIC, keyPair, 1, 10))));
-        assertEquals(2, new FileEventStore(temp, clock, epoch::get).publisherProgress(TOPIC).getFirst().latestSequenceNumber());
+        assertEquals(2, new FileEventStore(temp, clock, epoch::get, id -> java.util.Optional.of(topic))
+                .publisherProgress(TOPIC).getFirst().latestSequenceNumber());
         epoch.set(8);
-        assertTrue(first.get(stored.eventKey()).isEmpty());
+        assertTrue(first.findUnexpiredEventOrDeleteExpiredFile(stored.eventKey()).isEmpty());
         assertFalse(first.containsRaw(stored.eventKey()));
+    }
+
+    @Test
+    void replicaStorageRejectsFutureEpochAndInconsistentExpiry() throws Exception {
+        TopicState topic = topic(1, 3, List.of());
+        FileEventStore store = new FileEventStore(temp, Clock.systemUTC(), () -> 5,
+                id -> java.util.Optional.of(topic));
+        EventEnvelope event = event(TOPIC, keys(), 3, 1000);
+        StoredEvent valid = store.createEventRecord(event, topic);
+
+        assertThrows(IllegalArgumentException.class, () -> new StoredEvent(valid.eventKey(), event,
+                valid.storedAt(), 3, 5, 9));
+        assertThrows(IllegalArgumentException.class, () -> new EventReplicaMetadata(valid.eventKey(), TOPIC,
+                EventCrypto.publisherKeyId(event), event.sequenceNumber() + 1, 3, 5, 8));
+        StoredEvent future = new StoredEvent(valid.eventKey(), event, valid.storedAt(), 3, 6, 9);
+        assertThrows(IllegalArgumentException.class, () -> store.storeEventReplica(future));
+        StoredEvent expired = new StoredEvent(valid.eventKey(), event, valid.storedAt(), 3, 2, 5);
+        assertThrows(IllegalArgumentException.class, () -> store.storeEventReplica(expired));
+        assertFalse(store.containsRaw(valid.eventKey()));
+    }
+
+    @Test
+    void currentTopicRetentionOverridesReplicaMetadataAndUpdatesStoredEvents() throws Exception {
+        AtomicLong epoch = new AtomicLong(5);
+        AtomicLong retention = new AtomicLong(3);
+        TopicState initialTopic = topic(1, 3, List.of());
+        FileEventStore store = new FileEventStore(temp, Clock.systemUTC(), epoch::get,
+                id -> java.util.Optional.of(initialTopic.withRetentionPeriod(retention.get())));
+        EventEnvelope event = event(TOPIC, keys(), 4, 1000);
+        StoredEvent created = store.createEventRecord(event, initialTopic);
+        StoredEvent claimed = new StoredEvent(created.eventKey(), event, created.storedAt(), 100, 5, 105);
+
+        StoredEvent accepted = store.storeEventReplica(claimed);
+        assertEquals(3, accepted.topicRetentionPeriod());
+        assertEquals(8, accepted.expiresAfterEpoch());
+        assertEquals(8, store.findUnexpiredEventOrDeleteExpiredFile(created.eventKey()).orElseThrow().expiresAfterEpoch());
+        retention.set(5);
+        epoch.set(8);
+        StoredEvent extended = store.findUnexpiredEventOrDeleteExpiredFile(created.eventKey()).orElseThrow();
+        assertEquals(5, extended.topicRetentionPeriod());
+        assertEquals(10, extended.expiresAfterEpoch());
+        retention.set(2);
+        assertTrue(store.findUnexpiredEventOrDeleteExpiredFile(created.eventKey()).isEmpty());
+        assertFalse(store.containsRaw(created.eventKey()));
     }
 
     @Test
@@ -92,8 +140,8 @@ class PersistenceCoreTest {
         assertThrows(IllegalArgumentException.class, () -> closed.validate(valid));
     }
 
-    private static ReplicationServer server(String prefix) {
-        return new ReplicationServer(prefix + "00".repeat(31), "server-" + prefix, 9000);
+    private static ReplicationServerEndpoint server(String prefix) {
+        return new ReplicationServerEndpoint(prefix + "00".repeat(31), "server-" + prefix, 9000);
     }
 
     private static TopicState topic(int factor, long retention, List<String> publishers) {

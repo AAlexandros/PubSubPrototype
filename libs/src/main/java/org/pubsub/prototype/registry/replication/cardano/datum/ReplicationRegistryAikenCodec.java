@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.pubsub.prototype.registry.replication.ReplicationServerState;
+import org.pubsub.prototype.registry.replication.ReplicationServerEndpoint;
 import org.pubsub.prototype.registry.replication.cardano.mutation.ReplicationServerMutation;
 import org.pubsub.prototype.registry.replication.cardano.mutation.ReplicationServerOperation;
 import org.pubsub.prototype.util.files.JsonSupport;
@@ -68,7 +69,8 @@ public final class ReplicationRegistryAikenCodec {
                 || fields.get(6).path("fields").size() != 0) {
             throw new IllegalArgumentException("Invalid replication registry endpoint or commitment");
         }
-        return new ReplicationServerState(serverId, operator, host, port, start, end, active == 1);
+        return new ReplicationServerState(new ReplicationServerEndpoint(serverId, host, port),
+                operator, start, end, active == 1);
     }
 
     private static ObjectNode constructor(int index) {

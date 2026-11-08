@@ -12,7 +12,7 @@ public interface ReplicationRegistryReader {
     List<ReplicationServerState> queryServers(boolean includeInactive);
 
     /** Returns an immutable snapshot of the endpoints of all currently active replication servers. */
-    default List<ReplicationServer> activeServers() {
+    default List<ReplicationServerEndpoint> activeServers() {
         return queryServers(false).stream().filter(ReplicationServerState::active)
                 .map(ReplicationServerState::endpoint).toList();
     }

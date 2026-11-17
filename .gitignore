@@ -13,6 +13,12 @@ logs/
 # Generated acceptance output.
 implementation-reports/evidence/
 
+# Local implementation reports.
+implementation-reports/
+
+# Local project specifications.
+specs/
+
 # Generated Aiken/Cardano contract output.
 contracts/topic-registry/check.out
 contracts/topic-registry/check.err

@@ -6,12 +6,14 @@ cd "$ROOT_DIR"
 node_count="${PUBSUB_NODE_COUNT:-3}"
 if [[ "${1:-}" == "--nodes" ]]; then node_count="${2:?--nodes requires a count}"; shift 2; fi
 current="$(cat "$TESTBED_RUNTIME/node-count.txt" 2>/dev/null || true)"
-if [[ ! -f "$COMPOSE_FILE" || ! -f "$TESTBED_RUNTIME/topology.json" || "$current" != "$node_count" ]]; then
+if [[ ! -f "$COMPOSE_FILE" || ! -f "$TESTBED_RUNTIME/topology.json" || "$current" != "$node_count" \
+      || ! -f "$REGISTRY_RUNTIME_DIR/deployment.env" \
+      || ! -f "$REPLICATION_REGISTRY_RUNTIME_DIR/deployment.env" ]]; then
   scripts/testbed/bootstrap.sh "$node_count"
 else
   ops/infra/devnet/scripts/start.sh
   ops/infra/devnet/scripts/wait-healthy.sh
-  run_gradle :apps:pubsub-node:installDist :apps:replication-server:installDist :tools:telemetry:installDist
+  run_gradle :apps:pubsub-node:installDist :apps:replication-server:installDist
   server_ids="$(node -e 'const fs = require("fs"); process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).serverIds.join(","))' "$TESTBED_RUNTIME/topology.json")"
   node scripts/testbed/generate.mjs "$ROOT_DIR" "$node_count" "$server_ids" >/dev/null
 fi

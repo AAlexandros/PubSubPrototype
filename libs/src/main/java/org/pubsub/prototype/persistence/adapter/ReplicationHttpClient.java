@@ -20,6 +20,9 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.pubsub.prototype.constants.PersistenceConstants.RETRIES_FIELD;
 import static org.pubsub.prototype.constants.PersistenceConstants.SINCE_TIMESTAMP_FIELD;
@@ -31,6 +34,7 @@ import static org.pubsub.prototype.util.validation.Validators.requireNonNegative
  * {@code /v1/replication/*} to exchange copies and repair requests.
  */
 public final class ReplicationHttpClient implements AutoCloseable {
+    private static final Logger LOG = LoggerFactory.getLogger(ReplicationHttpClient.class);
     private static final int MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
     private final HttpClient client;
     private final Duration requestTimeout;
@@ -176,13 +180,25 @@ public final class ReplicationHttpClient implements AutoCloseable {
 
     private HttpResponse<byte[]> send(HttpRequest request, int retryCount) {
         RuntimeException last = null;
+        boolean eventSubmission = ApiPaths.CLIENT_EVENTS.equals(request.uri().getPath());
         for (int attempt = 0; attempt <= retryCount; attempt++) {
+            long startedAt = System.nanoTime();
             try {
                 HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+                if (eventSubmission) {
+                    LOG.info("PERSIST_HTTP_ATTEMPT server={} attempt={} durationMs={} status={}",
+                            request.uri().getAuthority(), attempt + 1,
+                            TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt), response.statusCode());
+                }
                 if (response.body().length > MAX_RESPONSE_BYTES) throw new IllegalStateException("response payload too large");
                 if (response.statusCode() >= 500 && attempt < retryCount) continue;
                 return response;
             } catch (IOException ex) {
+                if (eventSubmission) {
+                    LOG.warn("PERSIST_HTTP_ATTEMPT server={} attempt={} durationMs={} error={}",
+                            request.uri().getAuthority(), attempt + 1,
+                            TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt), ex.toString());
+                }
                 last = new IllegalStateException("Replication server unavailable", ex);
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();

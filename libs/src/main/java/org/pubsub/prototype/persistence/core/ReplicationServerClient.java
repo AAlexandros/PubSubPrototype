@@ -6,6 +6,8 @@ import org.pubsub.prototype.persistence.StoredEvent;
 import org.pubsub.prototype.persistence.adapter.ReplicationHttpClient;
 import org.pubsub.prototype.registry.replication.ReplicationMembershipProvider;
 import org.pubsub.prototype.registry.replication.ReplicationServerEndpoint;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -13,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.TimeUnit;
 
 import static org.pubsub.prototype.constants.PersistenceConstants.SINCE_TIMESTAMP_FIELD;
 import static org.pubsub.prototype.util.validation.Validators.requireNonNegative;
@@ -27,6 +30,7 @@ import static org.pubsub.prototype.util.validation.Validators.requireNonNegative
  * and closes it when this client is closed.
  */
 public final class ReplicationServerClient implements AutoCloseable {
+    private static final Logger LOG = LoggerFactory.getLogger(ReplicationServerClient.class);
     private final ReplicationMembershipProvider membership;
     private final ReplicationHttpClient httpClient;
     private final AtomicInteger nextServerIndex = new AtomicInteger();
@@ -47,9 +51,18 @@ public final class ReplicationServerClient implements AutoCloseable {
         RuntimeException last = null;
         int start = Math.floorMod(nextServerIndex.getAndIncrement(), servers.size());
         for (int i = 0; i < servers.size(); i++) {
+            ReplicationServerEndpoint server = servers.get((start + i) % servers.size());
+            long startedAt = System.nanoTime();
             try {
-                return httpClient.store(servers.get((start + i) % servers.size()), envelope);
+                StoredEvent stored = httpClient.store(server, envelope);
+                LOG.info("PERSIST_ENTRY_ATTEMPT eventId={} sequenceNumber={} serverId={} attempt={} durationMs={} result=stored",
+                        envelope.eventId(), envelope.sequenceNumber(), server.serverId(), i + 1,
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
+                return stored;
             } catch (RuntimeException ex) {
+                LOG.warn("PERSIST_ENTRY_ATTEMPT eventId={} sequenceNumber={} serverId={} attempt={} durationMs={} result=failed reason={}",
+                        envelope.eventId(), envelope.sequenceNumber(), server.serverId(), i + 1,
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt), ex.toString());
                 last = ex;
             }
         }

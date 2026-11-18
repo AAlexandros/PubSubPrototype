@@ -1,4 +1,4 @@
-# Phase 0.10 registry observation
+# Registry observation
 
 Every Pub/Sub node and replication server independently queries the Topic and
 Replication Registry UTxOs through `cardano-cli`. The configured Cardano node
@@ -38,7 +38,6 @@ authorization and placement use the fresh registry views instead.
 duration, and chain position when available. The current CLI UTxO query does
 not return a chain position, so logs mark it unavailable.
 
-The acceptance runner is `scripts/acceptance/phase-0.10.sh`. It starts a fresh
-three-node/three-server devnet, exercises topic and membership changes, tests
-startup and expiry during a Cardano outage, and records a six-node query-load
-sample in `implementation-reports/evidence/phase-0.10/`.
+The integrated acceptance entrypoint is `scripts/testbed/acceptance.sh`. The
+focused registry-observation scenarios are maintained under
+`scripts/acceptance/`.

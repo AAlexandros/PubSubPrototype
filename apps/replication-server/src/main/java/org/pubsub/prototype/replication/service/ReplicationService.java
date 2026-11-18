@@ -6,6 +6,7 @@ import static org.pubsub.prototype.util.validation.Validators.requireNonNegative
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 import org.pubsub.prototype.auth.Authenticator;
 import org.pubsub.prototype.auth.PublisherProgressAuthenticator;
@@ -89,6 +90,7 @@ public final class ReplicationService {
      * @return the event record sent to the event servers
      */
     public StoredEvent persistEvent(EventEnvelope event) {
+        long startedAt = System.nanoTime();
         String eventKey = EventKeys.eventKey(event);
         String publisher = EventCrypto.publisherKeyId(event);
         LOG.info(
@@ -103,18 +105,42 @@ public final class ReplicationService {
             throw new IllegalStateException("no active replication servers");
 
         StoredEvent record = store.createEventRecord(event, topic);
+        long replicasStartedAt = System.nanoTime();
         for (ReplicationServerEndpoint targetServer : targetServers) {
-            if (targetServer.serverId().equals(localServer.serverId()))
-                storeReplica(record);
-            else
-                httpClient.storeReplica(targetServer, record);
+            long replicaStartedAt = System.nanoTime();
+            try {
+                if (targetServer.serverId().equals(localServer.serverId()))
+                    storeReplica(record);
+                else
+                    httpClient.storeReplica(targetServer, record);
+                LOG.info("EVENT_REPLICA_WRITE eventId={} sequenceNumber={} serverId={} targetServerId={} durationMs={} result=stored",
+                        event.eventId(), event.sequenceNumber(), localServer.serverId(), targetServer.serverId(),
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - replicaStartedAt));
+            } catch (RuntimeException ex) {
+                LOG.warn("EVENT_REPLICA_WRITE eventId={} sequenceNumber={} serverId={} targetServerId={} durationMs={} result=failed reason={}",
+                        event.eventId(), event.sequenceNumber(), localServer.serverId(), targetServer.serverId(),
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - replicaStartedAt), ex.toString());
+                throw ex;
+            }
         }
+        long progressStartedAt = System.nanoTime();
         PublisherProgress progress = PublisherProgress.fromEvent(event);
-        replicatePublisherProgress(event.topicId(), topic.replicationFactor(), progress, servers);
+        try {
+            replicatePublisherProgress(event.topicId(), topic.replicationFactor(), progress, servers);
+        } catch (RuntimeException ex) {
+            LOG.warn("EVENT_PROGRESS_WRITE eventId={} sequenceNumber={} serverId={} durationMs={} result=failed reason={}",
+                    event.eventId(), event.sequenceNumber(), localServer.serverId(),
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - progressStartedAt), ex.toString());
+            throw ex;
+        }
+        long completedAt = System.nanoTime();
         LOG.info(
-                "EVENT_PERSISTED eventKey={} eventId={} topicId={} publisherKeyId={} sequenceNumber={} serverId={} replicaCount={}",
+                "EVENT_PERSISTED eventKey={} eventId={} topicId={} publisherKeyId={} sequenceNumber={} serverId={} replicaCount={} prepareMs={} replicasMs={} progressMs={} totalMs={}",
                 eventKey, event.eventId(), event.topicId(), publisher, event.sequenceNumber(), localServer.serverId(),
-                targetServers.size());
+                targetServers.size(), TimeUnit.NANOSECONDS.toMillis(replicasStartedAt - startedAt),
+                TimeUnit.NANOSECONDS.toMillis(progressStartedAt - replicasStartedAt),
+                TimeUnit.NANOSECONDS.toMillis(completedAt - progressStartedAt),
+                TimeUnit.NANOSECONDS.toMillis(completedAt - startedAt));
         return record;
     }
 
@@ -272,10 +298,21 @@ public final class ReplicationService {
         for (ReplicationServerEndpoint targetServer : DhtAssignment.responsibleServers(EventKeys.topicLogKey(topicId),
                 servers,
                 factor)) {
-            if (targetServer.serverId().equals(localServer.serverId()))
-                storeProgressReplica(topicId, progress);
-            else
-                httpClient.storeProgressReplica(targetServer, topicId, progress);
+            long startedAt = System.nanoTime();
+            try {
+                if (targetServer.serverId().equals(localServer.serverId()))
+                    storeProgressReplica(topicId, progress);
+                else
+                    httpClient.storeProgressReplica(targetServer, topicId, progress);
+                LOG.info("EVENT_PROGRESS_REPLICA_WRITE topicId={} sequenceNumber={} serverId={} targetServerId={} durationMs={} result=stored",
+                        topicId, progress.latestSequenceNumber(), localServer.serverId(), targetServer.serverId(),
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
+            } catch (RuntimeException ex) {
+                LOG.warn("EVENT_PROGRESS_REPLICA_WRITE topicId={} sequenceNumber={} serverId={} targetServerId={} durationMs={} result=failed reason={}",
+                        topicId, progress.latestSequenceNumber(), localServer.serverId(), targetServer.serverId(),
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt), ex.toString());
+                throw ex;
+            }
         }
     }
 

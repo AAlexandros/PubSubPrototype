@@ -206,11 +206,12 @@ public final class FileEventStore {
 
     /**
      * Scans the event directory and removes expired event files. Each file is
-     * checked against the topic's current retention period.
+     * checked against the topic's current retention period. The check and any
+     * deletion remain synchronized per event, without locking the full scan.
      *
      * @return number of event files removed during this scan
      */
-    public synchronized int deleteExpiredEventFiles() {
+    public int deleteExpiredEventFiles() {
         if (!Files.exists(events))
             return 0;
         int removed = 0;
@@ -245,9 +246,10 @@ public final class FileEventStore {
 
     /**
      * Returns unexpired local records sorted by event key. Expired files are
-     * deleted as each record is read.
+     * deleted as each record is read. Each event read remains synchronized;
+     * a concurrent write may appear in the next scan instead.
      */
-    public synchronized List<StoredEvent> eventRecords() {
+    public List<StoredEvent> eventRecords() {
         List<StoredEvent> records = new ArrayList<>();
         for (String eventKey : eventKeys())
             findUnexpiredEventOrDeleteExpiredFile(eventKey).ifPresent(records::add);

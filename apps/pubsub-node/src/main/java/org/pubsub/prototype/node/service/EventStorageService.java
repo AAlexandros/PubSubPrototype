@@ -262,16 +262,22 @@ public final class EventStorageService implements AutoCloseable {
 
     /** Queues an HTTP request to a replication server to store the full event. Returns before the request finishes. */
     public void queueEventForRemoteStorage(EventEnvelope event) {
+        long queuedAt = System.nanoTime();
         LOG.info("PERSIST_QUEUED eventId={} topic={} sequenceNumber={}",
                 event.eventId(), NodeLog.topic(event.topicId()), event.sequenceNumber());
         storageExecutor.execute(() -> {
+            long requestStartedAt = System.nanoTime();
+            long queueMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(requestStartedAt - queuedAt);
             try {
-                NodeLog.network(LOG, "PERSIST_REQUEST eventId={} topic={} sequenceNumber={}",
-                        event.eventId(), NodeLog.topic(event.topicId()), event.sequenceNumber());
+                NodeLog.network(LOG, "PERSIST_REQUEST eventId={} topic={} sequenceNumber={} queueMs={}",
+                        event.eventId(), NodeLog.topic(event.topicId()), event.sequenceNumber(), queueMs);
                 replicationServerClient.submitEventForStorage(event);
-                NodeLog.network(LOG, "PERSIST_RESULT eventId={} result=stored", event.eventId());
+                NodeLog.network(LOG, "PERSIST_RESULT eventId={} result=stored requestMs={}", event.eventId(),
+                        java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - requestStartedAt));
             } catch (RuntimeException ex) {
-                NodeLog.network(LOG, "PERSIST_RESULT eventId={} result=failed reason={}", event.eventId(), ex.getMessage());
+                NodeLog.network(LOG, "PERSIST_RESULT eventId={} result=failed requestMs={} reason={}",
+                        event.eventId(), java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - requestStartedAt),
+                        ex.getMessage());
                 LOG.warn("EVENT_PERSIST_FAILED eventKey={} eventId={} topicId={} publisherKeyId={} sequenceNumber={} reason={}", org.pubsub.prototype.persistence.core.EventKeys.eventKey(event), event.eventId(), event.topicId(), EventCrypto.publisherKeyId(event), event.sequenceNumber(), ex.getMessage());
             }
         });

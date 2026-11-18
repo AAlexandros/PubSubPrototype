@@ -33,12 +33,20 @@ public final class NodeEventStore {
                     try {
                         EventEnvelope event = JsonSupport.MAPPER.readValue(path.toFile(), EventEnvelope.class);
                         Key key = key(event);
-                        if (!path.equals(path(key)) || !EventCrypto.eventId(event).equals(event.eventId())
-                                || events.putIfAbsent(key, event) != null
-                                || byId.putIfAbsent(event.eventId(), key) != null) {
+                        Path deliveryPath = path(key);
+                        Path publishedPath = deliveryPath.resolveSibling(key.sequence + "-" + event.eventId() + ".json");
+                        if (!EventCrypto.eventId(event).equals(event.eventId())
+                                || (!path.equals(deliveryPath) && !path.equals(publishedPath))) {
                             throw new IllegalArgumentException("event content or path conflict");
                         }
                         authenticator.authenticate(event);
+                        // LocalEventCreator keeps the publisher's signed copy in this directory.
+                        // Only delivery files belong in the subscriber history index.
+                        if (path.equals(publishedPath)) continue;
+                        if (events.putIfAbsent(key, event) != null
+                                || byId.putIfAbsent(event.eventId(), key) != null) {
+                            throw new IllegalArgumentException("event content or path conflict");
+                        }
                     } catch (IOException | RuntimeException ex) {
                         throw new IllegalStateException("Corrupt local event file: " + path, ex);
                     }

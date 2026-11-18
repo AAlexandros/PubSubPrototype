@@ -141,8 +141,11 @@ public final class ReplicaMaintenanceService implements CyclicService {
     public void start() {
         // Start the cleanup thread
         executor.scheduleWithFixedDelay(() -> {
+            long startedAt = System.nanoTime();
             try {
-                eventStore.deleteExpiredEventFiles();
+                int deleted = eventStore.deleteExpiredEventFiles();
+                LOG.info("REPLICA_EXPIRATION_CLEANUP serverId={} durationMs={} deleted={}",
+                        localServer.serverId(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt), deleted);
             } catch (RuntimeException ex) {
                 LOG.error("REPLICA_EXPIRATION_CLEANUP reason=runtime_error", ex);
             }
@@ -157,6 +160,7 @@ public final class ReplicaMaintenanceService implements CyclicService {
      */
     @Override
     public void runCycle() {
+        long startedAt = System.nanoTime();
         try {
             List<ReplicationServerEndpoint> activeServers = sortServersById(replicationMembershipProvider.activeServers());
             String observedVersion = ReplicationMembershipProvider.versionOf(activeServers);
@@ -171,10 +175,22 @@ public final class ReplicaMaintenanceService implements CyclicService {
                         localServer.serverId(), membershipVersion, sortedServerIds(old), sortedServerIds(activeServers));
                 queueRepairsAfterMembershipChange(activeServers, observedVersion);
             }
-            probeRelevantPeers(activeServers);
+            long scanStartedAt = System.nanoTime();
+            List<StoredEvent> localRecords = eventStore.eventRecords();
+            long scanCompletedAt = System.nanoTime();
+            probeRelevantPeers(activeServers, localRecords);
+            long probedAt = System.nanoTime();
             Map<String, ReplicaInventory> inventories = new LinkedHashMap<>();
-            reconcileLocalRecords(activeServers, observedVersion, inventories);
+            reconcileLocalRecords(activeServers, observedVersion, inventories, localRecords);
+            long reconciledAt = System.nanoTime();
             processQueuedRepairs(activeServers, observedVersion);
+            long completedAt = System.nanoTime();
+            LOG.info("REPLICA_MAINTENANCE_TIMING serverId={} scanMs={} probeMs={} reconcileMs={} repairsMs={} totalMs={}",
+                    localServer.serverId(), TimeUnit.NANOSECONDS.toMillis(scanCompletedAt - scanStartedAt),
+                    TimeUnit.NANOSECONDS.toMillis(probedAt - startedAt),
+                    TimeUnit.NANOSECONDS.toMillis(reconciledAt - probedAt),
+                    TimeUnit.NANOSECONDS.toMillis(completedAt - reconciledAt),
+                    TimeUnit.NANOSECONDS.toMillis(completedAt - startedAt));
         } catch (RuntimeException ex) {
             LOG.error("REPLICA_MAINTENANCE_CYCLE reason=runtime_error", ex);
         }
@@ -354,8 +370,8 @@ public final class ReplicaMaintenanceService implements CyclicService {
      * suspected and confirmed-down state; continued probes of relevant down
      * peers allow their recovery to be detected.
      */
-    private void probeRelevantPeers(List<ReplicationServerEndpoint> activeServers) {
-        Set<String> relevantPeerIds = relevantPeerServerIds(activeServers);
+    private void probeRelevantPeers(List<ReplicationServerEndpoint> activeServers, List<StoredEvent> localRecords) {
+        Set<String> relevantPeerIds = relevantPeerServerIds(activeServers, localRecords);
         for (ReplicationServerEndpoint peer : activeServers) {
             if (peer.serverId().equals(localServer.serverId()) || !relevantPeerIds.contains(peer.serverId()))
                 continue;
@@ -384,9 +400,10 @@ public final class ReplicaMaintenanceService implements CyclicService {
      * membership. This includes peers currently marked down so they can be
      * probed again; this server itself is removed from the result.
      */
-    private Set<String> relevantPeerServerIds(List<ReplicationServerEndpoint> activeServers) {
+    private Set<String> relevantPeerServerIds(List<ReplicationServerEndpoint> activeServers,
+            List<StoredEvent> localRecords) {
         Set<String> relevantPeerIds = new LinkedHashSet<>();
-        for (StoredEvent record : eventStore.eventRecords())
+        for (StoredEvent record : localRecords)
             findResponsibleServersForActiveTopic(record.eventKey(), record.eventEnvelope().topicId(), activeServers)
                     .ifPresent(servers -> relevantPeerIds.addAll(sortedServerIds(servers)));
         for (String topicId : eventStore.topicIds())
@@ -402,10 +419,10 @@ public final class ReplicaMaintenanceService implements CyclicService {
      * peer inventories are cached for this pass to avoid repeated requests.
      */
     private void reconcileLocalRecords(List<ReplicationServerEndpoint> activeServers, String membershipSnapshotVersion,
-            Map<String, ReplicaInventory> inventories) {
+            Map<String, ReplicaInventory> inventories, List<StoredEvent> localRecords) {
         underReplicated.clear();
         List<ReplicationServerEndpoint> availableServers = serversNotConfirmedDown(activeServers);
-        for (StoredEvent record : eventStore.eventRecords())
+        for (StoredEvent record : localRecords)
             findResponsibleServersForActiveTopic(record.eventKey(), record.eventEnvelope().topicId(), availableServers)
                     .ifPresent(responsibleServers -> reconcileLocalReplica(ReplicaRecordType.EVENT, record.eventKey(),
                             record.eventEnvelope().topicId(), responsibleServers, membershipSnapshotVersion, inventories));

@@ -56,7 +56,5 @@ infra/devnet/genesis/
 Thumbs.db
 *.tmp
 
-# Phase 0.9 experiment output (keep the data dictionary and placeholders).
-results/*/
-!results/.gitkeep
-!results/data-dictionary.md
+# Legacy experiment output retained locally.
+results/

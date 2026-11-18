@@ -11,7 +11,7 @@ docker info >/dev/null 2>&1 || { echo "Docker Desktop Linux engine is required" 
 
 mkdir -p "$TESTBED_RUNTIME"
 stop_conflicting_stacks
-run_gradle :apps:pubsub-node:installDist :apps:replication-server:installDist :tools:telemetry:installDist
+run_gradle :apps:pubsub-node:installDist :apps:replication-server:installDist
 ops/infra/devnet/scripts/start.sh
 ops/infra/devnet/scripts/wait-healthy.sh
 ops/infra/devnet/scripts/fund-identities.sh

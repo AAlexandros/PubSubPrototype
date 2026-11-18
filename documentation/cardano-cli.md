@@ -67,7 +67,7 @@ These commands are owned by `ops/infra/devnet/scripts/`.
 
 | Command | Purpose | Used by |
 | --- | --- | --- |
-| `cardano-cli --version` | Prints the installed or container CLI version for diagnostic evidence. | Phase 0.1 acceptance |
+| `cardano-cli --version` | Prints the installed or container CLI version for devnet diagnostics. | Devnet acceptance |
 | `cardano-cli address key-gen --signing-key-file <payment.skey> --verification-key-file <payment.vkey>` | Creates each local Cardano payment identity. This is offline and does not require the node socket. | `init.sh` |
 | `cardano-cli address build --payment-verification-key-file <payment.vkey> --testnet-magic <magic> --out-file <payment.addr>` | Builds a payment address from a generated verification key. | `common.sh`, funding discovery |
 | `cardano-cli genesis initial-addr --verification-key-file <utxo.vkey> --testnet-magic <magic>` | Reconstructs the address of a testnet genesis UTxO key when selecting a funding source. | `common.sh`, funding discovery |

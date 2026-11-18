@@ -17,3 +17,10 @@ dependencies {
 application {
     mainClass.set("org.pubsub.prototype.node.PubSubNodeMain")
 }
+
+tasks.register<JavaExec>("runTopicRegistryCli") {
+    group = "application"
+    description = "Deploys, queries, or updates the Cardano topic registry."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.pubsub.prototype.node.registry.cli.TopicRegistryCli")
+}

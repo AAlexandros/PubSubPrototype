@@ -17,4 +17,3 @@ rootProject.name = "pubsub-prototype"
 include("libs")
 include("apps:pubsub-node")
 include("apps:replication-server")
-include("tools:registry-cli")

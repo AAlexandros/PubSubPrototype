@@ -6,14 +6,14 @@ In particular, `org.pubsub.prototype.protocol` contains wire messages and
 identity without Netty, while `org.pubsub.prototype.transport` contains the
 Netty connection code.
 
-The repository still has separate Gradle projects for `apps:pubsub-node`,
-`apps:replication-server`, `tools:telemetry`, and `tools:registry-cli`.
+The repository has separate Gradle projects for `apps:pubsub-node` and
+`apps:replication-server`. Each app also provides a registry administration CLI.
 
 Useful tasks:
 
 ```text
 :libs:test                       Run all library tests
-:tools:registry-cli:runRegistryCli
+:apps:pubsub-node:runTopicRegistryCli
                                  Run the Cardano topic registry CLI
 :apps:replication-server:runReplicationRegistryCli
                                  Run the Cardano replication registry CLI
@@ -28,6 +28,3 @@ The Topic Registry implementation is under
 Registry is under `org.pubsub.prototype.registry.replication.cardano`.
 Persistence exposes the replication membership client and reader contracts,
 not the Cardano adapter.
-
-The [sampling](docs/peer-sampling.md), [navigation](docs/navigation.md), and
-[dissemination](docs/dissemination.md) notes describe their package behavior.

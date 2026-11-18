@@ -1,4 +1,4 @@
-package org.pubsub.prototype.registry.cli;
+package org.pubsub.prototype.node.registry.cli;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

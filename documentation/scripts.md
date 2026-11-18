@@ -54,7 +54,10 @@ Docker-based tools otherwise.
 The registry scripts live in [`scripts/registry/`](../scripts/registry/) and
 [`scripts/replication/`](../scripts/replication/). They build and deploy the
 Aiken contracts, manage topic or server registrations, and query on-chain
-state. The [Cardano CLI reference](cardano-cli.md) describes the transaction
+state. Both registries use the same layout: the Topic Registry CLI is in
+`apps/pubsub-node`, the Replication Registry CLI is in
+`apps/replication-server`, and the shell scripts call their Gradle tasks.
+The [Cardano CLI reference](cardano-cli.md) describes the transaction
 commands assembled by the Java and shell tools. See the
 [registry observation guide](registry-observation.md) for polling and freshness
 behavior in running nodes and servers.

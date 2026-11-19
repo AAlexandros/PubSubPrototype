@@ -3,13 +3,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT_DIR"
 . scripts/testbed/common.sh
-EVIDENCE_DIR="$ROOT_DIR/implementation-reports/evidence/phase-0.10"
+EVIDENCE_DIR="$ROOT_DIR/.tools/test-results/registry-replication-recovery"
 mkdir -p "$EVIDENCE_DIR"
 exec > >(tee "$EVIDENCE_DIR/acceptance-output.log") 2>&1
 
-check() { node scripts/acceptance/phase-0.10.mjs "$@"; }
-check_persistence() { node scripts/acceptance/phase-0.8.mjs "$@"; }
-check_recovery() { node scripts/acceptance/phase-0.7.mjs "$@"; }
+check() { node test/helpers/registry-observation-assertions.mjs "$@"; }
+check_persistence() { node test/helpers/replica-state-assertions.mjs "$@"; }
+check_recovery() { node test/helpers/replication-recovery-assertions.mjs "$@"; }
 wait_for_log() {
   local service="$1" pattern="$2"
   for _ in $(seq 1 180); do
@@ -83,19 +83,19 @@ capture() {
     fi
   fi
   if [[ "$exit_status" == 0 && "$cleanup_status" == 0 ]]; then
-    echo "Phase 0.10 acceptance passed" > "$EVIDENCE_DIR/final-result.txt"
+    echo "Registry and replication recovery test passed" > "$EVIDENCE_DIR/final-result.txt"
   elif [[ "$exit_status" == 0 ]]; then
-    echo "Phase 0.10 acceptance FAILED (cleanup exit $cleanup_status)" > "$EVIDENCE_DIR/final-result.txt"
+    echo "Registry and replication recovery test FAILED (cleanup exit $cleanup_status)" > "$EVIDENCE_DIR/final-result.txt"
     cat "$EVIDENCE_DIR/cleanup.log" >&2
     exit_status="$cleanup_status"
   else
-    echo "Phase 0.10 acceptance FAILED ($exit_status)" > "$EVIDENCE_DIR/final-result.txt"
+    echo "Registry and replication recovery test FAILED ($exit_status)" > "$EVIDENCE_DIR/final-result.txt"
     if [[ "$cleanup_status" != 0 ]]; then cat "$EVIDENCE_DIR/cleanup.log" >&2; fi
   fi
   exit "$exit_status"
 }
 trap capture EXIT
-echo "Phase 0.10 acceptance running" > "$EVIDENCE_DIR/final-result.txt"
+echo "Registry and replication recovery test running" > "$EVIDENCE_DIR/final-result.txt"
 docker info >/dev/null 2>&1 || { echo "Docker Desktop Linux engine is required" >&2; exit 1; }
 TESTBED_CLEANUP_REQUIRED=1
 
@@ -111,7 +111,7 @@ check ready 3 > "$EVIDENCE_DIR/initial-readiness.json"
 
 publisher1="$(scripts/events/publisher-key-id.sh node-1)"
 publisher2="$(scripts/events/publisher-key-id.sh node-2)"
-topic="$(scripts/registry/create-topic.sh node-1 phase-0.10-topic - "$publisher1" 2 3600 | tail -1)"
+topic="$(scripts/registry/create-topic.sh node-1 registry-observation-topic - "$publisher1" 2 3600 | tail -1)"
 printf '%s\n' "$topic" > "$EVIDENCE_DIR/topic-id.txt"
 scripts/registry/query.sh --utxos > "$EVIDENCE_DIR/topic-created-utxos.json"
 check topic 3 "$topic" active > "$EVIDENCE_DIR/topic-created-observations.json"
@@ -164,7 +164,7 @@ if ! grep -q 'cliBackend: HOST' "$EVIDENCE_DIR/node-config.yaml" \
 fi
 check ready 3 > "$EVIDENCE_DIR/direct-registry-recovery-readiness.json"
 
-recovery_topic="$(scripts/registry/create-topic.sh node-1 phase-0.10-recovery-topic - "$publisher1" 3 3600 | tail -1)"
+recovery_topic="$(scripts/registry/create-topic.sh node-1 replication-recovery-topic - "$publisher1" 3 3600 | tail -1)"
 printf '%s\n' "$recovery_topic" > "$EVIDENCE_DIR/recovery-topic-id.txt"
 check topic 3 "$recovery_topic" active > "$EVIDENCE_DIR/recovery-topic-observations.json"
 for index in 1 2 3; do
@@ -175,7 +175,7 @@ check dissemination-ready 3 "$recovery_topic" > "$EVIDENCE_DIR/recovery-overlay-
 server_ids="$(node -e 'const fs=require("fs"); process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).serverIds.join(","))' "$TESTBED_RUNTIME/topology.json")"
 publish_recovery_event() {
   local sequence="$1" file="$EVIDENCE_DIR/published-sequence-$1.json" event_id
-  scripts/events/publish.sh node-1 "$recovery_topic" "phase-0.10-recovery-sequence-$sequence" > "$file"
+  scripts/events/publish.sh node-1 "$recovery_topic" "recovery-sequence-$sequence" > "$file"
   event_id="$(node -e 'const fs=require("fs"); process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).eventId)' "$file")"
   printf '%s\n' "$event_id"
 }
@@ -247,12 +247,17 @@ done
 compose start pubsub-node-3
 check_recovery node-ready "$EVIDENCE_DIR" 3
 check ready 3 > "$EVIDENCE_DIR/registry-readiness-before-missed-event-recovery.json"
-check_recovery recover "$EVIDENCE_DIR" "$recovery_topic" 3 3 5 6 7
+check_recovery caught-up "$EVIDENCE_DIR" "$recovery_topic" "$publisher1" 3 7
 compose logs --no-color pubsub-node-3 > "$EVIDENCE_DIR/missed-event-recovery-subscriber.log"
 for sequence in 5 6 7; do
-  test "$(grep -Ec "EVENT_ACCEPTED .*sequenceNumber=$sequence peerNodeId=recovery" \
-    "$EVIDENCE_DIR/missed-event-recovery-subscriber.log")" = 1
+  expected_event_id="$(node -e 'const fs=require("fs"); process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).eventId)' "$EVIDENCE_DIR/published-sequence-$sequence.json")"
+  if [[ "$(grep -Ec "EVENT_ACCEPTED eventId=$expected_event_id .*sequenceNumber=$sequence peerNodeId=recovery" \
+    "$EVIDENCE_DIR/missed-event-recovery-subscriber.log")" != 1 ]]; then
+    echo "Expected exactly one automatic recovery delivery for event $expected_event_id on pubsub-node-3" >&2
+    exit 1
+  fi
 done
+check_recovery recover-empty "$EVIDENCE_DIR" "$recovery_topic" 3
 event_id="$(publish_recovery_event 8)"
 wait_live_delivery 8 2 "$event_id"
 wait_live_delivery 8 3 "$event_id"

@@ -1,17 +1,15 @@
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import {nativePath as native} from '../lib/paths.mjs';
+import {fetchJson} from './http-json.mjs';
+import {nativePath as native} from '../../scripts/lib/paths.mjs';
 
 const [mode, rawEvidence, ...args] = process.argv.slice(2);
 const evidence = native(rawEvidence);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const save = (name, value) => fs.writeFileSync(path.join(evidence, `${name}.json`), JSON.stringify(value, null, 2) + '\n');
 async function json(url, options) {
-  const response = await fetch(url, options);
-  const text = await response.text();
-  if (!response.ok) throw Error(`${url} returned ${response.status}: ${text}`);
-  return JSON.parse(text);
+  return fetchJson(url, options);
 }
 async function wait(check, timeout = 120000) {
   const end = Date.now() + timeout;
@@ -57,11 +55,12 @@ if (mode === 'prepare-devnet') {
   }
 } else if (mode === 'server-configs') {
   const [rawRuntime, ids] = args;
-  if (!ids || ids.split(',').length !== 3 || ids.split(',').some(id => !/^[0-9a-f]{64}$/.test(id)))
-    throw Error('server-configs requires three 64-character lowercase hexadecimal server IDs');
+  const serverIds = ids?.split(',') ?? [];
+  if (serverIds.length < 1 || serverIds.length > 3 || serverIds.some(id => !/^[0-9a-f]{64}$/.test(id)))
+    throw Error('server-configs requires one to three 64-character lowercase hexadecimal server IDs');
   const runtime = native(rawRuntime);
   fs.mkdirSync(runtime, {recursive: true});
-  ids.split(',').forEach((id, index) => fs.writeFileSync(path.join(runtime, `server-${index + 1}.yaml`), `server:
+  serverIds.forEach((id, index) => fs.writeFileSync(path.join(runtime, `server-${index + 1}.yaml`), `server:
   serverId: ${id}
   listenHost: 0.0.0.0
   advertisedHost: replication-server-${index + 1}
@@ -126,6 +125,16 @@ timing:
   console.log(assigned[0].serverId);
 } else if (mode === 'state') {
   save(args[1], await json(`http://127.0.0.1:800${args[0]}/v1/events/recovery-state`));
+} else if (mode === 'caught-up') {
+  const [topic, publisherKeyId, rawNodeIndex, rawSequence] = args;
+  const nodeIndex = Number(rawNodeIndex);
+  const expectedSequence = Number(rawSequence);
+  const state = await wait(async () => {
+    const current = await json(`http://127.0.0.1:800${nodeIndex}/v1/events/recovery-state`);
+    return Number(current[topic]?.[publisherKeyId]?.lastDeliveredSequenceNumber) >= expectedSequence
+      ? current : false;
+  });
+  save(`node-${nodeIndex}-automatic-catch-up-state`, state);
 } else if (mode === 'node-ready') {
   await wait(() => json(`http://127.0.0.1:800${args[0]}/v1/events/recovery-state`));
 } else if (mode === 'replication-ready') {
@@ -163,6 +172,15 @@ timing:
   });
   if (result.deliveredEventKeys.join() !== expected.join()) throw Error('recovered events were not delivered in sequence order');
   save(`node-${nodeIndex}-recovery-result`, result);
+} else if (mode === 'recover-empty') {
+  const [topic, rawNodeIndex] = args;
+  const nodeIndex = Number(rawNodeIndex);
+  const result = await json(`http://127.0.0.1:800${nodeIndex}/v1/events/recover/${topic}`, {method: 'POST'});
+  if (result.topicId !== topic || result.missingCount !== 0 || result.deliveredCount !== 0
+      || result.deliveredEventKeys.length !== 0 || result.unavailableEventKeys.length !== 0) {
+    throw Error(`recovery was not idempotent after automatic catch-up: ${JSON.stringify(result)}`);
+  }
+  save(`node-${nodeIndex}-recovery-after-catch-up`, result);
 } else if (mode === 'health-snapshot') {
   const snapshot = await Promise.all([1, 2, 3].map(health));
   if (args[0] === 'replication-inventories-after-restart') {

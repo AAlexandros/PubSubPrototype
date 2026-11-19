@@ -12,7 +12,15 @@ import org.pubsub.prototype.util.files.JsonSupport;
 
 import java.nio.file.Path;
 
-/** CLI for deploying, querying, and changing the Cardano replication registry. */
+/**
+ * Operator entrypoint for Replication Registry deployment, queries, and
+ * registration changes. The {@code scripts/replication/} wrappers invoke this
+ * class through the {@code :apps:replication-server:runReplicationRegistryCli}
+ * Gradle task. The first argument is the command; deployment and queries take
+ * a runtime directory and {@code HOST} or {@code DEVNET} backend, while
+ * registration commands read their operator and backend from a server config.
+ * See {@code documentation/registry-clis.md} for the command forms.
+ */
 public final class ReplicationRegistryCli {
     private ReplicationRegistryCli() {
     }

@@ -1,8 +1,9 @@
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import {nativePath as native} from '../lib/paths.mjs';
-import {repositoryRoot, signedOptions} from '../lib/signed-http.mjs';
+import {fetchJson} from './http-json.mjs';
+import {nativePath as native} from '../../scripts/lib/paths.mjs';
+import {repositoryRoot, signedOptions} from '../../scripts/lib/signed-http.mjs';
 
 const [mode, rawEvidence, ...args] = process.argv.slice(2);
 const evidence = native(rawEvidence);
@@ -12,15 +13,10 @@ async function json(url, options) {
   const parsed = new URL(url);
   let requestOptions = options;
   if (parsed.pathname === '/v1/replication/inventory') {
-    const healthResponse = await fetch(url.replace('/v1/replication/inventory', '/v1/ops/health'));
-    if (!healthResponse.ok) throw Error(`Health request failed for ${url}`);
-    const {serverId} = await healthResponse.json();
+    const {serverId} = await fetchJson(url.replace('/v1/replication/inventory', '/v1/ops/health'));
     requestOptions = signedOptions(repositoryRoot, url, options, serverId);
   }
-  const response = await fetch(url, requestOptions);
-  const text = await response.text();
-  if (!response.ok) throw Error(`${url} returned ${response.status}: ${text}`);
-  return JSON.parse(text);
+  return fetchJson(url, requestOptions);
 }
 async function wait(check, timeout = 180000) {
   const end = Date.now() + timeout;
@@ -94,7 +90,7 @@ registry:
   pollIntervalMs: 500
   topicRegistryRuntimeDir: /registry
   topicRegistrySigner: ${signers[index]}
-  topicRegistryCliBackend: CACHE_ONLY
+  topicRegistryCliBackend: HOST
 timing:
   connectionTimeoutMs: 500
   requestTimeoutMs: 1500

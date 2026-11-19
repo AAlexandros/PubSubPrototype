@@ -20,14 +20,17 @@ class NodeConfigTest {
     Path tempDir;
 
     @Test
-    void phase07DeploymentConfigsMatchCurrentSchema() {
-        for (int index = 1; index <= 3; index++) {
-            NodeConfig config = NodeConfig.load(Path.of("../../ops/config/phase-0.7/node-" + index + ".yaml"));
+    void acceptanceNodeConfigsMatchCurrentSchema() {
+        for (String phase : new String[]{"0.1", "0.4", "0.5", "0.6", "0.7", "0.8"}) {
+            for (int index = 1; index <= 3; index++) {
+                NodeConfig config = NodeConfig.load(
+                        Path.of("../../ops/config/phase-" + phase + "/node-" + index + ".yaml"));
 
-            assertEquals("node-" + index, config.node().name);
-            assertEquals("/replication-registry", config.registry().replicationRuntimeDir);
-            assertEquals(CardanoCliBackend.HOST, config.registry().cliBackend);
-            assertEquals(30_000L, config.registry().maximumAgeMs);
+                assertEquals("node-" + index, config.node().name);
+                assertEquals("/replication-registry", config.registry().replicationRuntimeDir);
+                assertEquals(CardanoCliBackend.HOST, config.registry().cliBackend);
+                assertEquals(30_000L, config.registry().maximumAgeMs);
+            }
         }
     }
 

@@ -1,4 +1,6 @@
-const [action, countText, id, expected] = process.argv.slice(2);
+import {matchesMemberObservation} from './registry-observation-membership.mjs';
+
+const [action, countText, id, expected, detail] = process.argv.slice(2);
 const nodeCount = Number(countText);
 if (!Number.isInteger(nodeCount) || nodeCount < 3) throw Error('node count must be at least 3');
 
@@ -11,6 +13,10 @@ const endpoints = action === 'dissemination-ready'
     name: `pubsub-node-${i + 1}`,
     url: `http://127.0.0.1:${8001 + i}/v1/dissemination/view/${id}`
   }))
+  : action === 'node-ready'
+    ? allEndpoints.filter(endpoint => endpoint.name === id && endpoint.name.startsWith('pubsub-node-'))
+  : ['node-topic', 'node-topic-publisher'].includes(action)
+    ? allEndpoints.filter(endpoint => endpoint.name === expected && endpoint.name.startsWith('pubsub-node-'))
   : ['not-ready', 'not-loaded', 'stale'].includes(action) && id
     ? allEndpoints.filter(endpoint => id.split(',').includes(endpoint.name)) : allEndpoints;
 if (endpoints.length === 0) throw Error('no matching endpoints');
@@ -36,10 +42,15 @@ function matches(state) {
     const peers = [state.predecessor, state.successor, ...(state.randomPeers ?? [])];
     return state.topicId === id && peers.some(peer => peer?.nodeId && peer.nodeId !== state.nodeId);
   }
-  if (action === 'ready') return state.topic === 'FRESH' && state.replication === 'FRESH';
+  if (action === 'ready' || action === 'node-ready') return state.topic === 'FRESH' && state.replication === 'FRESH';
   if (action === 'not-ready') return state.topic !== 'FRESH' || state.replication !== 'FRESH';
   if (action === 'not-loaded') return state.topic === 'NOT_LOADED' && state.replication === 'NOT_LOADED';
   if (action === 'stale') return state.topic === 'STALE' && state.replication === 'STALE';
+  if (action === 'node-topic' || action === 'node-topic-publisher') {
+    return state.topic === 'FRESH' && state.topics?.some(value =>
+      (value.topicId?.value === id || value.topicId === id) && value.active === true
+      && (action === 'node-topic' || value.publishers?.includes(detail)));
+  }
   if (action === 'topic') {
     const topic = state.topics?.find(value => value.topicId?.value === id || value.topicId === id);
     if (expected === 'active') return topic?.active === true;
@@ -50,8 +61,7 @@ function matches(state) {
     throw Error(`unknown topic expectation: ${expected}`);
   }
   if (action === 'member') {
-    const present = state.members?.some(value => value.serverId === id && value.active !== false);
-    return expected === 'present' ? present : !present;
+    return matchesMemberObservation(state, id, expected);
   }
   throw Error(`unknown action: ${action}`);
 }

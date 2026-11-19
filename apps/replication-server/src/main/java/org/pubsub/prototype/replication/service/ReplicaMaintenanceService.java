@@ -14,6 +14,7 @@ import org.pubsub.prototype.persistence.maintenance.ReplicaRecordType;
 import org.pubsub.prototype.persistence.maintenance.ReplicaRepairRequest;
 import org.pubsub.prototype.persistence.maintenance.ReplicaRepairStatus;
 import org.pubsub.prototype.persistence.maintenance.TopicLogReplicaMetadata;
+import org.pubsub.prototype.registry.RegistryUnavailableException;
 import org.pubsub.prototype.registry.replication.ReplicationMembershipProvider;
 import org.pubsub.prototype.registry.replication.ReplicationServerEndpoint;
 import org.pubsub.prototype.registry.topic.TopicState;
@@ -118,6 +119,8 @@ public final class ReplicaMaintenanceService implements CyclicService {
     private volatile List<ReplicationServerEndpoint> lastMembers = List.of();
     /** Version of the membership most recently observed by the maintenance cycle. */
     private volatile String membershipVersion = ReplicationMembershipProvider.versionOf(List.of());
+    /** Avoid repeating expected registry-unavailable messages during an outage. */
+    private volatile boolean waitingForRegistry;
 
     public ReplicaMaintenanceService(ReplicationServerEndpoint localServer, ReplicationMembershipProvider membership,
             ReplicationService replicationService,
@@ -191,6 +194,15 @@ public final class ReplicaMaintenanceService implements CyclicService {
                     TimeUnit.NANOSECONDS.toMillis(reconciledAt - probedAt),
                     TimeUnit.NANOSECONDS.toMillis(completedAt - reconciledAt),
                     TimeUnit.NANOSECONDS.toMillis(completedAt - startedAt));
+            if (waitingForRegistry) {
+                waitingForRegistry = false;
+                LOG.info("REPLICA_MAINTENANCE_RESUMED serverId={}", localServer.serverId());
+            }
+        } catch (RegistryUnavailableException ex) {
+            if (!waitingForRegistry) {
+                waitingForRegistry = true;
+                LOG.info("REPLICA_MAINTENANCE_DEFERRED serverId={} reason={}", localServer.serverId(), ex.getMessage());
+            }
         } catch (RuntimeException ex) {
             LOG.error("REPLICA_MAINTENANCE_CYCLE reason=runtime_error", ex);
         }

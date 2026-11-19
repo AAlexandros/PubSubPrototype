@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {nativePath} from '../lib/paths.mjs';
+import {nativePath} from '../../scripts/lib/paths.mjs';
 
 const [mode, rawEvidence, topic, label] = process.argv.slice(2);
 const evidence = nativePath(rawEvidence);

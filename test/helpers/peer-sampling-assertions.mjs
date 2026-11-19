@@ -3,7 +3,7 @@ import net from 'node:net';
 import crypto from 'node:crypto';
 import path from 'node:path';
 
-// Runtime assertions use HTTP snapshots and an actual framed HELLO + invalid gossip exchange.
+// Runtime assertions use HTTP snapshots and a framed unauthenticated HELLO rejection.
 const [mode, evidence] = process.argv.slice(2);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function views(nodes = [1, 2, 3]) {
@@ -71,30 +71,39 @@ if (mode === 'prepare-devnet') {
     save('restart-rediscovery-views', current); return true;
   });
 } else if (mode === 'invalid') {
-  const before = await views(); save('before-invalid-exchange', before);
-  const fake = crypto.createHash('sha256').update('phase-0.4-invalid-exchange').digest('hex');
+  const before = await views(); save('before-invalid-identity', before);
+  const fake = crypto.createHash('sha256').update('phase-0.4-invalid-identity').digest('hex');
   const frame = message => {
     const body = Buffer.from(JSON.stringify(message));
     const header = Buffer.alloc(4); header.writeUInt32BE(body.length); return Buffer.concat([header, body]);
   };
-  const exchange = {type: 'SECURECYCLON_REQUEST', version: 1, requestId: crypto.randomUUID(),
-    exchange: {links: [], samples: [], reports: []}};
   await new Promise((resolve, reject) => {
-    const socket = net.connect(7001, '127.0.0.1'); let bytes = Buffer.alloc(0); let sent = false;
-    socket.setTimeout(5000, () => { socket.destroy(); reject(Error('HELLO timeout')); });
-    socket.on('error', reject);
+    const socket = net.connect(7001, '127.0.0.1'); let bytes = Buffer.alloc(0);
+    let settled = false;
+    const timer = setTimeout(() => finish(Error('Unauthenticated HELLO was not rejected')), 5000);
+    function finish(error) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      if (error) reject(error); else resolve();
+    }
+    socket.on('error', error => finish(error));
     socket.on('connect', () => socket.write(frame({type: 'HELLO', version: 1, nodeId: fake, nodeName: 'invalid-fixture'})));
     socket.on('data', chunk => {
       bytes = Buffer.concat([bytes, chunk]);
-      if (sent || bytes.length < 4 || bytes.length < bytes.readUInt32BE(0) + 4) return;
+      if (bytes.length < 4 || bytes.length < bytes.readUInt32BE(0) + 4) return;
       const hello = JSON.parse(bytes.subarray(4, 4 + bytes.readUInt32BE(0)));
-      if (hello.type !== 'HELLO_ACK') { socket.destroy(); reject(Error('Expected HELLO_ACK')); return; }
-      sent = true; socket.write(frame(exchange));
-      setTimeout(() => { socket.end(); resolve(); }, 400);
+      if (hello.type === 'HELLO_ACK') finish(Error('Server acknowledged an unauthenticated HELLO'));
+      else finish(Error(`Unexpected response to unauthenticated HELLO: ${hello.type}`));
+    });
+    socket.on('close', () => {
+      if (bytes.length === 0) finish();
+      else if (!settled) finish(Error('Connection closed after an unexpected response'));
     });
   });
   const after = await views();
   if (after.some(n => n.view.some(p => p.nodeId === fake))) throw Error('Invalid sender entered view');
-  save('invalid-exchange', exchange); save('after-invalid-exchange', after);
+  save('after-invalid-identity', after);
 } else throw Error(`Unknown mode ${mode}`);
 console.log(`Phase 0.4 assertion passed: ${mode}`);

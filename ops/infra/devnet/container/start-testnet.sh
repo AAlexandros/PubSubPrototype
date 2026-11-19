@@ -8,7 +8,21 @@ EPOCH_LENGTH="${CARDANO_TESTNET_EPOCH_LENGTH:-10000}"
 ACTIVE_SLOTS_COEFF="${CARDANO_TESTNET_ACTIVE_SLOTS_COEFF:-1.0}"
 OUTPUT_DIR="${CARDANO_TESTNET_OUTPUT_DIR:-/devnet/runtime/testnet}"
 
-mkdir -p "$OUTPUT_DIR" /devnet/state
+if { [ -e "$OUTPUT_DIR" ] && [ ! -d "$OUTPUT_DIR" ]; } || { [ -L "$OUTPUT_DIR" ] && [ ! -e "$OUTPUT_DIR" ]; }; then
+  echo "Removing stale non-directory Cardano testnet output path: $OUTPUT_DIR" >&2
+  rm -f -- "$OUTPUT_DIR"
+fi
+
+if [ -d "$OUTPUT_DIR" ]; then
+  if rmdir "$OUTPUT_DIR" 2>/dev/null; then
+    echo "Removed empty Cardano testnet output directory: $OUTPUT_DIR" >&2
+  else
+    echo "Cardano testnet output path already contains data before startup: $OUTPUT_DIR" >&2
+    ls -la "$OUTPUT_DIR" >&2
+  fi
+fi
+
+mkdir -p /devnet/state
 
 export CARDANO_CLI="${CARDANO_CLI:-$(command -v cardano-cli)}"
 export CARDANO_NODE="${CARDANO_NODE:-$(command -v cardano-node)}"

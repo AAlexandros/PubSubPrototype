@@ -12,9 +12,14 @@ services:
     depends_on:
       - cardano-node
     command: ["/config/node-1.yaml"]
+    environment:
+      CARDANO_NETWORK_MAGIC: ${CARDANO_NETWORK_MAGIC:-42}
+      CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock
     volumes:
       - ../../config/phase-0.5/node-1.yaml:/config/node-1.yaml:ro
       - ../devnet/runtime/registry:/registry
+      - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - ../devnet/runtime/testnet/socket:/node-socket:ro
       - pubsub-node-1-identity-0-5:/data/identity
     ports:
       - "7001:7000"
@@ -27,9 +32,14 @@ services:
     depends_on:
       - cardano-node
     command: ["/config/node-2.yaml"]
+    environment:
+      CARDANO_NETWORK_MAGIC: ${CARDANO_NETWORK_MAGIC:-42}
+      CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock
     volumes:
       - ../../config/phase-0.5/node-2.yaml:/config/node-2.yaml:ro
       - ../devnet/runtime/registry:/registry
+      - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - ../devnet/runtime/testnet/socket:/node-socket:ro
       - pubsub-node-2-identity-0-5:/data/identity
     ports:
       - "7002:7000"
@@ -42,9 +52,14 @@ services:
     depends_on:
       - cardano-node
     command: ["/config/node-3.yaml"]
+    environment:
+      CARDANO_NETWORK_MAGIC: ${CARDANO_NETWORK_MAGIC:-42}
+      CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock
     volumes:
       - ../../config/phase-0.5/node-3.yaml:/config/node-3.yaml:ro
       - ../devnet/runtime/registry:/registry
+      - ../devnet/runtime/replication-registry:/replication-registry:ro
+      - ../devnet/runtime/testnet/socket:/node-socket:ro
       - pubsub-node-3-identity-0-5:/data/identity
     ports:
       - "7003:7000"

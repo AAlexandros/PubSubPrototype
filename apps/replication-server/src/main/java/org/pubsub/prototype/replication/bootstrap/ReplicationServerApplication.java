@@ -33,6 +33,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Owns construction and lifecycle for one replication-server process. */
 public final class ReplicationServerApplication implements AutoCloseable {
@@ -48,6 +49,7 @@ public final class ReplicationServerApplication implements AutoCloseable {
 
         private final ReplicationHttpClient replicationHttpClient;
         private final CountDownLatch stopped = new CountDownLatch(1);
+        private final AtomicBoolean closing = new AtomicBoolean();
 
         // Creates an HTTP API for sending commands to this node and inspecting its
         // state. The testbed exposes this port on the host's loopback interface.
@@ -156,6 +158,7 @@ public final class ReplicationServerApplication implements AutoCloseable {
 
         @Override
         public void close() {
+                if (!closing.compareAndSet(false, true)) return;
                 try {
                         httpAdapter.close();
                         replicaMaintenance.close();

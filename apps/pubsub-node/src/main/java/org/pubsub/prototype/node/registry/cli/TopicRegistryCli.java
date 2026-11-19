@@ -14,6 +14,14 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * Operator entrypoint for Topic Registry deployment, queries, and mutations.
+ * The {@code scripts/registry/} wrappers invoke this class through the
+ * {@code :apps:pubsub-node:runTopicRegistryCli} Gradle task. Arguments start
+ * with a registry runtime directory, a {@code HOST} or {@code DEVNET} Cardano
+ * CLI backend, and a command; topic mutations then take a signer and command
+ * arguments. See {@code documentation/registry-clis.md} for the command forms.
+ */
 public final class TopicRegistryCli {
     private static final ObjectMapper MAPPER = JsonSupport.MAPPER;
 
@@ -31,7 +39,7 @@ public final class TopicRegistryCli {
 
     private static void run(String[] args) {
         if (args.length < 3) {
-            throw new IllegalArgumentException("Usage: TopicRegistryCli <runtime-dir> <cache-only|host|devnet> <command> ...");
+            throw new IllegalArgumentException("Usage: TopicRegistryCli <runtime-dir> <HOST|DEVNET> <command> ...");
         }
         Path runtimeDir = Path.of(args[0]);
         CardanoCliBackend backend = CardanoCliBackend.parse(args[1]);

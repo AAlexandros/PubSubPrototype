@@ -5,18 +5,18 @@ cd "$ROOT_DIR"
 if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
   export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL="*"
 fi
-EVIDENCE_DIR="$ROOT_DIR/implementation-reports/evidence/phase-0.11"
+EVIDENCE_DIR="$ROOT_DIR/.tools/test-results/subscriber-local-catch-up"
 mkdir -p "$EVIDENCE_DIR"
 exec > >(tee "$EVIDENCE_DIR/acceptance-output.log") 2>&1
 set -a
 . "$ROOT_DIR/ops/infra/devnet/versions.env"
 set +a
-COMPOSE=(docker compose -p phase-0-11 --env-file ops/infra/devnet/versions.env -f ops/infra/phase-0.7/compose.yaml)
+COMPOSE=(docker compose -p subscriber-local-catch-up --env-file ops/infra/devnet/versions.env -f ops/infra/phase-0.7/compose.yaml)
 DEVNET_COMPOSE=(docker compose --env-file ops/infra/devnet/versions.env -f ops/infra/devnet/compose.yaml)
 export REGISTRY_RUNTIME_DIR="$ROOT_DIR/ops/infra/devnet/runtime/registry"
 export REPLICATION_REGISTRY_STATE="$ROOT_DIR/ops/infra/devnet/runtime/replication-registry/servers.json"
-check() { node scripts/acceptance/phase-0.11.mjs "$1" "$EVIDENCE_DIR" "${@:2}"; }
-setup_check() { node scripts/acceptance/phase-0.7.mjs "$1" "$EVIDENCE_DIR" "${@:2}"; }
+check() { node test/helpers/local-event-history-assertions.mjs "$1" "$EVIDENCE_DIR" "${@:2}"; }
+setup_check() { node test/helpers/replication-recovery-assertions.mjs "$1" "$EVIDENCE_DIR" "${@:2}"; }
 host_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s\n' "$1"; fi; }
 start_healthy_devnet() {
   local attempt
@@ -69,9 +69,9 @@ finish() {
     status=1
   fi
   if [ "$status" = 0 ]; then
-    echo "Phase 0.11 acceptance passed; containers stopped and removed" > "$EVIDENCE_DIR/final-result.txt"
+    echo "Subscriber local catch-up test passed; containers stopped and removed" > "$EVIDENCE_DIR/final-result.txt"
   else
-    echo "Phase 0.11 acceptance FAILED ($status); cleanup statuses: phase-0-11=$compose_status devnet=$devnet_status" \
+    echo "Subscriber local catch-up test FAILED ($status); cleanup statuses: phase-0-11=$compose_status devnet=$devnet_status" \
       > "$EVIDENCE_DIR/final-result.txt"
   fi
   exit "$status"
@@ -114,7 +114,7 @@ for n in 1 2 3; do
 done
 ./scripts/replication/query-servers.sh > "$EVIDENCE_DIR/on-chain-server-registrations.json"
 
-topic="$(./scripts/registry/create-topic.sh node-1 phase-0.11-open-topic "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 2 3600 | tail -1)"
+topic="$(./scripts/registry/create-topic.sh node-1 subscriber-catch-up-topic "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 2 3600 | tail -1)"
 printf '%s\n' "$topic" > "$EVIDENCE_DIR/topic-id.txt"
 "${COMPOSE[@]}" up -d --build --force-recreate replication-server-1 replication-server-2 replication-server-3
 for n in 1 2 3; do wait_log "replication-server-$n" REPLICATION_SERVER_STARTED; done
@@ -124,9 +124,12 @@ for n in 1 2 3; do
   wait_log "pubsub-node-$n" SAMPLING_STARTED
   setup_check subscribe "$n" "$topic"
 done
-for n in 1 2 3; do wait_log "pubsub-node-$n" DISSEMINATION_CYCLE; done
+# A cycle can run before peer discovery has populated the per-topic forwarding view.
+# Wait for the three-node ring before publishing the event expected at node 3.
+node test/helpers/dissemination-assertions.mjs converged "$EVIDENCE_DIR" "$topic" \
+  catch-up-dissemination-views
 
-./scripts/events/publish.sh node-1 "$topic" phase-0.11-sequence-0 > "$EVIDENCE_DIR/published-sequence-0.json"
+./scripts/events/publish.sh node-1 "$topic" catch-up-sequence-0 > "$EVIDENCE_DIR/published-sequence-0.json"
 event_zero="$(node -e 'console.log(require(process.argv[1]).eventId)' "$(host_path "$EVIDENCE_DIR/published-sequence-0.json")")"
 wait_log pubsub-node-3 "EVENT_ACCEPTED eventId=$event_zero"
 setup_check replicas "$ids_csv" "$EVIDENCE_DIR/published-sequence-0.json" initial >/dev/null
@@ -137,7 +140,7 @@ check snapshot "$topic" first-restart
 
 "${COMPOSE[@]}" stop pubsub-node-3
 for sequence in 1 2 3; do
-  ./scripts/events/publish.sh node-1 "$topic" "phase-0.11-sequence-$sequence" \
+  ./scripts/events/publish.sh node-1 "$topic" "catch-up-sequence-$sequence" \
     > "$EVIDENCE_DIR/published-sequence-$sequence.json"
   setup_check replicas "$ids_csv" "$EVIDENCE_DIR/published-sequence-$sequence.json" "offline-$sequence" >/dev/null
 done
@@ -162,4 +165,4 @@ check snapshot "$topic" second-restart
 test "$(wc -l < "$EVIDENCE_DIR/node-3-event-file-inventory-after-second-restart.txt")" = 4
 printf '%s\n' 'No explicit recover command or endpoint was invoked during catch-up.' \
   > "$EVIDENCE_DIR/no-explicit-recovery.txt"
-echo "Phase 0.11 acceptance checks completed"
+echo "Subscriber local catch-up test checks completed"

@@ -38,6 +38,6 @@ authorization and placement use the fresh registry views instead.
 duration, and chain position when available. The current CLI UTxO query does
 not return a chain position, so logs mark it unavailable.
 
-The integrated acceptance entrypoint is `scripts/testbed/acceptance.sh`. The
-focused registry-observation scenarios are maintained under
-`scripts/acceptance/`.
+Registry observation and failure recovery are covered by
+[`test/acceptance/registry-replication-recovery.sh`](../test/acceptance/registry-replication-recovery.sh),
+as documented in the [system test guide](../test/README.md).

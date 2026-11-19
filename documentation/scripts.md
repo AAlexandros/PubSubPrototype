@@ -29,7 +29,6 @@ accepts `--nodes N` for topologies from 3 to 50 nodes.
 | [`scripts/testbed/stop.sh`](../scripts/testbed/stop.sh) | Stop testbed containers while retaining their data. |
 | [`scripts/testbed/restart.sh`](../scripts/testbed/restart.sh) | Restart the running testbed. |
 | [`scripts/testbed/reset.sh`](../scripts/testbed/reset.sh) | Remove generated testbed/devnet state and Docker volumes, then reinitialize by default. This is destructive to local testbed data. |
-| [`scripts/testbed/acceptance.sh`](../scripts/testbed/acceptance.sh) | Run the current integrated acceptance flow. |
 | [`scripts/testbed/generate.mjs`](../scripts/testbed/generate.mjs) | Generate per-node configuration and Docker Compose files. |
 
 ## Cardano devnet
@@ -57,6 +56,8 @@ Aiken contracts, manage topic or server registrations, and query on-chain
 state. Both registries use the same layout: the Topic Registry CLI is in
 `apps/pubsub-node`, the Replication Registry CLI is in
 `apps/replication-server`, and the shell scripts call their Gradle tasks.
+The [registry CLI reference](registry-clis.md) documents both Java entrypoints
+and their arguments.
 The [Cardano CLI reference](cardano-cli.md) describes the transaction
 commands assembled by the Java and shell tools. See the
 [registry observation guide](registry-observation.md) for polling and freshness
@@ -78,10 +79,9 @@ subscribe, event-history, recovery, status, and overlay commands. Compatibility
 wrappers for event publishing and injection are in
 [`scripts/events/`](../scripts/events/).
 
-Acceptance entrypoints are in [`scripts/acceptance/`](../scripts/acceptance/).
-The integrated flow is available through `scripts/testbed/acceptance.sh`; older
-phase-named flows remain available for focused regression checks. The original
-three-node lifecycle helpers are under [`ops/scripts/`](../ops/scripts/).
+Automated tests are documented in the [system test guide](../test/README.md).
+Operational scripts and the original three-node lifecycle helpers remain under
+[`scripts/`](../scripts/) and [`ops/scripts/`](../ops/scripts/).
 
 ## Experiments
 

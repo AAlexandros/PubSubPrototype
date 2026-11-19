@@ -14,13 +14,15 @@ set -a
 . ops/infra/devnet/versions.env
 set +a
 
-COMPOSE=(docker compose --env-file ops/infra/devnet/versions.env -f ops/infra/phase-0.1/compose.yaml)
-EVIDENCE_DIR="$ROOT_DIR/implementation-reports/evidence/phase-0.3"
+COMPOSE=(docker compose -p event-authorization-delivery --env-file ops/infra/devnet/versions.env -f ops/infra/phase-0.1/compose.yaml)
+${COMPOSE[@]} down -v --remove-orphans
+EVIDENCE_DIR="$ROOT_DIR/.tools/test-results/event-authorization-and-delivery"
 REGISTRY_RUNTIME_DIR="$ROOT_DIR/ops/infra/devnet/runtime/registry"
 export REGISTRY_RUNTIME_DIR
 
 rm -rf "$EVIDENCE_DIR" "$REGISTRY_RUNTIME_DIR"
-mkdir -p "$EVIDENCE_DIR" "$REGISTRY_RUNTIME_DIR"
+mkdir -p "$EVIDENCE_DIR"
+
 exec > >(tee "$EVIDENCE_DIR/acceptance-output.log") 2>&1
 
 run_gradle() {
@@ -48,7 +50,7 @@ wait_for_log() {
   local logs
   for _ in $(seq 1 "$attempts"); do
     logs="$(compose_logs "$service" 1000 2>/dev/null || true)"
-    if printf '%s\n' "$logs" | grep -q "$pattern"; then
+    if grep -q -- "$pattern" <<< "$logs"; then
       return 0
     fi
     sleep 1
@@ -65,7 +67,7 @@ json_field() {
 assert_event_accepted_once() {
   local service="$1"
   local event_id="$2"
-  sleep 1
+  wait_for_log "$service" "EVENT_ACCEPTED eventId=$event_id" 60
   compose_logs "$service" 3000 > "$EVIDENCE_DIR/$service-events.log"
   local count
   count="$(grep -c "EVENT_ACCEPTED eventId=$event_id" "$EVIDENCE_DIR/$service-events.log" || true)"
@@ -91,11 +93,14 @@ ops/infra/devnet/scripts/fund-identities.sh | tee "$EVIDENCE_DIR/funded-address-
 
 ./scripts/registry/build.sh
 ./scripts/registry/deploy.sh | tee "$EVIDENCE_DIR/validator-and-policy-identifiers.env"
+./scripts/replication/build.sh
+./scripts/replication/deploy.sh > "$EVIDENCE_DIR/replication-registry-deployment.txt"
 
 "${COMPOSE[@]}" up -d --build --no-deps pubsub-node-1 pubsub-node-2 pubsub-node-3
 for service in pubsub-node-1 pubsub-node-2 pubsub-node-3; do
   wait_for_log "$service" "NODE_STARTED"
-  wait_for_log "$service" "REGISTRY_SYNCED"
+  node test/helpers/registry-observation-assertions.mjs node-ready 3 "$service" \
+    > "$EVIDENCE_DIR/$service-registry-readiness.json"
 done
 
 node1_publisher="$("./scripts/events/publisher-key-id.sh" node-1)"
@@ -108,11 +113,19 @@ moderated_topic="$(./scripts/registry/create-topic.sh node-1 moderated "$(bash .
 echo "$moderated_topic" | tee "$EVIDENCE_DIR/moderated-topic-id.txt"
 ./scripts/registry/add-publisher.sh --node node-1 "$moderated_topic" node-1 | tee "$EVIDENCE_DIR/add-event-publisher-transaction.txt"
 ./scripts/registry/query.sh --topic "$moderated_topic" | tee "$EVIDENCE_DIR/moderated-topic-after-publisher.json"
-wait_for_log pubsub-node-1 "$node1_publisher" 90
-wait_for_log pubsub-node-2 "$node1_publisher" 90
-wait_for_log pubsub-node-3 "$node1_publisher" 90
+for service in pubsub-node-1 pubsub-node-2 pubsub-node-3; do
+  node test/helpers/registry-observation-assertions.mjs node-topic-publisher 3 \
+    "$moderated_topic" "$service" "$node1_publisher" \
+    > "$EVIDENCE_DIR/$service-publisher-readiness.json"
+done
+for node_index in 1 2 3; do
+  node scripts/pubsub-node.mjs subscribe --node "$node_index" --topic "$moderated_topic" \
+    > "$EVIDENCE_DIR/pubsub-node-$node_index-moderated-subscription.json"
+done
+node test/helpers/registry-observation-assertions.mjs dissemination-ready 3 "$moderated_topic" \
+  > "$EVIDENCE_DIR/moderated-dissemination-readiness.json"
 
-first_response="$(./scripts/events/publish.sh node-1 "$moderated_topic" "phase-0.3 sequence zero")"
+first_response="$(./scripts/events/publish.sh node-1 "$moderated_topic" "event authorization sequence zero")"
 printf '%s\n' "$first_response" | tee "$EVIDENCE_DIR/published-event-sequence-0.json"
 first_event="$(printf '%s' "$first_response" | json_field eventId)"
 first_sequence="$(printf '%s' "$first_response" | json_field sequenceNumber)"
@@ -120,7 +133,7 @@ test "$first_sequence" = "0"
 assert_event_accepted_once pubsub-node-2 "$first_event"
 assert_event_accepted_once pubsub-node-3 "$first_event"
 
-second_response="$(./scripts/events/publish.sh node-1 "$moderated_topic" "phase-0.3 sequence one")"
+second_response="$(./scripts/events/publish.sh node-1 "$moderated_topic" "event authorization sequence one")"
 printf '%s\n' "$second_response" | tee "$EVIDENCE_DIR/published-event-sequence-1.json"
 second_sequence="$(printf '%s' "$second_response" | json_field sequenceNumber)"
 test "$second_sequence" = "1"
@@ -139,7 +152,8 @@ assert_rejected pubsub-node-2 "$tampered_event" "INVALID_SIGNATURE"
 wait_for_log pubsub-node-2 "EVENT_DUPLICATE eventId=$first_event" 60
 "${COMPOSE[@]}" restart pubsub-node-1
 wait_for_log pubsub-node-1 "NODE_STARTED" 90
-wait_for_log pubsub-node-1 "REGISTRY_SYNCED" 90
+node test/helpers/registry-observation-assertions.mjs node-ready 3 pubsub-node-1 \
+  > "$EVIDENCE_DIR/restart-registry-readiness.json"
 ./scripts/events/publish.sh node-1 "$moderated_topic" "after restart" | tee "$EVIDENCE_DIR/sequence-continuity-after-restart.json"
 restart_sequence="$(json_field sequenceNumber < "$EVIDENCE_DIR/sequence-continuity-after-restart.json")"
 test "$restart_sequence" = "3"
@@ -147,7 +161,14 @@ test "$restart_sequence" = "3"
 echo "Creating open topic"
 open_topic="$(./scripts/registry/create-topic.sh node-1 open - - 1 600 | tail -1)"
 echo "$open_topic" | tee "$EVIDENCE_DIR/open-topic-id.txt"
-wait_for_log pubsub-node-2 "$open_topic" 90
+node test/helpers/registry-observation-assertions.mjs node-topic 3 "$open_topic" pubsub-node-2 \
+  > "$EVIDENCE_DIR/pubsub-node-2-open-topic-readiness.json"
+for node_index in 1 2 3; do
+  node scripts/pubsub-node.mjs subscribe --node "$node_index" --topic "$open_topic" \
+    > "$EVIDENCE_DIR/pubsub-node-$node_index-open-subscription.json"
+done
+node test/helpers/registry-observation-assertions.mjs dissemination-ready 3 "$open_topic" \
+  > "$EVIDENCE_DIR/open-dissemination-readiness.json"
 open_response="$(./scripts/events/publish.sh node-2 "$open_topic" "open topic event")"
 printf '%s\n' "$open_response" | tee "$EVIDENCE_DIR/open-topic-publication.json"
 open_event="$(printf '%s' "$open_response" | json_field eventId)"
@@ -173,4 +194,4 @@ cp "$REGISTRY_RUNTIME_DIR/transactions.log" "$EVIDENCE_DIR/registry-transactions
 "${COMPOSE[@]}" down
 ops/infra/devnet/scripts/stop.sh
 
-echo "Phase 0.3 acceptance passed" | tee "$EVIDENCE_DIR/final-result.txt"
+echo "Event authorization and delivery test passed" | tee "$EVIDENCE_DIR/final-result.txt"

@@ -3,9 +3,6 @@ set -euo pipefail
 . "$(dirname "$0")/common.sh"
 . "$ROOT_DIR/scripts/registry/aiken-common.sh"
 
-EVIDENCE_DIR="$ROOT_DIR/implementation-reports/evidence/phase-0.2"
-mkdir -p "$EVIDENCE_DIR"
-
 run_aiken_wsl() {
   command -v wsl.exe >/dev/null 2>&1 || return 1
   command -v cygpath >/dev/null 2>&1 || return 1

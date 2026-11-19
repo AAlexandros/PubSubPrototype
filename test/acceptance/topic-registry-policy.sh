@@ -14,47 +14,23 @@ set -a
 . ops/infra/devnet/versions.env
 set +a
 
-COMPOSE=(docker compose --env-file ops/infra/devnet/versions.env -f ops/infra/phase-0.1/compose.yaml)
-EVIDENCE_DIR="$ROOT_DIR/implementation-reports/evidence/phase-0.2"
+COMPOSE=(docker compose -p topic-registry-policy --env-file ops/infra/devnet/versions.env -f ops/infra/phase-0.1/compose.yaml)
+${COMPOSE[@]} down -v --remove-orphans
+EVIDENCE_DIR="$ROOT_DIR/.tools/test-results/topic-registry-policy"
 REGISTRY_RUNTIME_DIR="$ROOT_DIR/ops/infra/devnet/runtime/registry"
 export REGISTRY_RUNTIME_DIR
 
 rm -rf "$EVIDENCE_DIR" "$REGISTRY_RUNTIME_DIR"
-mkdir -p "$EVIDENCE_DIR" "$REGISTRY_RUNTIME_DIR"
+mkdir -p "$EVIDENCE_DIR"
+
 exec > >(tee "$EVIDENCE_DIR/acceptance-output.log") 2>&1
-
-wait_for_log() {
-  local service="$1"
-  local pattern="$2"
-  local attempts="${3:-120}"
-  local logs
-  for _ in $(seq 1 "$attempts"); do
-    logs="$(compose_logs "$service" 500 2>/dev/null || true)"
-    if printf '%s\n' "$logs" | grep -q "$pattern"; then
-      return 0
-    fi
-    sleep 1
-  done
-  echo "Timed out waiting for $pattern in $service logs" >&2
-  compose_logs "$service" 500 >&2 || true
-  return 1
-}
-
-compose_logs() {
-  local service="$1"
-  local tail_lines="${2:-200}"
-  if command -v timeout >/dev/null 2>&1; then
-    timeout 15s "${COMPOSE[@]}" logs --no-color --tail="$tail_lines" "$service"
-  else
-    "${COMPOSE[@]}" logs --no-color --tail="$tail_lines" "$service"
-  fi
-}
 
 assert_topic_seen_by_all_nodes() {
   local topic_id="$1"
   for service in pubsub-node-1 pubsub-node-2 pubsub-node-3; do
     echo "Waiting for $service to observe topicId=$topic_id"
-    wait_for_log "$service" "$topic_id" 90
+    node test/helpers/registry-observation-assertions.mjs node-topic 3 "$topic_id" "$service" \
+      > "$EVIDENCE_DIR/$service-topic-$topic_id.json"
   done
 }
 
@@ -75,11 +51,13 @@ ops/infra/devnet/scripts/fund-identities.sh | tee "$EVIDENCE_DIR/funded-address-
 
 ./scripts/registry/build.sh
 ./scripts/registry/deploy.sh | tee "$EVIDENCE_DIR/validator-and-policy-identifiers.env"
+./scripts/replication/build.sh
+./scripts/replication/deploy.sh > "$EVIDENCE_DIR/replication-registry-deployment.txt"
 
 "${COMPOSE[@]}" up -d --build --no-deps pubsub-node-1 pubsub-node-2 pubsub-node-3
 for service in pubsub-node-1 pubsub-node-2 pubsub-node-3; do
-  wait_for_log "$service" "NODE_STARTED"
-  wait_for_log "$service" "REGISTRY_SYNCED"
+  node test/helpers/registry-observation-assertions.mjs node-ready 3 "$service" \
+    > "$EVIDENCE_DIR/$service-registry-readiness.json"
 done
 
 echo "Creating topic name=orders signer=node-1"
@@ -140,7 +118,8 @@ for service in pubsub-node-1 pubsub-node-2 pubsub-node-3; do
 done
 
 "${COMPOSE[@]}" restart pubsub-node-1
-wait_for_log pubsub-node-1 "REGISTRY_SYNCED" 90
+node test/helpers/registry-observation-assertions.mjs node-ready 3 pubsub-node-1 \
+  > "$EVIDENCE_DIR/restart-registry-readiness.json"
 "${COMPOSE[@]}" logs pubsub-node-1 > "$EVIDENCE_DIR/restart-cache-rebuild.log"
 
 cp "$REGISTRY_RUNTIME_DIR/transactions.log" "$EVIDENCE_DIR/registry-transactions.log"
@@ -149,4 +128,4 @@ cp "$REGISTRY_RUNTIME_DIR/transactions.log" "$EVIDENCE_DIR/registry-transactions
 "${COMPOSE[@]}" down
 ops/infra/devnet/scripts/stop.sh
 
-echo "Phase 0.2 acceptance passed" | tee "$EVIDENCE_DIR/final-result.txt"
+echo "Topic registry policy test passed" | tee "$EVIDENCE_DIR/final-result.txt"

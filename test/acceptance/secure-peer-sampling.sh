@@ -5,10 +5,14 @@ cd "$ROOT_DIR"
 if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
   export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL="*"
 fi
-EVIDENCE_DIR="$ROOT_DIR/implementation-reports/evidence/phase-0.4"
+EVIDENCE_DIR="$ROOT_DIR/.tools/test-results/secure-peer-sampling"
 mkdir -p "$EVIDENCE_DIR"
+
+
 exec > >(tee "$EVIDENCE_DIR/acceptance-output.log") 2>&1
-COMPOSE=(docker compose --env-file ops/infra/devnet/versions.env -f ops/infra/phase-0.4/compose.yaml)
+COMPOSE=(docker compose -p secure-peer-sampling --env-file ops/infra/devnet/versions.env -f ops/infra/phase-0.4/compose.yaml)
+DEVNET_COMPOSE=(docker compose --env-file ops/infra/devnet/versions.env -f ops/infra/devnet/compose.yaml)
+${COMPOSE[@]} down -v --remove-orphans
 export REGISTRY_RUNTIME_DIR="$ROOT_DIR/ops/infra/devnet/runtime/registry"
 run_gradle() {
   if grep -qi microsoft /proc/version 2>/dev/null; then cmd.exe /c gradlew.bat "$@"; else ./gradlew "$@"; fi
@@ -16,12 +20,31 @@ run_gradle() {
 assert_runtime() {
   local evidence_arg="$EVIDENCE_DIR"
   if command -v cygpath >/dev/null 2>&1; then evidence_arg="$(cygpath -w "$EVIDENCE_DIR")"; fi
-  node scripts/acceptance/phase-0.4.mjs "$1" "$evidence_arg"
+  node test/helpers/peer-sampling-assertions.mjs "$1" "$evidence_arg"
+}
+start_healthy_devnet() {
+  local attempt
+  for attempt in 1 2; do
+    if ops/infra/devnet/scripts/start.sh && \
+        ops/infra/devnet/scripts/wait-healthy.sh > "$EVIDENCE_DIR/devnet-health.json"; then
+      return 0
+    fi
+    "${DEVNET_COMPOSE[@]}" logs --no-color cardano-node \
+      > "$EVIDENCE_DIR/devnet-start-attempt-$attempt.log" 2>&1 || true
+    if [[ "$attempt" == 2 ]] || ! grep -Fq 'node1 was unable to produce any blocks for 45s' \
+        "$EVIDENCE_DIR/devnet-start-attempt-$attempt.log"; then
+      echo "Cardano devnet startup failed on attempt $attempt" >&2
+      return 1
+    fi
+    echo "Retrying Cardano devnet after its block-production timeout" >&2
+    "${DEVNET_COMPOSE[@]}" down -v --remove-orphans
+    assert_runtime prepare-devnet
+  done
 }
 wait_log() {
   local service="$1" pattern="$2"
   for _ in $(seq 1 90); do
-    "${COMPOSE[@]}" logs --no-color --tail=2000 "$service" > "$EVIDENCE_DIR/$service-current.log" 2>&1
+    "${COMPOSE[@]}" logs --no-color "$service" > "$EVIDENCE_DIR/$service-current.log" 2>&1
     if grep -q "$pattern" "$EVIDENCE_DIR/$service-current.log"; then return; fi
     sleep 1
   done
@@ -29,12 +52,18 @@ wait_log() {
 }
 finish() {
   local status=$?
+  local cleanup_status=0
+  trap - EXIT
   for n in 1 2 3; do
     "${COMPOSE[@]}" logs --no-color "pubsub-node-$n" > "$EVIDENCE_DIR/node-$n-final.log" 2>&1 || true
     grep 'SECURECYCLON_' "$EVIDENCE_DIR/node-$n-final.log" > "$EVIDENCE_DIR/node-$n-gossip.log" || true
   done
-  grep 'SECURECYCLON_EXCHANGE_REJECTED' "$EVIDENCE_DIR/node-1-final.log" > "$EVIDENCE_DIR/invalid-exchange-rejection.log" || true
-  if [[ "$status" != 0 ]]; then echo "Phase 0.4 acceptance FAILED ($status)" > "$EVIDENCE_DIR/final-result.txt"; fi
+  grep 'PEER_DISCONNECTED.*Invalid peer identity' "$EVIDENCE_DIR/node-1-final.log" > "$EVIDENCE_DIR/invalid-identity-rejection.log" || true
+  "${COMPOSE[@]}" down -v --remove-orphans > "$EVIDENCE_DIR/cleanup.log" 2>&1 || cleanup_status=$?
+  ops/infra/devnet/scripts/reset.sh --no-init >> "$EVIDENCE_DIR/cleanup.log" 2>&1 || cleanup_status=$?
+  if [[ "$status" == 0 ]]; then status="$cleanup_status"; fi
+  if [[ "$status" != 0 ]]; then echo "Secure peer sampling test FAILED ($status)" > "$EVIDENCE_DIR/final-result.txt"; fi
+  exit "$status"
 }
 trap finish EXIT
 
@@ -51,14 +80,15 @@ done
 "${COMPOSE[@]}" stop pubsub-node-1 pubsub-node-2 pubsub-node-3
 docker compose --env-file ops/infra/devnet/versions.env -f ops/infra/devnet/compose.yaml down
 assert_runtime prepare-devnet
-ops/infra/devnet/scripts/start.sh
-ops/infra/devnet/scripts/wait-healthy.sh > "$EVIDENCE_DIR/devnet-health.json"
+start_healthy_devnet
 ops/infra/devnet/scripts/fund-identities.sh > "$EVIDENCE_DIR/funded-address-balances.txt"
 ./scripts/registry/build.sh
 ./scripts/registry/deploy.sh > "$EVIDENCE_DIR/deployment.txt"
+./scripts/replication/build.sh
+./scripts/replication/deploy.sh > "$EVIDENCE_DIR/replication-registry-deployment.txt"
 
 "${COMPOSE[@]}" up -d --build --force-recreate --no-deps pubsub-node-1 pubsub-node-2 pubsub-node-3
-for n in 1 2 3; do wait_log "pubsub-node-$n" PEER_SAMPLING_STARTED; done
+for n in 1 2 3; do wait_log "pubsub-node-$n" NODE_STARTED; done
 assert_runtime initial
 assert_runtime converge
 for n in 1 2 3; do
@@ -71,19 +101,12 @@ assert_runtime removed
 sleep 3
 assert_runtime restarted
 assert_runtime invalid
-wait_log pubsub-node-1 'SECURECYCLON_EXCHANGE_REJECTED.*reason=Request requires one fresh sender link first'
+wait_log pubsub-node-1 'PEER_DISCONNECTED.*Invalid peer identity'
 
-# Exercise the existing on-chain registry and signed Phase 0.3 event path after convergence.
-topic="$(./scripts/registry/create-topic.sh node-1 open "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 3 3600 | tail -1)"
-echo "$topic" > "$EVIDENCE_DIR/event-topic-id.txt"
-sleep 4
-./scripts/events/publish.sh node-2 "$topic" 'phase-0.4-after-convergence' > "$EVIDENCE_DIR/published-event.json"
-event_id="$(node -e 'const fs=require("fs"); console.log(JSON.parse(fs.readFileSync(0,"utf8")).eventId)' < "$EVIDENCE_DIR/published-event.json")"
-for n in 1 3; do wait_log "pubsub-node-$n" "EVENT_ACCEPTED eventId=$event_id"; done
 health_since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 sleep 7
 for n in 1 2 3; do
   "${COMPOSE[@]}" logs --no-color --since "$health_since" "pubsub-node-$n" > "$EVIDENCE_DIR/node-$n-health-after-convergence.log"
   grep -q PONG_RECEIVED "$EVIDENCE_DIR/node-$n-health-after-convergence.log"
 done
-echo 'Phase 0.4 acceptance passed' | tee "$EVIDENCE_DIR/final-result.txt"
+echo 'Secure peer sampling test passed' | tee "$EVIDENCE_DIR/final-result.txt"

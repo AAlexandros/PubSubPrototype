@@ -143,11 +143,11 @@ testbed's node command endpoints on `127.0.0.1:8001...` and collect logs from
 this repository's running services. `scripts/testbed/collect-logs.sh` captures
 a diagnostic bundle; pass an output directory to store it with an experiment.
 
-## Acceptance
+## Tests
 
-Prototype regression checks remain under `scripts/acceptance/`. Some acceptance
-flows reset the devnet and testbed volumes, so run them only when that local
-state can be discarded.
+System and integration tests live under [`test/`](test/README.md). The full test
+suite resets local devnet state and may remove Compose volumes, so run it only
+when that local testbed data can be discarded.
 
 ## Repository map
 

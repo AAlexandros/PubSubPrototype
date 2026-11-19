@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {nativePath} from '../../scripts/lib/paths.mjs';
 
-const [mode, evidence, arg1, arg2] = process.argv.slice(2);
+const [mode, rawEvidence, arg1, arg2] = process.argv.slice(2);
+const evidence = nativePath(rawEvidence);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-const save = (name, data) => fs.writeFileSync(`${evidence}/${name}.json`, JSON.stringify(data, null, 2) + '\n');
+const save = (name, data) => fs.writeFileSync(path.join(evidence, `${name}.json`), JSON.stringify(data, null, 2) + '\n');
 
 async function json(url, options) {
   const response = await fetch(url, options);
@@ -54,6 +56,19 @@ if (mode === 'prepare-devnet') {
 } else if (mode === 'subscribe') {
   const result = await json(`http://127.0.0.1:800${arg1}/v1/subscriptions/${arg2}`, {method: 'POST'});
   save(`subscribe-node-${arg1}-${arg2.slice(0, 8)}`, result);
+} else if (mode === 'replication-ready') {
+  await wait(async () => {
+    const server = await json('http://127.0.0.1:8101/v1/ops/health');
+    const nodes = await Promise.all([1, 2, 3].map(node =>
+      json(`http://127.0.0.1:800${node}/v1/ops/registry`)));
+    if (server.serverId !== arg1 || server.registries?.topic !== 'FRESH'
+        || server.registries?.replication !== 'FRESH'
+        || server.membership?.length !== 1 || server.membership[0].serverId !== arg1
+        || !nodes.every(state => state.topic === 'FRESH' && state.replication === 'FRESH'
+          && state.members?.length === 1 && state.members[0].endpoint?.serverId === arg1)) return false;
+    save('replication-readiness', {server, nodes});
+    return true;
+  });
 } else if (mode === 'navigation-candidates') {
   await wait(async () => {
     const views = await Promise.all([1, 2, 3].map(navigation));
@@ -90,7 +105,7 @@ if (mode === 'prepare-devnet') {
     return true;
   });
 } else if (mode === 'rejoin') {
-  const initial = JSON.parse(fs.readFileSync(`${evidence}/converged-dissemination-views.json`, 'utf8'));
+  const initial = JSON.parse(fs.readFileSync(path.join(evidence, 'converged-dissemination-views.json'), 'utf8'));
   const expectedNodeThree = initial[2].nodeId;
   await wait(async () => {
     const views = await Promise.all([1, 2, 3].map(n => dissemination(n, arg1)));

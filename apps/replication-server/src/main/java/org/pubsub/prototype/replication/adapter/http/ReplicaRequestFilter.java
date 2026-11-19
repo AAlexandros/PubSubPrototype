@@ -9,6 +9,7 @@ import org.pubsub.prototype.auth.HttpRequestAuthenticator;
 import org.pubsub.prototype.auth.ReplicationHttpRequestSignatures;
 import org.pubsub.prototype.http.ApiPaths;
 import org.pubsub.prototype.http.HttpRequestBodyReader;
+import org.pubsub.prototype.registry.RegistryUnavailableException;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -40,6 +41,8 @@ public final class ReplicaRequestFilter implements ContainerRequestFilter {
                             context.getHeaderString(ReplicationHttpRequestSignatures.SIGNATURE_HEADER));
             authenticator.authenticate(new HttpRequestAuthenticator.Request(
                     context.getMethod(), path, body, signatureHeaders));
+        } catch (RegistryUnavailableException ex) {
+            throw ex;
         } catch (RuntimeException ex) {
             throw new SecurityException("invalid replication caller", ex);
         }

@@ -34,6 +34,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /**
@@ -66,6 +67,7 @@ public final class PubSubNodeApplication implements AutoCloseable {
 
     private final PubSubTransport transport;
     private final CountDownLatch stopped = new CountDownLatch(1);
+    private final AtomicBoolean closing = new AtomicBoolean();
 
     // Creates an HTTP API for sending commands to this node and inspecting its
     // state. The testbed exposes this port on the host's loopback interface.
@@ -201,6 +203,7 @@ public final class PubSubNodeApplication implements AutoCloseable {
 
     @Override
     public void close() {
+        if (!closing.compareAndSet(false, true)) return;
         try {
             controlAdapter.close();
             topics.close();

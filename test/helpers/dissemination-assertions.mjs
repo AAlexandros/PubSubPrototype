@@ -42,9 +42,9 @@ function verifyRing(views) {
 
 if (mode === 'prepare-devnet') {
   const root = fs.realpathSync(process.cwd());
-  const backup = path.resolve(root, '.tools', 'phase-0.6-devnet-backups', String(Date.now()));
+  const backup = path.resolve(root, '.tools', 'topic-dissemination-repair-devnet-backups', String(Date.now()));
   for (const name of ['runtime', 'keys', 'state']) {
-    const source = path.resolve(root, 'ops', 'infra', 'devnet', name);
+    const source = path.resolve(root, 'test', 'devnet', name);
     const target = path.resolve(backup, name);
     if (!source.startsWith(root + path.sep) || !target.startsWith(root + path.sep)) throw Error('Unsafe archive path');
     if (fs.existsSync(source)) {

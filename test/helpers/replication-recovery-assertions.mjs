@@ -44,9 +44,9 @@ function responsible(key, membership, factor) {
 
 if (mode === 'prepare-devnet') {
   const root = fs.realpathSync(process.cwd());
-  const backup = path.resolve(root, '.tools', 'phase-0.7-devnet-backups', String(Date.now()));
+  const backup = path.resolve(root, '.tools', 'subscriber-local-catch-up-devnet-backups', String(Date.now()));
   for (const name of ['runtime', 'keys', 'state']) {
-    const source = path.resolve(root, 'ops', 'infra', 'devnet', name);
+    const source = path.resolve(root, 'test', 'devnet', name);
     if (fs.existsSync(source)) {
       if (fs.lstatSync(source).isSymbolicLink()) throw Error('refusing to archive a devnet symlink');
       fs.mkdirSync(backup, {recursive: true});

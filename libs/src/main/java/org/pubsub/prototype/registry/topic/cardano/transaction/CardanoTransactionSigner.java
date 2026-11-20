@@ -4,8 +4,6 @@ import org.pubsub.prototype.cardano.cli.CardanoCommandRunner;
 import org.pubsub.prototype.cardano.cli.transaction.CardanoPaymentIdentity;
 import org.pubsub.prototype.registry.topic.cardano.CardanoRegistryConfig;
 
-import java.nio.file.Path;
-
 /** Provides the configured local identity used to fund and sign registry transactions. */
 public final class CardanoTransactionSigner {
     private final CardanoRegistryConfig config;
@@ -31,8 +29,7 @@ public final class CardanoTransactionSigner {
     /** Returns the configured local signing identity, loading it lazily. */
     public synchronized CardanoPaymentIdentity identity() {
         if (identity == null) {
-            Path keysDirectory = config.runtimeDir().toAbsolutePath().getParent().getParent().resolve("keys");
-            identity = CardanoPaymentIdentity.load(keysDirectory, config.signer());
+            identity = CardanoPaymentIdentity.load(config.keysDirectory(), config.signer());
         }
         return identity;
     }

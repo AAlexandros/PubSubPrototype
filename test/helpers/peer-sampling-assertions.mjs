@@ -11,10 +11,15 @@ async function views(nodes = [1, 2, 3]) {
     const response = await fetch(`http://127.0.0.1:800${n}/v1/peer-sampling/view`);
     if (!response.ok) throw Error(`View request failed: ${response.status}`);
     const value = await response.json();
-    if (!Number.isInteger(value.capacity) || value.capacity !== 2 || !Array.isArray(value.view)
-        || value.view.length > value.capacity || new Set(value.view.map(p => p.nodeId)).size !== value.view.length
-        || value.view.some(p => p.nodeId === value.nodeId || !/^[a-f0-9]{64}$/.test(p.nodeId)
-          || !p.host || !Number.isInteger(p.port) || p.port < 1 || p.port > 65535)) throw Error('Invalid view');
+    // SecureCyclon may hold distinct descriptors for the same peer endpoint.
+    if (!/^[a-f0-9]{64}$/.test(value.nodeId)
+        || !Number.isInteger(value.capacity) || value.capacity !== 2 || !Array.isArray(value.view)
+        || value.view.length > value.capacity
+        || value.view.some(p => !p || p.nodeId === value.nodeId || !/^[a-f0-9]{64}$/.test(p.nodeId)
+          || typeof p.host !== 'string' || !p.host
+          || !Number.isInteger(p.port) || p.port < 1 || p.port > 65535)) {
+      throw Error(`Invalid view from node-${n}: ${JSON.stringify(value)}`);
+    }
     return value;
   }));
 }
@@ -31,9 +36,9 @@ function save(name, data) { fs.writeFileSync(`${evidence}/${name}.json`, JSON.st
 if (mode === 'prepare-devnet') {
   // Preserve old generated keys/state outside evidence; all rename targets stay inside this checkout.
   const root = fs.realpathSync(process.cwd());
-  const backup = path.resolve(root, '.tools', 'phase-0.4-devnet-backups', String(Date.now()));
+  const backup = path.resolve(root, '.tools', 'secure-peer-sampling-devnet-backups', String(Date.now()));
   for (const name of ['runtime', 'keys', 'state']) {
-    const source = path.resolve(root, 'ops', 'infra', 'devnet', name);
+    const source = path.resolve(root, 'test', 'devnet', name);
     const target = path.resolve(backup, name);
     if (!source.startsWith(root + path.sep) || !target.startsWith(root + path.sep)) throw Error('Unsafe archive path');
     if (fs.existsSync(source)) {
@@ -72,7 +77,7 @@ if (mode === 'prepare-devnet') {
   });
 } else if (mode === 'invalid') {
   const before = await views(); save('before-invalid-identity', before);
-  const fake = crypto.createHash('sha256').update('phase-0.4-invalid-identity').digest('hex');
+  const fake = crypto.createHash('sha256').update('secure-peer-sampling-invalid-identity').digest('hex');
   const frame = message => {
     const body = Buffer.from(JSON.stringify(message));
     const header = Buffer.alloc(4); header.writeUInt32BE(body.length); return Buffer.concat([header, body]);
@@ -106,4 +111,4 @@ if (mode === 'prepare-devnet') {
   if (after.some(n => n.view.some(p => p.nodeId === fake))) throw Error('Invalid sender entered view');
   save('after-invalid-identity', after);
 } else throw Error(`Unknown mode ${mode}`);
-console.log(`Phase 0.4 assertion passed: ${mode}`);
+console.log(`Secure peer sampling assertion passed: ${mode}`);

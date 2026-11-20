@@ -1,182 +1,57 @@
 # Cardano Pub/Sub Prototype
 
-A Java 21 prototype of a decentralized, topic-based publish/subscribe system.
-Cardano provides the control plane for topic and replication-server registries;
-live event payloads travel between Pub/Sub nodes and are stored by independent
-replication servers for later recovery.
+A Java 21 publish/subscribe client with Cardano registries for topic policy and
+replication server membership. Pub/Sub nodes deliver events over a Netty peer
+network. Replication servers store events for recovery; event payloads are not
+written to Cardano.
 
-The current implementation includes subscriber-local event history and automatic
-restart catch-up. A local testbed can run 3-50 Pub/Sub JVMs, three replication
-servers, and a Cardano devnet.
+## Client components
 
-## System at a glance
+| Path | Purpose |
+| --- | --- |
+| [`apps/pubsub-node`](apps/pubsub-node) | Runnable node, local HTTP command adapter, peer overlays, delivery, and recovery. |
+| [`apps/replication-server`](apps/replication-server) | Runnable event storage server, placement, repair, and recovery HTTP API. |
+| [`libs`](libs) | Shared protocol, Cardano, registry, transport, and persistence code. |
+| [`contracts`](contracts) | Aiken Topic and Replication Registry contracts. |
+| [`scripts`](scripts/README.md) | Node HTTP client and Cardano registry operator commands. |
+| [`documentation`](documentation/deployment.md) | Deployment, command, and protocol guides. |
+| [`test`](test/README.md) | Unit tests, local Cardano devnet, integrated testbed, fixtures, and acceptance scenarios. |
 
-The system has four cooperating planes:
+## Build the client
 
-- **Control:** two Aiken/Cardano registries describe topics, authorization,
-  replication factors, and active replication servers.
-- **Live delivery:** Pub/Sub nodes use SecureCyclon peer sampling, Navigation,
-  and topic-specific Dissemination overlays over Netty connections.
-- **Persistence:** publishing nodes send signed events to replication servers;
-  deterministic placement, repair, and release maintain the requested replicas.
-- **Observation:** local HTTP endpoints and node logs expose runtime activity
-  for inspection and external experiments.
-
-Event payloads are not written to Cardano.
-
-## Prerequisites
-
-- JDK 21.
-- Docker with Docker Compose and the Linux container engine.
-- Bash (`Git Bash` or WSL on Windows) for repository scripts.
-- Node.js 18 or newer for testbed generation and local node commands.
-
-Cardano and Aiken versions are pinned by the repository. The testbed scripts
-use locally installed Cardano tools when available and otherwise use Docker.
-The [Cardano CLI command reference](documentation/cardano-cli.md) documents the
-host and Docker execution forms and every CLI command used by the prototype.
-
-## Build and test
-
-From Bash:
+Install JDK 21. Use the included Gradle wrapper from the repository root:
 
 ```bash
-./gradlew --gradle-user-home .gradle-user-home test
+./gradlew :apps:pubsub-node:installDist :apps:replication-server:installDist
 ```
 
-From Windows PowerShell:
+On Windows PowerShell, use `./gradlew.bat` with the same tasks. Dependencies
+are declared in [`gradle/libs.versions.toml`](gradle/libs.versions.toml).
+The installed applications are under each app's `build/install/` directory.
 
-```powershell
-.\gradlew.bat -g .gradle-user-home test
-```
+## Operate on a Cardano network
 
-Dependencies are declared once in
-[`gradle/libs.versions.toml`](gradle/libs.versions.toml). No system Gradle
-installation is required.
+The [deployment guide](documentation/deployment.md) covers Cardano node access,
+signer keys, contract deployment, topic creation, server registration, and
+application configuration. Registry administration uses signed Cardano
+transactions through [`scripts/registry/`](scripts/registry/) and
+[`scripts/replication/`](scripts/replication/). The scripts use the host
+`cardano-cli` by default. They are part of the operator workflow; the node's
+HTTP API is for publishing, subscriptions, and runtime inspection.
 
-## Run the integrated testbed
-
-Run lifecycle commands from Bash at the repository root.
+The local node command client is [`scripts/pubsub-node.mjs`](scripts/pubsub-node.mjs):
 
 ```bash
-# First start; bootstraps Cardano, deploys registries, and creates the topology.
-./scripts/testbed/up.sh --nodes 3
-
-# Inspect processes and API health, or follow logs.
-./scripts/testbed/status.sh
-./scripts/testbed/logs.sh
-
-# Stop containers while retaining identities and server data.
-./scripts/testbed/down.sh
-```
-
-Each Pub/Sub node writes logs under
-`.tools/phase-0.9/logs/node-<n>/` while the testbed runs:
-
-- `node.log` contains the complete Java log.
-- `initialization.log` shows configuration, component construction, startup,
-  and listening addresses.
-- `network.log` contains API calls, peer connections, and protocol exchanges.
-  Each file belongs to one node, so local IDs are omitted. Peer and topic IDs
-  usually use four characters in the focused logs. Entries show the component's
-  class name.
-
-Match `callId` for an API request and response, `requestId` for a peer exchange,
-and `eventId` for an event across nodes. `./scripts/testbed/collect-logs.sh`
-copies these files into `node-logs/` alongside the combined Compose log. When
-running a node outside the testbed, the default files are
-`<identityPath>/node.log`, `initialization.log`, and `network.log`; override
-their paths with `NODE_LOG_FILE`, `NODE_INIT_LOG_FILE`, and
-`NODE_NETWORK_LOG_FILE`. Payload bytes and signatures are summarized instead
-of logged. Logger names are printed in full; thread names such as
-`nioEventLoopGroup-3-3` identify Netty's I/O worker group and worker index.
-
-`up.sh` accepts 3-50 Pub/Sub nodes and reuses an existing compatible bootstrap.
-The first run can take several minutes because it builds distributions and
-images, initializes the devnet, funds operators, and submits registry
-transactions.
-
-Default host ports are:
-
-| Service | Host ports | Purpose |
-| --- | --- | --- |
-| Pub/Sub transport | `7001...` | Node-to-node Netty protocol |
-| Local node commands | `8001...` | Host-loopback adapter used by the `pubsub-node` CLI |
-| Replication API | `8101`-`8103` | Storage, lookup, maintenance, and health |
-
-Use one CLI for local node commands and inspection. The testbed publishes its
-node command ports only on `127.0.0.1`; no operator key is needed for these
-local requests.
-
-```bash
-node scripts/pubsub-node.mjs status --node 1
-node scripts/pubsub-node.mjs subscribe --node 2 --topic <topic-id>
-node scripts/pubsub-node.mjs publish --node 1 --topic <topic-id> --payload "hello"
-node scripts/pubsub-node.mjs events --node 2 --topic <topic-id>
-node scripts/pubsub-node.mjs event --node 2 --event <event-id>
-node scripts/pubsub-node.mjs catch-up-status --node 2
+node scripts/pubsub-node.mjs status --url http://127.0.0.1:8000
+node scripts/pubsub-node.mjs subscribe --url http://127.0.0.1:8000 --topic <topic-id>
+node scripts/pubsub-node.mjs publish --url http://127.0.0.1:8000 --topic <topic-id> --payload "hello"
 ```
 
 See the [node command reference](documentation/node-cli.md) for all commands
-and options. Node-to-node traffic continues to use the Netty transport on port
-`7000`; the local command adapter is not a peer protocol.
+and address options.
 
-Subscribed nodes persist complete event envelopes on their own node volume and
-automatically catch up from replication servers after restart. User event reads
-come from that local store. Subscriber-local files have no automatic pruning;
-replication-server topic retention bounds how long missed events remain recoverable.
+## Local development and tests
 
-To discard generated runtime state and Docker volumes:
-
-```bash
-./scripts/testbed/reset.sh
-```
-
-This is intentionally destructive for local testbed/devnet state.
-
-## External experiments
-
-Experiment workloads, datasets, aggregation, plots, and results belong in the
-separate [PubSubPrototype-Experiments](https://github.com/AAlexandros/PubSubPrototype-Experiments)
-repository. Its scripts can call the
-testbed's node command endpoints on `127.0.0.1:8001...` and collect logs from
-this repository's running services. `scripts/testbed/collect-logs.sh` captures
-a diagnostic bundle; pass an output directory to store it with an experiment.
-
-## Tests
-
-System and integration tests live under [`test/`](test/README.md). The full test
-suite resets local devnet state and may remove Compose volumes, so run it only
-when that local testbed data can be discarded.
-
-## Repository map
-
-| Path | Responsibility |
-| --- | --- |
-| [`apps/pubsub-node`](apps/pubsub-node) | Runnable node: configuration, local command adapter, overlays, event validation/delivery, persistence and recovery integration |
-| [`apps/replication-server`](apps/replication-server) | Runnable storage server: HTTP API, replica placement, failure detection, repair, and safe release |
-| [`libs`](libs) | One Gradle library project with separate Java packages for sampling, navigation, dissemination, events, protocol, Netty transport, registry, persistence, HTTP, and shared utilities |
-| [`contracts`](contracts) | Topic and replication registry Aiken contracts |
-| [`ops/config`](ops/config) | Checked-in node, server, and testbed configuration |
-| [`ops/infra/devnet`](ops/infra/devnet) | Local Cardano network definition and lifecycle tooling |
-| [`scripts`](scripts) | Registry, replication, event, testbed, and acceptance entrypoints |
-
-## Configuration and generated state
-
-- [`ops/config/phase-0.9/testbed.yaml`](ops/config/phase-0.9/testbed.yaml) is the
-  source configuration for generated topologies.
-- `.tools/phase-0.9/` contains generated Compose and per-process configuration;
-  do not edit it as source.
-- `ops/infra/devnet/runtime/`, `state/`, and `keys/` contain generated local
-  Cardano state and credentials. They are ignored by Git.
-- Legacy local `results/` output and acceptance evidence are ignored by Git.
-- Pub/Sub identities and replication data live in Docker volumes so ordinary
-  `down`/`up` cycles retain them.
-
-## Where to read next
-
-- [Complete script reference](documentation/scripts.md) - lifecycle, registry,
-  event, testbed, and acceptance commands.
-- [Cardano CLI command reference](documentation/cardano-cli.md) - every
-  `cardano-cli` invocation, its purpose, and its host or Docker execution form.
-- [Node command reference](documentation/node-cli.md) - local HTTP command usage.
+The [test guide](test/README.md) explains the Docker devnet, integrated
+testbed, Java and Node tests, and acceptance scenarios. The client applications,
+contracts, libraries, and operator commands build without `test/`.

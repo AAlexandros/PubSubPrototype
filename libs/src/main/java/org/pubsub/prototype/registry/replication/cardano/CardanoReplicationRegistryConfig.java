@@ -28,14 +28,11 @@ public record CardanoReplicationRegistryConfig(Path runtimeDir, String signer, C
     }
 
     public Path projectRoot() {
-        Path devnetDir = runtimeDir.toAbsolutePath().normalize().getParent().getParent();
-        Path opsDir = devnetDir.getParent().getParent();
-        Path projectRoot = opsDir.getParent();
-        if (projectRoot == null) throw new IllegalStateException("Unable to derive project root from " + runtimeDir);
-        return projectRoot;
+        return Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
     }
 
     public Path keysDirectory() {
-        return runtimeDir.toAbsolutePath().normalize().getParent().getParent().resolve("keys");
+        Path parent = runtimeDir.toAbsolutePath().normalize().getParent();
+        return (cliBackend == CardanoCliBackend.DEVNET ? parent.getParent() : parent).resolve("keys");
     }
 }

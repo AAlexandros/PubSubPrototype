@@ -49,9 +49,9 @@ function candidateCount(view) {
 
 if (mode === 'prepare-devnet') {
   const root = fs.realpathSync(process.cwd());
-  const backup = path.resolve(root, '.tools', 'phase-0.5-devnet-backups', String(Date.now()));
+  const backup = path.resolve(root, '.tools', 'topic-navigation-devnet-backups', String(Date.now()));
   for (const name of ['runtime', 'keys', 'state']) {
-    const source = path.resolve(root, 'ops', 'infra', 'devnet', name);
+    const source = path.resolve(root, 'test', 'devnet', name);
     const target = path.resolve(backup, name);
     if (!source.startsWith(root + path.sep) || !target.startsWith(root + path.sep)) throw Error('Unsafe archive path');
     if (fs.existsSync(source)) {
@@ -145,4 +145,4 @@ if (mode === 'prepare-devnet') {
     save('topic-deleted-views', current); return true;
   });
 } else throw Error(`Unknown mode ${mode}`);
-console.log(`Phase 0.5 assertion passed: ${mode}`);
+console.log(`Topic navigation assertion passed: ${mode}`);

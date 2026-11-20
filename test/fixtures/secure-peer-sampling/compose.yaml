@@ -1,0 +1,72 @@
+name: secure-peer-sampling
+services:
+  cardano-node:
+    extends:
+      file: ../../../test/devnet/compose.yaml
+      service: cardano-node
+
+  pubsub-node-1:
+    build:
+      context: ../../..
+      dockerfile: apps/pubsub-node/Dockerfile
+    depends_on:
+      - cardano-node
+    command: ["/config/node-1.yaml"]
+    environment:
+      CARDANO_NETWORK_MAGIC: ${CARDANO_NETWORK_MAGIC:-42}
+      CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock
+    volumes:
+      - ./node-1.yaml:/config/node-1.yaml:ro
+      - ../../../test/devnet/runtime/registry:/registry
+      - ../../../test/devnet/runtime/replication-registry:/replication-registry:ro
+      - ../../../test/devnet/runtime/testnet/socket:/node-socket:ro
+      - pubsub-node-1-identity:/data/identity
+    ports:
+      - "7001:7000"
+      - "127.0.0.1:8001:8000"
+
+  pubsub-node-2:
+    build:
+      context: ../../..
+      dockerfile: apps/pubsub-node/Dockerfile
+    depends_on:
+      - cardano-node
+    command: ["/config/node-2.yaml"]
+    environment:
+      CARDANO_NETWORK_MAGIC: ${CARDANO_NETWORK_MAGIC:-42}
+      CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock
+    volumes:
+      - ./node-2.yaml:/config/node-2.yaml:ro
+      - ../../../test/devnet/runtime/registry:/registry
+      - ../../../test/devnet/runtime/replication-registry:/replication-registry:ro
+      - ../../../test/devnet/runtime/testnet/socket:/node-socket:ro
+      - pubsub-node-2-identity:/data/identity
+    ports:
+      - "7002:7000"
+      - "127.0.0.1:8002:8000"
+
+  pubsub-node-3:
+    build:
+      context: ../../..
+      dockerfile: apps/pubsub-node/Dockerfile
+    depends_on:
+      - cardano-node
+    command: ["/config/node-3.yaml"]
+    environment:
+      CARDANO_NETWORK_MAGIC: ${CARDANO_NETWORK_MAGIC:-42}
+      CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock
+    volumes:
+      - ./node-3.yaml:/config/node-3.yaml:ro
+      - ../../../test/devnet/runtime/registry:/registry
+      - ../../../test/devnet/runtime/replication-registry:/replication-registry:ro
+      - ../../../test/devnet/runtime/testnet/socket:/node-socket:ro
+      - pubsub-node-3-identity:/data/identity
+    ports:
+      - "7003:7000"
+      - "127.0.0.1:8003:8000"
+
+volumes:
+  cardano-devnet-state:
+  pubsub-node-1-identity:
+  pubsub-node-2-identity:
+  pubsub-node-3-identity:

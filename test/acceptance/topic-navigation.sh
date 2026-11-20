@@ -2,6 +2,7 @@
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+. test/helpers/devnet-env.sh
 if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
   export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL="*"
 fi
@@ -10,9 +11,9 @@ mkdir -p "$EVIDENCE_DIR"
 
 
 exec > >(tee "$EVIDENCE_DIR/acceptance-output.log") 2>&1
-COMPOSE=(docker compose -p topic-navigation --env-file ops/infra/devnet/versions.env -f ops/infra/phase-0.5/compose.yaml)
+COMPOSE=(docker compose -p topic-navigation --env-file test/devnet/versions.env -f test/fixtures/topic-navigation/compose.yaml)
 ${COMPOSE[@]} down -v --remove-orphans
-export REGISTRY_RUNTIME_DIR="$ROOT_DIR/ops/infra/devnet/runtime/registry"
+export REGISTRY_RUNTIME_DIR="$ROOT_DIR/test/devnet/runtime/registry"
 run_gradle() {
   if grep -qi microsoft /proc/version 2>/dev/null; then cmd.exe /c gradlew.bat "$@"; else ./gradlew "$@"; fi
 }
@@ -39,7 +40,7 @@ finish() {
     grep 'NAVIGATION_' "$EVIDENCE_DIR/node-$n-final.log" > "$EVIDENCE_DIR/node-$n-navigation-gossip.log" || true
   done
   "${COMPOSE[@]}" down -v --remove-orphans > "$EVIDENCE_DIR/cleanup.log" 2>&1 || cleanup_status=$?
-  ops/infra/devnet/scripts/reset.sh --no-init >> "$EVIDENCE_DIR/cleanup.log" 2>&1 || cleanup_status=$?
+  test/devnet/reset.sh --no-init >> "$EVIDENCE_DIR/cleanup.log" 2>&1 || cleanup_status=$?
   if [[ "$status" == 0 ]]; then status="$cleanup_status"; fi
   if [[ "$status" != 0 ]]; then echo "Topic navigation test FAILED ($status)" > "$EVIDENCE_DIR/final-result.txt"; fi
   exit "$status"
@@ -47,22 +48,21 @@ finish() {
 trap finish EXIT
 
 run_gradle build :apps:pubsub-node:installDist
-cp ops/config/phase-0.5/node-*.yaml "$EVIDENCE_DIR/"
+cp test/fixtures/topic-navigation/node-*.yaml "$EVIDENCE_DIR/"
 "${COMPOSE[@]}" config > "$EVIDENCE_DIR/bootstrap-compose.yaml"
 # Fail if either leaf includes the other in its configured seed list (asymmetric peer bootstrap).
-tr -d '\r' < ops/config/phase-0.5/node-1.yaml | grep -qx 'peers: \[\]'
+tr -d '\r' < test/fixtures/topic-navigation/node-1.yaml | grep -qx 'peers: \[\]'
 for n in 2 3; do
-  sed -n '/^peers:/,/^transport:/p' "ops/config/phase-0.5/node-$n.yaml" > "$EVIDENCE_DIR/node-$n-bootstrap.txt"
+  sed -n '/^peers:/,/^transport:/p' "test/fixtures/topic-navigation/node-$n.yaml" > "$EVIDENCE_DIR/node-$n-bootstrap.txt"
   test "$(grep -c 'host:' "$EVIDENCE_DIR/node-$n-bootstrap.txt")" = 1
   grep -q 'host: pubsub-node-1' "$EVIDENCE_DIR/node-$n-bootstrap.txt"
 done
 
 "${COMPOSE[@]}" stop pubsub-node-1 pubsub-node-2 pubsub-node-3 || true
-docker compose --env-file ops/infra/devnet/versions.env -f ops/infra/devnet/compose.yaml down
+docker compose --env-file test/devnet/versions.env -f test/devnet/compose.yaml down
 assert_runtime prepare-devnet
-ops/infra/devnet/scripts/start.sh
-ops/infra/devnet/scripts/wait-healthy.sh > "$EVIDENCE_DIR/devnet-health.json"
-ops/infra/devnet/scripts/fund-identities.sh > "$EVIDENCE_DIR/funded-address-balances.txt"
+start_fresh_devnet > "$EVIDENCE_DIR/devnet-health.json"
+test/devnet/fund-identities.sh > "$EVIDENCE_DIR/funded-address-balances.txt"
 ./scripts/registry/build.sh
 ./scripts/registry/deploy.sh > "$EVIDENCE_DIR/deployment.txt"
 ./scripts/replication/build.sh
@@ -71,7 +71,7 @@ ops/infra/devnet/scripts/fund-identities.sh > "$EVIDENCE_DIR/funded-address-bala
 # At least five active topics, created and owned by distinct signers.
 declare -a TOPIC_IDS
 for i in 1 2 3 4 5; do
-  topic="$(./scripts/registry/create-topic.sh node-1 "phase-0.5-topic-$i" "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 3 3600 | tail -1)"
+  topic="$(./scripts/registry/create-topic.sh node-1 "topic-navigation-topic-$i" "$(bash ./test/helpers/registry/payment-key-hash.sh node-2)" - 3 3600 | tail -1)"
   TOPIC_IDS+=("$topic")
 done
 printf '%s\n' "${TOPIC_IDS[@]}" > "$EVIDENCE_DIR/active-topic-ordering-input.txt"
@@ -103,7 +103,7 @@ sleep 3
 assert_runtime restarted
 
 # Topic creation/deletion recomputes topic ordering and finger topics without restart.
-new_topic="$(./scripts/registry/create-topic.sh node-1 phase-0.5-topic-created "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 3 3600 | tail -1)"
+new_topic="$(./scripts/registry/create-topic.sh node-1 topic-navigation-topic-created "$(bash ./test/helpers/registry/payment-key-hash.sh node-2)" - 3 3600 | tail -1)"
 assert_runtime topic-created "$new_topic"
 ./scripts/registry/delete-topic.sh node-1 "${TOPIC_IDS[4]}"
 assert_runtime topic-deleted "${TOPIC_IDS[4]}"

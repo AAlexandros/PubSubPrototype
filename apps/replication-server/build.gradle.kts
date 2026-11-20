@@ -18,9 +18,17 @@ application {
     mainClass.set("org.pubsub.prototype.replication.ReplicationServerMain")
 }
 
+sourceSets {
+    test {
+        java.setSrcDirs(listOf("../../test/java/replication-server/java"))
+        resources.setSrcDirs(listOf("../../test/java/replication-server/resources"))
+    }
+}
+
 tasks.register<JavaExec>("runReplicationRegistryCli") {
     group = "application"
     description = "Deploys, queries, or updates the Cardano replication registry."
+    workingDir = rootProject.projectDir
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.pubsub.prototype.replication.registry.cli.ReplicationRegistryCli")
 }

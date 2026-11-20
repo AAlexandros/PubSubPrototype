@@ -2,6 +2,7 @@
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+. test/helpers/devnet-env.sh
 if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
   export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL="*"
 fi
@@ -9,20 +10,20 @@ EVIDENCE_DIR="$ROOT_DIR/.tools/test-results/subscriber-local-catch-up"
 mkdir -p "$EVIDENCE_DIR"
 exec > >(tee "$EVIDENCE_DIR/acceptance-output.log") 2>&1
 set -a
-. "$ROOT_DIR/ops/infra/devnet/versions.env"
+. "$ROOT_DIR/test/devnet/versions.env"
 set +a
-COMPOSE=(docker compose -p subscriber-local-catch-up --env-file ops/infra/devnet/versions.env -f ops/infra/phase-0.7/compose.yaml)
-DEVNET_COMPOSE=(docker compose --env-file ops/infra/devnet/versions.env -f ops/infra/devnet/compose.yaml)
-export REGISTRY_RUNTIME_DIR="$ROOT_DIR/ops/infra/devnet/runtime/registry"
-export REPLICATION_REGISTRY_STATE="$ROOT_DIR/ops/infra/devnet/runtime/replication-registry/servers.json"
+COMPOSE=(docker compose -p subscriber-local-catch-up --env-file test/devnet/versions.env -f test/fixtures/subscriber-local-catch-up/compose.yaml)
+DEVNET_COMPOSE=(docker compose --env-file test/devnet/versions.env -f test/devnet/compose.yaml)
+export REGISTRY_RUNTIME_DIR="$ROOT_DIR/test/devnet/runtime/registry"
+export REPLICATION_REGISTRY_STATE="$ROOT_DIR/test/devnet/runtime/replication-registry/servers.json"
 check() { node test/helpers/local-event-history-assertions.mjs "$1" "$EVIDENCE_DIR" "${@:2}"; }
 setup_check() { node test/helpers/replication-recovery-assertions.mjs "$1" "$EVIDENCE_DIR" "${@:2}"; }
 host_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s\n' "$1"; fi; }
 start_healthy_devnet() {
   local attempt
   for attempt in 1 2; do
-    if ops/infra/devnet/scripts/start.sh && \
-        ops/infra/devnet/scripts/wait-healthy.sh > "$EVIDENCE_DIR/devnet-health.json"; then
+    if test/devnet/start.sh && \
+        test/devnet/wait-healthy.sh > "$EVIDENCE_DIR/devnet-health.json"; then
       return 0
     fi
     "${DEVNET_COMPOSE[@]}" logs --no-color cardano-node \
@@ -71,7 +72,7 @@ finish() {
   if [ "$status" = 0 ]; then
     echo "Subscriber local catch-up test passed; containers stopped and removed" > "$EVIDENCE_DIR/final-result.txt"
   else
-    echo "Subscriber local catch-up test FAILED ($status); cleanup statuses: phase-0-11=$compose_status devnet=$devnet_status" \
+    echo "Subscriber local catch-up test FAILED ($status); cleanup statuses: test-stack=$compose_status devnet=$devnet_status" \
       > "$EVIDENCE_DIR/final-result.txt"
   fi
   exit "$status"
@@ -91,7 +92,7 @@ fi
 "${DEVNET_COMPOSE[@]}" down -v --remove-orphans
 setup_check prepare-devnet
 start_healthy_devnet
-ops/infra/devnet/scripts/fund-identities.sh > "$EVIDENCE_DIR/funded-address-balances.txt"
+test/devnet/fund-identities.sh > "$EVIDENCE_DIR/funded-address-balances.txt"
 ./scripts/registry/build.sh
 ./scripts/registry/deploy.sh > "$EVIDENCE_DIR/topic-registry-deployment.txt"
 ./scripts/replication/build.sh
@@ -99,7 +100,7 @@ ops/infra/devnet/scripts/fund-identities.sh > "$EVIDENCE_DIR/funded-address-bala
 
 ids=()
 for n in 1 2 3; do
-  id="$(./scripts/replication/server-id.sh "ops/infra/devnet/keys/node-$n/payment.vkey")"
+  id="$(./scripts/replication/server-id.sh "test/devnet/keys/node-$n/payment.vkey")"
   if [[ ! "$id" =~ ^[0-9a-f]{64}$ ]]; then
     echo "Invalid server ID from node-$n verification key" >&2
     exit 1
@@ -107,14 +108,14 @@ for n in 1 2 3; do
   ids+=("$id")
 done
 IFS=,; ids_csv="${ids[*]}"; unset IFS
-setup_check server-configs "$ROOT_DIR/ops/infra/devnet/runtime/phase-0.7" "$ids_csv"
+setup_check server-configs "$ROOT_DIR/test/devnet/runtime/subscriber-local-catch-up" "$ids_csv"
 for n in 1 2 3; do
-  ./scripts/replication/register-server.sh "$ROOT_DIR/ops/infra/devnet/runtime/phase-0.7/server-$n.yaml" \
+  ./scripts/replication/register-server.sh "$ROOT_DIR/test/devnet/runtime/subscriber-local-catch-up/server-$n.yaml" \
     > "$EVIDENCE_DIR/registration-$n.txt"
 done
 ./scripts/replication/query-servers.sh > "$EVIDENCE_DIR/on-chain-server-registrations.json"
 
-topic="$(./scripts/registry/create-topic.sh node-1 subscriber-catch-up-topic "$(bash ./scripts/registry/payment-key-hash.sh node-2)" - 2 3600 | tail -1)"
+topic="$(./scripts/registry/create-topic.sh node-1 subscriber-catch-up-topic "$(bash ./test/helpers/registry/payment-key-hash.sh node-2)" - 2 3600 | tail -1)"
 printf '%s\n' "$topic" > "$EVIDENCE_DIR/topic-id.txt"
 "${COMPOSE[@]}" up -d --build --force-recreate replication-server-1 replication-server-2 replication-server-3
 for n in 1 2 3; do wait_log "replication-server-$n" REPLICATION_SERVER_STARTED; done
@@ -129,7 +130,7 @@ done
 node test/helpers/dissemination-assertions.mjs converged "$EVIDENCE_DIR" "$topic" \
   catch-up-dissemination-views
 
-./scripts/events/publish.sh node-1 "$topic" catch-up-sequence-0 > "$EVIDENCE_DIR/published-sequence-0.json"
+node scripts/pubsub-node.mjs publish --node 1 --topic "$topic" --payload catch-up-sequence-0 > "$EVIDENCE_DIR/published-sequence-0.json"
 event_zero="$(node -e 'console.log(require(process.argv[1]).eventId)' "$(host_path "$EVIDENCE_DIR/published-sequence-0.json")")"
 wait_log pubsub-node-3 "EVENT_ACCEPTED eventId=$event_zero"
 setup_check replicas "$ids_csv" "$EVIDENCE_DIR/published-sequence-0.json" initial >/dev/null
@@ -140,7 +141,7 @@ check snapshot "$topic" first-restart
 
 "${COMPOSE[@]}" stop pubsub-node-3
 for sequence in 1 2 3; do
-  ./scripts/events/publish.sh node-1 "$topic" "catch-up-sequence-$sequence" \
+  node scripts/pubsub-node.mjs publish --node 1 --topic "$topic" --payload "catch-up-sequence-$sequence" \
     > "$EVIDENCE_DIR/published-sequence-$sequence.json"
   setup_check replicas "$ids_csv" "$EVIDENCE_DIR/published-sequence-$sequence.json" "offline-$sequence" >/dev/null
 done

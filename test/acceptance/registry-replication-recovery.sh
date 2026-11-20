@@ -2,7 +2,7 @@
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT_DIR"
-. scripts/testbed/common.sh
+. test/testbed/common.sh
 EVIDENCE_DIR="$ROOT_DIR/.tools/test-results/registry-replication-recovery"
 mkdir -p "$EVIDENCE_DIR"
 exec > >(tee "$EVIDENCE_DIR/acceptance-output.log") 2>&1
@@ -21,7 +21,7 @@ wait_for_log() {
   return 1
 }
 devnet_compose() {
-  docker compose --env-file ops/infra/devnet/versions.env -f ops/infra/devnet/compose.yaml "$@"
+  docker compose --env-file test/devnet/versions.env -f test/devnet/compose.yaml "$@"
 }
 devnet_compose_exec() {
   if pubsub_is_msys; then
@@ -33,7 +33,7 @@ devnet_compose_exec() {
   fi
 }
 CARDANO_SOCKET_PATH=/devnet/runtime/testnet/socket/node1/sock
-CARDANO_SOCKET_OFFLINE_PATH=/devnet/runtime/testnet/socket/node1/sock.phase-0.10-offline
+CARDANO_SOCKET_OFFLINE_PATH=/devnet/runtime/testnet/socket/node1/sock.registry-replication-recovery-offline
 CARDANO_SOCKET_HIDDEN=0
 TESTBED_CLEANUP_REQUIRED=0
 hide_cardano_socket() {
@@ -55,11 +55,11 @@ capture() {
   compose logs --no-color > "$EVIDENCE_DIR/integrated.log" 2>&1 || true
   scripts/replication/query-servers.sh --all > "$EVIDENCE_DIR/replication-registry.json" 2>&1 || true
   scripts/registry/query.sh --all > "$EVIDENCE_DIR/topic-registry.json" 2>&1 || true
-  ops/infra/devnet/scripts/status.sh > "$EVIDENCE_DIR/chain-status.txt" 2>&1 || true
+  test/devnet/status.sh > "$EVIDENCE_DIR/chain-status.txt" 2>&1 || true
   if [[ "$TESTBED_CLEANUP_REQUIRED" == 1 ]]; then
-    scripts/testbed/reset.sh --no-init > "$EVIDENCE_DIR/cleanup.log" 2>&1 || cleanup_status=$?
+    test/testbed/reset.sh --no-init > "$EVIDENCE_DIR/cleanup.log" 2>&1 || cleanup_status=$?
     if [[ "$cleanup_status" == 0 ]]; then
-      for project in phase-0-9 devnet; do
+      for project in pubsub-testbed devnet; do
         if ! remaining_containers="$(docker ps -aq --filter "label=com.docker.compose.project=$project" 2>> "$EVIDENCE_DIR/cleanup.log")"; then
           cleanup_status=1
         elif [[ -n "$remaining_containers" ]]; then
@@ -73,8 +73,8 @@ capture() {
           cleanup_status=1
         fi
       done
-      for generated_path in "$TESTBED_RUNTIME" "$ROOT_DIR/ops/infra/devnet/runtime" \
-        "$ROOT_DIR/ops/infra/devnet/keys" "$ROOT_DIR/ops/infra/devnet/state"; do
+      for generated_path in "$TESTBED_RUNTIME" "$ROOT_DIR/test/devnet/runtime" \
+        "$ROOT_DIR/test/devnet/keys" "$ROOT_DIR/test/devnet/state"; do
         if [[ -e "$generated_path" ]]; then
           echo "Generated state remains after cleanup: $generated_path" >> "$EVIDENCE_DIR/cleanup.log"
           cleanup_status=1
@@ -102,20 +102,20 @@ TESTBED_CLEANUP_REQUIRED=1
 run_gradle :libs:test --tests org.pubsub.prototype.registry.RegistryObserverTest \
   --tests org.pubsub.prototype.registry.topic.cardano.CardanoRegistryObservationTest \
   > "$EVIDENCE_DIR/invalid-utxo-and-freshness-tests.log"
-scripts/testbed/reset.sh
-scripts/testbed/up.sh --nodes 3
+test/testbed/reset.sh
+test/testbed/up.sh --nodes 3
 compose config > "$EVIDENCE_DIR/compose.yaml"
 cp "$TESTBED_RUNTIME/config/node-1.yaml" "$EVIDENCE_DIR/node-config.yaml"
 cp "$TESTBED_RUNTIME/config/server-1.yaml" "$EVIDENCE_DIR/server-config.yaml"
 check ready 3 > "$EVIDENCE_DIR/initial-readiness.json"
 
-publisher1="$(scripts/events/publisher-key-id.sh node-1)"
-publisher2="$(scripts/events/publisher-key-id.sh node-2)"
+publisher1="$(node scripts/pubsub-node.mjs publisher-key-id --node 1)"
+publisher2="$(node scripts/pubsub-node.mjs publisher-key-id --node 2)"
 topic="$(scripts/registry/create-topic.sh node-1 registry-observation-topic - "$publisher1" 2 3600 | tail -1)"
 printf '%s\n' "$topic" > "$EVIDENCE_DIR/topic-id.txt"
 scripts/registry/query.sh --utxos > "$EVIDENCE_DIR/topic-created-utxos.json"
 check topic 3 "$topic" active > "$EVIDENCE_DIR/topic-created-observations.json"
-if scripts/events/publish.sh node-2 "$topic" before-authorization > "$EVIDENCE_DIR/publish-before-add.json" 2>&1; then
+if node scripts/pubsub-node.mjs publish --node 2 --topic "$topic" --payload before-authorization > "$EVIDENCE_DIR/publish-before-add.json" 2>&1; then
   echo "Unlisted publisher was accepted" >&2; exit 1
 fi
 
@@ -125,18 +125,18 @@ check topic 3 "$topic" factor:3 > "$EVIDENCE_DIR/policy-update-observations.json
 scripts/registry/add-publisher.sh node-1 "$topic" "$publisher2"
 scripts/registry/query.sh --utxos > "$EVIDENCE_DIR/publisher-added-utxos.json"
 check topic 3 "$topic" "publisher:$publisher2" > "$EVIDENCE_DIR/publisher-added-observations.json"
-scripts/events/publish.sh node-2 "$topic" after-authorization > "$EVIDENCE_DIR/publish-after-add.json"
+node scripts/pubsub-node.mjs publish --node 2 --topic "$topic" --payload after-authorization > "$EVIDENCE_DIR/publish-after-add.json"
 scripts/registry/remove-publisher.sh node-1 "$topic" "$publisher2"
 scripts/registry/query.sh --utxos > "$EVIDENCE_DIR/publisher-removed-utxos.json"
 check topic 3 "$topic" "no-publisher:$publisher2" > "$EVIDENCE_DIR/publisher-removed-observations.json"
-if scripts/events/publish.sh node-2 "$topic" after-revocation > "$EVIDENCE_DIR/publish-after-remove.json" 2>&1; then
+if node scripts/pubsub-node.mjs publish --node 2 --topic "$topic" --payload after-revocation > "$EVIDENCE_DIR/publish-after-remove.json" 2>&1; then
   echo "Revoked publisher was accepted" >&2; exit 1
 fi
 scripts/registry/delete-topic.sh node-1 "$topic"
 scripts/registry/query.sh --utxos > "$EVIDENCE_DIR/topic-deleted-utxos.json"
 check topic 3 "$topic" deleted > "$EVIDENCE_DIR/topic-deleted-observations.json"
 
-fourth_id="$(scripts/replication/server-id.sh ops/infra/devnet/keys/registry-deployer/payment.vkey)"
+fourth_id="$(scripts/replication/server-id.sh test/devnet/keys/registry-deployer/payment.vkey)"
 cat > "$EVIDENCE_DIR/server-4.yaml" <<EOF
 server: {serverId: $fourth_id, advertisedHost: replication-server-4, port: 8100}
 registration: {operator: registry-deployer, cliBackend: DEVNET, commitmentStartEpoch: 0, commitmentEndEpoch: 100000}
@@ -175,7 +175,7 @@ check dissemination-ready 3 "$recovery_topic" > "$EVIDENCE_DIR/recovery-overlay-
 server_ids="$(node -e 'const fs=require("fs"); process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).serverIds.join(","))' "$TESTBED_RUNTIME/topology.json")"
 publish_recovery_event() {
   local sequence="$1" file="$EVIDENCE_DIR/published-sequence-$1.json" event_id
-  scripts/events/publish.sh node-1 "$recovery_topic" "recovery-sequence-$sequence" > "$file"
+  node scripts/pubsub-node.mjs publish --node 1 --topic "$recovery_topic" --payload "recovery-sequence-$sequence" > "$file"
   event_id="$(node -e 'const fs=require("fs"); process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).eventId)' "$file")"
   printf '%s\n' "$event_id"
 }
@@ -278,10 +278,10 @@ check stale 3 pubsub-node-2,pubsub-node-3,replication-server-2,replication-serve
 check not-loaded 3 pubsub-node-1,replication-server-1 \
   > "$EVIDENCE_DIR/not-loaded-during-outage.json"
 restore_cardano_socket
-ops/infra/devnet/scripts/wait-healthy.sh
+test/devnet/wait-healthy.sh
 check ready 3 > "$EVIDENCE_DIR/recovered-readiness.json"
 
-scripts/testbed/up.sh --nodes 6
+test/testbed/up.sh --nodes 6
 check ready 6 > "$EVIDENCE_DIR/scaled-readiness.json"
 sleep 15
 compose logs --no-color > "$EVIDENCE_DIR/scaled-integrated.log"

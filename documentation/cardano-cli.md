@@ -1,91 +1,21 @@
 # Cardano CLI command reference
 
-This page documents every `cardano-cli` command used by the repository. Most
-users should run the repository scripts listed below rather than assembling
+This page documents the `cardano-cli` commands used to administer the Cardano
+registries. Most operators should run the scripts listed below rather than assembling
 these commands manually: the scripts supply the network magic, node socket,
 keys, UTxOs, datums, redeemers, and generated file paths.
 
 ## How commands are executed
 
-The same logical command can run against a host-installed CLI or inside the
-local devnet container.
-
-### Host backend
-
-The `HOST` Java backend and the `cardano_cli` shell helper execute:
-
-```text
-CARDANO_NODE_SOCKET_PATH=<host-node-socket> cardano-cli <arguments>
-```
-
-`CARDANO_NODE_SOCKET_PATH` and the testnet network magic come from
-`ops/infra/devnet/runtime/network.env`. Files passed to the CLI remain host
-paths.
-
-### Devnet backend
-
-The `DEVNET` Java backend expands the same arguments to:
-
-```text
-docker compose \
-  --env-file <devnet>/versions.env \
-  -f <devnet>/compose.yaml \
-  exec -T \
-  -e CARDANO_NODE_SOCKET_PATH=/devnet/runtime/testnet/socket/node1/sock \
-  cardano-node cardano-cli <arguments>
-```
-
-Paths below the host devnet directory are translated to `/devnet/...`, because
-that directory is mounted at `/devnet` in the container. `node1/sock` belongs
-to the devnet's single Cardano pool node, not to a Pub/Sub application node.
-
-The shell helper `cardano_cli` uses the host command when `cardano-cli` is on
-`PATH`; otherwise it runs this Docker Compose form. `cardano_cli_offline` is for
-commands that do not need a running node. Its Docker fallback is:
-
-```text
-docker run --rm --entrypoint cardano-cli \
-  -v <devnet>:/devnet \
-  -w /devnet \
-  <cardano-node-image> <arguments>
-```
-
-Pub/Sub nodes and replication servers use the `HOST` Java backend to query
-Cardano through their read-only socket mounts. Registry views remain in memory;
-unavailable or invalid queries never fall back to a disk snapshot.
-The replication server reads the current epoch through the same configured
-backend as its runtime registry queries, using the shared Java runner factory.
-
-The reusable Java types are in `org.pubsub.prototype.cardano`. Registry-specific
-datum and transaction code stays in its owning package. Replication Registry
-shell commands reuse `ops/infra/devnet/scripts/common.sh`, which provides the
-equivalent host-or-Docker `cardano_cli` execution boundary for Bash.
-
-## Devnet and identity commands
-
-These commands are owned by `ops/infra/devnet/scripts/`.
-
-| Command | Purpose | Used by |
-| --- | --- | --- |
-| `cardano-cli --version` | Prints the installed or container CLI version for devnet diagnostics. | Devnet acceptance |
-| `cardano-cli address key-gen --signing-key-file <payment.skey> --verification-key-file <payment.vkey>` | Creates each local Cardano payment identity. This is offline and does not require the node socket. | `init.sh` |
-| `cardano-cli address build --payment-verification-key-file <payment.vkey> --testnet-magic <magic> --out-file <payment.addr>` | Builds a payment address from a generated verification key. | `common.sh`, funding discovery |
-| `cardano-cli genesis initial-addr --verification-key-file <utxo.vkey> --testnet-magic <magic>` | Reconstructs the address of a testnet genesis UTxO key when selecting a funding source. | `common.sh`, funding discovery |
-| `cardano-cli query tip --testnet-magic <magic>` | Reads the chain tip. Advancing slots are the devnet readiness check. | `status.sh`, `wait-healthy.sh` |
-| `cardano-cli query utxo --address <address> --testnet-magic <magic>` | Lists an address's UTxOs. The bootstrap scripts use the text form to calculate balances and select inputs. | `common.sh`, `fund-identities.sh` |
-| `cardano-cli latest transaction build-raw --fee <lovelace> --tx-in <utxo>... --tx-out <address+value>... --out-file <body>` | Builds the initial funding transaction. Inputs and outputs are assembled from the generated testnet and identity addresses. | `fund-identities.sh` |
-| `cardano-cli latest transaction sign --tx-body-file <body> --signing-key-file <source.skey> --testnet-magic <magic> --out-file <signed>` | Signs the funding transaction. | `fund-identities.sh` |
-| `cardano-cli latest transaction submit --tx-file <signed> --testnet-magic <magic>` | Submits the funding transaction to the devnet. | `fund-identities.sh` |
-
-The public lifecycle entrypoints are:
-
-```bash
-./ops/infra/devnet/scripts/init.sh
-./ops/infra/devnet/scripts/start.sh
-./ops/infra/devnet/scripts/wait-healthy.sh
-./ops/infra/devnet/scripts/fund-identities.sh
-./ops/infra/devnet/scripts/status.sh
-```
+Registry operator scripts default to the `HOST` Java backend, which invokes
+the installed `cardano-cli` using `CARDANO_NODE_SOCKET_PATH`. Set that value
+and `CARDANO_NETWORK_MAGIC` in the operator process, or put both in
+`runtime/cardano/network.env`. Application processes use the same host backend
+with a readable Cardano node socket and the registry `deployment.env` files.
+Registry views remain in memory; unavailable or invalid queries do not fall
+back to a disk snapshot. See [deployment](deployment.md) for the required
+layout. The Docker devnet backend and its lifecycle commands live in
+[test/](../test/README.md).
 
 ## Topic Registry commands
 
@@ -99,7 +29,7 @@ Java layer fills in all placeholders shown below.
 | --- | --- |
 | `cardano-cli address build --payment-script-file <topic-state.plutus.json> --testnet-magic <magic>` | Derives the Topic Registry validator address. |
 | `cardano-cli latest transaction policyid --script-file <topic-policy.plutus.json>` | Derives the topic minting-policy ID. |
-| `cardano-cli address key-hash --payment-verification-key-file <payment.vkey>` | Derives the configured transaction signer's payment-key hash. Java does not look up owner or administrator identities: callers supply those public 56-character hashes through a separate trusted channel. The local acceptance helper derives them from generated devnet keys only. |
+| `cardano-cli address key-hash --payment-verification-key-file <payment.vkey>` | Derives the configured transaction signer's payment-key hash. Callers supply owner or administrator hashes as command arguments. |
 
 ### UTxO queries
 
@@ -157,10 +87,6 @@ cardano-cli latest transaction build \
   --out-file <mutation.txbody>
 ```
 
-The negative last-owner-removal test deliberately builds this transaction with
-an invalid zero-owner datum. It stops after `build`; the validator is expected
-to reject the attempted transition.
-
 ### Sign and submit topic transactions
 
 Valid create, update, and delete transactions finish with:
@@ -182,8 +108,8 @@ The operator-facing scripts and their argument contracts are listed in the
 
 ## Replication Registry commands
 
-These commands are assembled by `scripts/replication/`. They use the shared
-`cardano_cli` helper, so they work with either a host CLI or the Docker devnet.
+These commands are assembled by the Replication Registry Java CLI, which the
+scripts in `scripts/replication/` invoke.
 
 ### Deployment, identity, and query
 
@@ -192,7 +118,7 @@ These commands are assembled by `scripts/replication/`. They use the shared
 | `cardano-cli address build --payment-script-file <replication-registry.plutus.json> --testnet-magic <magic>` | Derives the Replication Registry validator address. |
 | `cardano-cli address key-hash --payment-verification-key-file <operator.vkey>` | Derives the controlling operator hash used by the datum and required signer. |
 | `cardano-cli query utxo --address <validator-address> --testnet-magic <magic> --output-json` | Reads registration UTxOs before rebuilding the materialized server snapshot. |
-| `cardano-cli query utxo --address <operator-address> --testnet-magic <magic>` | Selects operator payment and collateral inputs through the shared devnet helper. |
+| `cardano-cli query utxo --address <operator-address> --testnet-magic <magic>` | Selects operator payment and collateral inputs. |
 
 ### Register a new server
 
@@ -252,10 +178,3 @@ Use the repository entrypoints rather than these expanded forms:
 ./scripts/replication/unregister-server.sh <replication-server-config>
 ./scripts/replication/query-servers.sh
 ```
-
-## Maintenance rule
-
-When adding or changing a `cardano-cli` invocation, update this page in the
-same change. Search both Java and shell call sites: Topic Registry and
-Replication Registry commands are constructed in Java, while shell scripts
-provide the repository's operational entrypoints.

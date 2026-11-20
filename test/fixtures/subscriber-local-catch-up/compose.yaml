@@ -1,0 +1,92 @@
+name: subscriber-local-catch-up
+services:
+  cardano-node:
+    extends:
+      file: ../../../test/devnet/compose.yaml
+      service: cardano-node
+
+  replication-server-1: &replication
+    build:
+      context: ../../..
+      dockerfile: apps/replication-server/Dockerfile
+      args:
+        CARDANO_TESTNET_VERSION: ${CARDANO_TESTNET_VERSION:-11.0.1}
+    command: ["/config/server-1.yaml"]
+    environment:
+      CARDANO_NETWORK_MAGIC: ${CARDANO_NETWORK_MAGIC:-42}
+      CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock
+    volumes:
+      - ../../../test/devnet/runtime/subscriber-local-catch-up/server-1.yaml:/config/server-1.yaml:ro
+      - ../../../test/devnet/keys/node-1:/request-keys:ro
+      - ../../../test/devnet/runtime/registry:/registry:ro
+      - ../../../test/devnet/runtime/replication-registry:/replication-registry:ro
+      - ../../../test/devnet/runtime/testnet/socket:/node-socket:ro
+      - replication-server-1-data:/data
+    ports: ["127.0.0.1:8101:8100"]
+  replication-server-2:
+    <<: *replication
+    command: ["/config/server-2.yaml"]
+    volumes:
+      - ../../../test/devnet/runtime/subscriber-local-catch-up/server-2.yaml:/config/server-2.yaml:ro
+      - ../../../test/devnet/keys/node-2:/request-keys:ro
+      - ../../../test/devnet/runtime/registry:/registry:ro
+      - ../../../test/devnet/runtime/replication-registry:/replication-registry:ro
+      - ../../../test/devnet/runtime/testnet/socket:/node-socket:ro
+      - replication-server-2-data:/data
+    ports: ["127.0.0.1:8102:8100"]
+  replication-server-3:
+    <<: *replication
+    command: ["/config/server-3.yaml"]
+    volumes:
+      - ../../../test/devnet/runtime/subscriber-local-catch-up/server-3.yaml:/config/server-3.yaml:ro
+      - ../../../test/devnet/keys/node-3:/request-keys:ro
+      - ../../../test/devnet/runtime/registry:/registry:ro
+      - ../../../test/devnet/runtime/replication-registry:/replication-registry:ro
+      - ../../../test/devnet/runtime/testnet/socket:/node-socket:ro
+      - replication-server-3-data:/data
+    ports: ["127.0.0.1:8103:8100"]
+
+  pubsub-node-1: &pubsub
+    build:
+      context: ../../..
+      dockerfile: apps/pubsub-node/Dockerfile
+    command: ["/config/node-1.yaml"]
+    environment:
+      CARDANO_NETWORK_MAGIC: ${CARDANO_NETWORK_MAGIC:-42}
+      CARDANO_NODE_SOCKET_PATH: /node-socket/node1/sock
+    volumes:
+      - ./node-1.yaml:/config/node-1.yaml:ro
+      - ../../../test/devnet/runtime/registry:/registry:ro
+      - ../../../test/devnet/runtime/replication-registry:/replication-registry:ro
+      - ../../../test/devnet/runtime/testnet/socket:/node-socket:ro
+      - pubsub-node-1-identity:/data/identity
+    ports: ["7001:7000", "127.0.0.1:8001:8000"]
+  pubsub-node-2:
+    <<: *pubsub
+    command: ["/config/node-2.yaml"]
+    volumes:
+      - ./node-2.yaml:/config/node-2.yaml:ro
+      - ../../../test/devnet/runtime/registry:/registry:ro
+      - ../../../test/devnet/runtime/replication-registry:/replication-registry:ro
+      - ../../../test/devnet/runtime/testnet/socket:/node-socket:ro
+      - pubsub-node-2-identity:/data/identity
+    ports: ["7002:7000", "127.0.0.1:8002:8000"]
+  pubsub-node-3:
+    <<: *pubsub
+    command: ["/config/node-3.yaml"]
+    volumes:
+      - ./node-3.yaml:/config/node-3.yaml:ro
+      - ../../../test/devnet/runtime/registry:/registry:ro
+      - ../../../test/devnet/runtime/replication-registry:/replication-registry:ro
+      - ../../../test/devnet/runtime/testnet/socket:/node-socket:ro
+      - pubsub-node-3-identity:/data/identity
+    ports: ["7003:7000", "127.0.0.1:8003:8000"]
+
+volumes:
+  cardano-devnet-state:
+  replication-server-1-data:
+  replication-server-2-data:
+  replication-server-3-data:
+  pubsub-node-1-identity:
+  pubsub-node-2-identity:
+  pubsub-node-3-identity:

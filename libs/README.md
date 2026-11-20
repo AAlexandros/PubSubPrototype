@@ -1,7 +1,8 @@
 # Libraries
 
-`libs` is one Gradle project (`:libs`). Its source and tests live in
-`src/main/java` and `src/test/java`; Java packages keep the concepts separate.
+`libs` is one Gradle project (`:libs`). Its runtime source is in
+`src/main/java`; its tests are in [`test/java/libs`](../test/java/libs).
+Java packages keep the concepts separate.
 In particular, `org.pubsub.prototype.protocol` contains wire messages and
 identity without Netty, while `org.pubsub.prototype.transport` contains the
 Netty connection code.

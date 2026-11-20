@@ -19,7 +19,7 @@ import java.util.Map;
  *
  * <p>The {@code DEVNET} backend runs {@code cardano-cli} through Docker Compose
  * using the local devnet files and the network magic from {@code network.env}.
- * Both backends expect the runtime directory to follow the project layout
+ * The DEVNET backend expects the runtime directory to follow the project layout
  * {@code <devnet>/runtime/<contract>/}.</p>
  */
 public final class CardanoCommandRunnerFactory {
@@ -30,7 +30,7 @@ public final class CardanoCommandRunnerFactory {
      * Creates the runner for the requested backend and contract runtime directory.
      *
      * @param backend where Cardano CLI commands should run
-     * @param runtimeDir contract runtime directory, conventionally
+     * @param runtimeDir contract runtime directory; DEVNET uses
      *                   {@code <devnet>/runtime/<contract>/}
      * @return a runner configured for that backend and network
      * @throws IllegalStateException if {@code network.env} cannot be read

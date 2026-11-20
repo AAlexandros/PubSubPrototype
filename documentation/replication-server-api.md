@@ -93,10 +93,11 @@ These read routes do not require caller authentication.
 
 | Method and path | Response |
 | --- | --- |
-| `GET /v1/ops/health` | `200` object containing `status`, `serverId`, the active `membership`, and local `eventKeys`. |
+| `GET /v1/ops/health` | `200` object containing `status`, `serverId`, active `membership`, registry status in `registries`, and local `eventKeys`. |
+| `GET /v1/ops/registry` | `200` with Topic and Replication Registry observation status. |
 | `GET /v1/ops/maintenance/status` | `200` `MaintenanceStatus`: `serverId`, `membershipVersion`, `suspectedPeers`, `confirmedUnavailablePeers`, `repairQueue`, and `underReplicatedRecords`. |
 
-Health and maintenance status expose operational state. Client event and
+Health, registry, and maintenance status expose operational state. Client event and
 publisher-progress lookups are also readable without a caller signature.
 
 ## Request and response records
@@ -120,13 +121,5 @@ request bodies over 4 MiB return `413`; missing routes return `404`; unsupported
 methods return `405`; persistence failures return `503`; unexpected handler
 failures return `500`.
 
-Services still verify records fetched from other servers during lookup and
-repair. These records enter through a separate receiving path. The service also
-retains checks for calls initiated by local maintenance rather than an HTTP
-route. Sequence and placement decisions remain with the services because they
-depend on current state.
-
-The local node CLI (`scripts/pubsub-node.mjs`) sends commands to
-`NodeControlHttpAdapter`. Its loopback HTTP adapter is a separate API and keeps
-its own `/v1/events/*` and related paths; the prefixes above apply to the
-replication server.
+The [node CLI](node-cli.md) uses the Pub/Sub node's separate control API; the
+routes above belong to the replication server.

@@ -12,3 +12,10 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.logback.classic)
 }
+
+sourceSets {
+    test {
+        java.setSrcDirs(listOf("../test/java/libs/java"))
+        resources.setSrcDirs(listOf("../test/java/libs/resources"))
+    }
+}

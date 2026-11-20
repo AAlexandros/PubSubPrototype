@@ -4,8 +4,7 @@ import path from 'node:path';
 import {nativePath} from './lib/paths.mjs';
 
 const usage = `Usage:
-  node scripts/pubsub-node.mjs <command> --node <1..50> [options]
-    [--url http://127.0.0.1:<control-port>]
+  node scripts/pubsub-node.mjs <command> (--url <control-base-url> | --node <1..50>) [options]
 
 Commands:
   publish          --topic <id> --payload <text> [--base64] [--force-broadcast] [--tamper-signature]
@@ -48,8 +47,11 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-const node = Number(values.get('--node'));
-if (!Number.isInteger(node) || node < 1 || node > 50) throw Error('--node must be between 1 and 50');
+const nodeOption = values.get('--node');
+const node = nodeOption === undefined ? undefined : Number(nodeOption);
+if (nodeOption !== undefined && (!Number.isInteger(node) || node < 1 || node > 50))
+  throw Error('--node must be between 1 and 50');
+if (!values.has('--url') && node === undefined) throw Error('Provide --url or --node');
 const baseUrl = values.get('--url') || `http://127.0.0.1:${8000 + node}`;
 const topic = values.get('--topic');
 const endpoint = {
@@ -121,7 +123,12 @@ const responseBody = await response.text();
 if (!response.ok) throw Error(`${command} on node ${node} failed (${response.status}): ${responseBody}`);
 if (responseBody) {
   const parsed = JSON.parse(responseBody);
-  if (command === 'status') {
+  if (command === 'publisher-key-id') {
+    if (typeof parsed.publisherKeyId !== 'string' || !parsed.publisherKeyId) {
+      throw Error('publisher-key-id response is missing publisherKeyId');
+    }
+    process.stdout.write(parsed.publisherKeyId + '\n');
+  } else if (command === 'status') {
     const [navigation, subscriptions, recovery] = await Promise.all([
       fetch(new URL('/v1/navigation/view', `${baseUrl.replace(/\/$/, '')}/`)),
       fetch(new URL('/v1/subscriptions', `${baseUrl.replace(/\/$/, '')}/`)),

@@ -2,7 +2,7 @@
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "$ROOT_DIR/scripts/lib/platform.sh"
-REPLICATION_REGISTRY_RUNTIME_DIR="${REPLICATION_REGISTRY_RUNTIME_DIR:-$ROOT_DIR/ops/infra/devnet/runtime/replication-registry}"
+REPLICATION_REGISTRY_RUNTIME_DIR="${REPLICATION_REGISTRY_RUNTIME_DIR:-$ROOT_DIR/runtime/cardano/replication-registry}"
 export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$ROOT_DIR/.gradle-user-home}"
 host_path() {
   pubsub_host_path "$1"

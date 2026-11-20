@@ -2,6 +2,7 @@
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+. test/helpers/devnet-env.sh
 if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
   export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL="*"
 fi
@@ -10,10 +11,10 @@ mkdir -p "$EVIDENCE_DIR"
 
 
 exec > >(tee "$EVIDENCE_DIR/acceptance-output.log") 2>&1
-COMPOSE=(docker compose -p secure-peer-sampling --env-file ops/infra/devnet/versions.env -f ops/infra/phase-0.4/compose.yaml)
-DEVNET_COMPOSE=(docker compose --env-file ops/infra/devnet/versions.env -f ops/infra/devnet/compose.yaml)
+COMPOSE=(docker compose -p secure-peer-sampling --env-file test/devnet/versions.env -f test/fixtures/secure-peer-sampling/compose.yaml)
+DEVNET_COMPOSE=(docker compose --env-file test/devnet/versions.env -f test/devnet/compose.yaml)
 ${COMPOSE[@]} down -v --remove-orphans
-export REGISTRY_RUNTIME_DIR="$ROOT_DIR/ops/infra/devnet/runtime/registry"
+export REGISTRY_RUNTIME_DIR="$ROOT_DIR/test/devnet/runtime/registry"
 run_gradle() {
   if grep -qi microsoft /proc/version 2>/dev/null; then cmd.exe /c gradlew.bat "$@"; else ./gradlew "$@"; fi
 }
@@ -25,8 +26,8 @@ assert_runtime() {
 start_healthy_devnet() {
   local attempt
   for attempt in 1 2; do
-    if ops/infra/devnet/scripts/start.sh && \
-        ops/infra/devnet/scripts/wait-healthy.sh > "$EVIDENCE_DIR/devnet-health.json"; then
+    if test/devnet/start.sh && \
+        test/devnet/wait-healthy.sh > "$EVIDENCE_DIR/devnet-health.json"; then
       return 0
     fi
     "${DEVNET_COMPOSE[@]}" logs --no-color cardano-node \
@@ -60,7 +61,7 @@ finish() {
   done
   grep 'PEER_DISCONNECTED.*Invalid peer identity' "$EVIDENCE_DIR/node-1-final.log" > "$EVIDENCE_DIR/invalid-identity-rejection.log" || true
   "${COMPOSE[@]}" down -v --remove-orphans > "$EVIDENCE_DIR/cleanup.log" 2>&1 || cleanup_status=$?
-  ops/infra/devnet/scripts/reset.sh --no-init >> "$EVIDENCE_DIR/cleanup.log" 2>&1 || cleanup_status=$?
+  test/devnet/reset.sh --no-init >> "$EVIDENCE_DIR/cleanup.log" 2>&1 || cleanup_status=$?
   if [[ "$status" == 0 ]]; then status="$cleanup_status"; fi
   if [[ "$status" != 0 ]]; then echo "Secure peer sampling test FAILED ($status)" > "$EVIDENCE_DIR/final-result.txt"; fi
   exit "$status"
@@ -68,20 +69,20 @@ finish() {
 trap finish EXIT
 
 run_gradle build :apps:pubsub-node:installDist
-cp ops/config/phase-0.4/node-*.yaml "$EVIDENCE_DIR/"
+cp test/fixtures/secure-peer-sampling/node-*.yaml "$EVIDENCE_DIR/"
 "${COMPOSE[@]}" config > "$EVIDENCE_DIR/bootstrap-compose.yaml"
 # Fail if either leaf includes the other in its configured seed list.
-grep -qx 'peers: \[\]' ops/config/phase-0.4/node-1.yaml
+grep -qx 'peers: \[\]' test/fixtures/secure-peer-sampling/node-1.yaml
 for n in 2 3; do
-  sed -n '/^peers:/,/^transport:/p' "ops/config/phase-0.4/node-$n.yaml" > "$EVIDENCE_DIR/node-$n-bootstrap.txt"
+  sed -n '/^peers:/,/^transport:/p' "test/fixtures/secure-peer-sampling/node-$n.yaml" > "$EVIDENCE_DIR/node-$n-bootstrap.txt"
   test "$(grep -c 'host:' "$EVIDENCE_DIR/node-$n-bootstrap.txt")" = 1
   grep -q 'host: pubsub-node-1' "$EVIDENCE_DIR/node-$n-bootstrap.txt"
 done
 "${COMPOSE[@]}" stop pubsub-node-1 pubsub-node-2 pubsub-node-3
-docker compose --env-file ops/infra/devnet/versions.env -f ops/infra/devnet/compose.yaml down
+docker compose --env-file test/devnet/versions.env -f test/devnet/compose.yaml down
 assert_runtime prepare-devnet
 start_healthy_devnet
-ops/infra/devnet/scripts/fund-identities.sh > "$EVIDENCE_DIR/funded-address-balances.txt"
+test/devnet/fund-identities.sh > "$EVIDENCE_DIR/funded-address-balances.txt"
 ./scripts/registry/build.sh
 ./scripts/registry/deploy.sh > "$EVIDENCE_DIR/deployment.txt"
 ./scripts/replication/build.sh

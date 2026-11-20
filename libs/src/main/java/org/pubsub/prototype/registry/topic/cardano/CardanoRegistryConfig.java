@@ -34,8 +34,12 @@ public record CardanoRegistryConfig(Path runtimeDir, String signer, CardanoCliBa
     }
 
     public Path projectRoot() {
-        Path devnetDir = runtimeDir.toAbsolutePath().normalize().getParent().getParent();
-        return devnetDir.getParent().getParent().getParent();
+        return Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
+    }
+
+    public Path keysDirectory() {
+        Path parent = runtimeDir.toAbsolutePath().normalize().getParent();
+        return (cliBackend == CardanoCliBackend.DEVNET ? parent.getParent() : parent).resolve("keys");
     }
 
 }

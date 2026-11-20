@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+. test/helpers/devnet-env.sh
 
 if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
   export MSYS_NO_PATHCONV=1
@@ -11,11 +12,11 @@ fi
 
 set -a
 # shellcheck disable=SC1091
-. ops/infra/devnet/versions.env
+. test/devnet/versions.env
 set +a
 
 SOAK_SECONDS="${PEER_CONNECTIVITY_SOAK_SECONDS:-30}"
-COMPOSE=(docker compose -p peer-connectivity --env-file ops/infra/devnet/versions.env -f ops/infra/phase-0.1/compose.yaml)
+COMPOSE=(docker compose -p peer-connectivity --env-file test/devnet/versions.env -f test/fixtures/three-node/compose.yaml)
 ${COMPOSE[@]} down -v --remove-orphans
 EVIDENCE_DIR="$ROOT_DIR/.tools/test-results/peer-connectivity"
 rm -rf "$EVIDENCE_DIR"
@@ -121,11 +122,10 @@ wait_for_peer_event_growth() {
 ./gradlew clean build :apps:pubsub-node:installDist
 capture_cardano_versions
 
-ops/infra/devnet/scripts/reset.sh
-ops/infra/devnet/scripts/start.sh
-ops/infra/devnet/scripts/wait-healthy.sh | tee "$EVIDENCE_DIR/cardano-chain-tip.json"
-ops/infra/devnet/scripts/status.sh | tee "$EVIDENCE_DIR/cardano-status.json"
-ops/infra/devnet/scripts/fund-identities.sh | tee "$EVIDENCE_DIR/funded-address-balances.txt"
+test/devnet/reset.sh
+start_fresh_devnet | tee "$EVIDENCE_DIR/cardano-chain-tip.json"
+test/devnet/status.sh | tee "$EVIDENCE_DIR/cardano-status.json"
+test/devnet/fund-identities.sh | tee "$EVIDENCE_DIR/funded-address-balances.txt"
 
 ./scripts/registry/build.sh
 ./scripts/registry/deploy.sh > "$EVIDENCE_DIR/topic-registry-deployment.txt"
@@ -184,10 +184,9 @@ wait_for_full_mesh
 "${COMPOSE[@]}" logs pubsub-node-1 pubsub-node-2 pubsub-node-3 > "$EVIDENCE_DIR/restart-reconnection.log"
 
 "${COMPOSE[@]}" down
-ops/infra/devnet/scripts/stop.sh
-ops/infra/devnet/scripts/reset.sh
-ops/infra/devnet/scripts/start.sh
-ops/infra/devnet/scripts/wait-healthy.sh | tee "$EVIDENCE_DIR/reset-restart-chain-tip.json"
-ops/infra/devnet/scripts/stop.sh
+test/devnet/stop.sh
+test/devnet/reset.sh
+start_fresh_devnet | tee "$EVIDENCE_DIR/reset-restart-chain-tip.json"
+test/devnet/stop.sh
 
 echo "Peer connectivity test passed" | tee "$EVIDENCE_DIR/final-result.txt"

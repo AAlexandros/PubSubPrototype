@@ -8,4 +8,4 @@
 
 `CardanoTopicRegistry` queries the live script UTxOs using the deployed address and policy ID. It ignores outputs without that policy token and rejects inconsistent registry-token outputs before publishing a topic snapshot. No shared UTxO cache is used for runtime decisions.
 
-`scripts/registry/build.sh` compiles the contract, exports cardano-cli script files, and runs the Java registry tests. Because the mint and spend handlers share one script, changing this contract changes both the validator address and topic policy ID; a fresh deployment is required.
+`scripts/registry/build.sh` compiles the contract and exports cardano-cli script files. Java registry tests run through Gradle or `test/run-all.sh`. Because the mint and spend handlers share one script, changing this contract changes both the validator address and topic policy ID; a fresh deployment is required.

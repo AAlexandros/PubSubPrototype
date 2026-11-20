@@ -3,20 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fetchJson} from './http-json.mjs';
 import {nativePath as native} from '../../scripts/lib/paths.mjs';
-import {repositoryRoot, signedOptions} from '../../scripts/lib/signed-http.mjs';
+import {repositoryRoot, signedOptions} from '../lib/signed-http.mjs';
 
 const [mode, rawEvidence, ...args] = process.argv.slice(2);
 const evidence = native(rawEvidence);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const save = (name, value) => fs.writeFileSync(path.join(evidence, `${name}.json`), JSON.stringify(value, null, 2) + '\n');
 async function json(url, options) {
-  const parsed = new URL(url);
-  let requestOptions = options;
-  if (parsed.pathname === '/v1/replication/inventory') {
-    const {serverId} = await fetchJson(url.replace('/v1/replication/inventory', '/v1/ops/health'));
-    requestOptions = signedOptions(repositoryRoot, url, options, serverId);
-  }
-  return fetchJson(url, requestOptions);
+  return fetchJson(url, options);
 }
 async function wait(check, timeout = 180000) {
   const end = Date.now() + timeout;
@@ -29,7 +23,11 @@ async function wait(check, timeout = 180000) {
 }
 const health = n => json(`http://127.0.0.1:810${n}/v1/ops/health`);
 const status = n => json(`http://127.0.0.1:810${n}/v1/ops/maintenance/status`);
-const inventory = n => json(`http://127.0.0.1:810${n}/v1/replication/inventory`);
+const inventory = async n => {
+  const url = `http://127.0.0.1:810${n}/v1/replication/inventory`;
+  const {serverId} = await health(n);
+  return json(url, signedOptions(repositoryRoot, url, {}, serverId, `node-${n}`));
+};
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 function eventKey(envelope) {
   const publisher = sha(Buffer.from(envelope.publisherPublicKey, 'base64'));
@@ -59,9 +57,9 @@ async function availableInventories(serverIndices) {
 
 if (mode === 'prepare-devnet') {
   const root = fs.realpathSync(process.cwd());
-  const backup = path.resolve(root, '.tools', 'phase-0.8-devnet-backups', String(Date.now()));
+  const backup = path.resolve(root, '.tools', 'replica-state-devnet-backups', String(Date.now()));
   for (const name of ['runtime', 'keys', 'state']) {
-    const source = path.resolve(root, 'ops', 'infra', 'devnet', name);
+    const source = path.resolve(root, 'test', 'devnet', name);
     if (!fs.existsSync(source)) continue;
     if (fs.lstatSync(source).isSymbolicLink()) throw Error('refusing to archive a devnet symlink');
     fs.mkdirSync(backup, {recursive: true});

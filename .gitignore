@@ -28,17 +28,10 @@ contracts/topic-registry/plutus.json
 contracts/replication-registry/plutus.json
 
 # Current devnet runtime tree.
-ops/infra/devnet/runtime/
-ops/infra/devnet/state/
-ops/infra/devnet/keys/
-ops/infra/devnet/genesis/
-ops/infra/devnet;*/
-
-# Legacy devnet runtime paths kept ignored for older checkouts.
-infra/devnet/runtime/
-infra/devnet/state/
-infra/devnet/keys/
-infra/devnet/genesis/
+test/devnet/runtime/
+test/devnet/state/
+test/devnet/keys/
+test/devnet/genesis/
 
 # aiken binaries and tarball
 .tools/*

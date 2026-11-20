@@ -18,9 +18,17 @@ application {
     mainClass.set("org.pubsub.prototype.node.PubSubNodeMain")
 }
 
+sourceSets {
+    test {
+        java.setSrcDirs(listOf("../../test/java/pubsub-node/java"))
+        resources.setSrcDirs(listOf("../../test/java/pubsub-node/resources"))
+    }
+}
+
 tasks.register<JavaExec>("runTopicRegistryCli") {
     group = "application"
     description = "Deploys, queries, or updates the Cardano topic registry."
+    workingDir = rootProject.projectDir
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.pubsub.prototype.node.registry.cli.TopicRegistryCli")
 }

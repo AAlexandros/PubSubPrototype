@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {nativePath} from '../../scripts/lib/paths.mjs';
-import {loadSectionedYaml} from '../../scripts/lib/simple-yaml.mjs';
+import {loadSectionedYaml} from '../lib/simple-yaml.mjs';
 
 test('nativePath handles slash-prefixed drive paths on Windows', () => {
   const input = '/c/work/project';

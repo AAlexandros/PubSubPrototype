@@ -2,9 +2,8 @@
 
 The two Java entrypoints administer the Cardano registries. They run as Gradle
 tasks on the operator's machine; the shell scripts in `scripts/registry/` and
-`scripts/replication/` are the usual way to invoke them. The testbed calls
-these scripts to deploy registries and register servers before its application
-HTTP endpoints are available.
+`scripts/replication/` are the usual way to invoke them. An operator runs
+these commands to deploy registries, create topics, and register servers.
 
 | Registry | Java entrypoint | Gradle task | Shell scripts |
 | --- | --- | --- | --- |
@@ -30,10 +29,10 @@ The Topic Registry CLI receives arguments in this order:
 ```
 
 The runtime directory contains local registry deployment metadata and
-transaction files. `HOST` runs an installed `cardano-cli`; `DEVNET` runs it
-through the local Docker devnet. The shell helper
+transaction files. `HOST` runs an installed `cardano-cli`; `DEVNET` is for the
+local testbed. The shell helper
 [`scripts/registry/common.sh`](../scripts/registry/common.sh) supplies the
-runtime directory and backend, defaulting to `DEVNET`. Its command wrappers
+runtime directory and backend, defaulting to `HOST`. Its command wrappers
 provide the signer. `deploy`, `query`, and `utxos` default to
 `registry-deployer` when no signer is passed; commands with further positional
 arguments require the signer position.
@@ -41,14 +40,13 @@ arguments require the signer position.
 | Command and arguments after `<runtime-dir> <backend>` | Result |
 | --- | --- |
 | `deploy [signer]` | Derive and write the Topic Registry deployment metadata. |
-| `query <signer> [--all]` | Print active topics as JSON; `--all` includes tombstones. |
+| `query [signer] [--all]` | Print active topics as JSON; `--all` includes tombstones. |
 | `utxos [signer]` | Print the registry script UTxOs as JSON. |
 | `topic <signer> <topic-id>` | Print one topic as JSON. |
 | `create <signer> <name> <admin-hashes-csv-or-dash> <publisher-ids-csv-or-dash> <replication-factor> <retention-period>` | Create a topic and print its ID. |
 | `delete <signer> <topic-id>` | Mark a topic inactive. |
 | `add-owner`, `remove-owner`, `add-admin`, `remove-admin`, `add-publisher`, `remove-publisher` followed by `<signer> <topic-id> <value>` | Change the corresponding topic role. |
 | `set-replication-factor`, `set-retention-period` followed by `<signer> <topic-id> <value>` | Change the corresponding topic setting. |
-| `direct-last-owner-removal <signer> <topic-id> <owner-hash>` | Build an intentionally invalid transaction for the validator rejection check. |
 
 For normal use, run the named scripts such as
 [`create-topic.sh`](../scripts/registry/create-topic.sh) and

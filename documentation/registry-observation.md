@@ -8,18 +8,17 @@ signed transactions; subscriptions remain local overlay state.
 
 The application uses `HOST` query mode with `CARDANO_NETWORK_MAGIC`,
 `CARDANO_NODE_SOCKET_PATH`, and read-only `deployment.env` files for both
-registries. The generated testbed mounts those metadata files and the
-read-only socket for registry reads; it does not mount a shared registry JSON
-snapshot. The replication server still receives its existing Cardano payment
-key for HTTP request signing pending the key-boundary decision. A
-confirmed `{"...": ...}` query is validated before replacing the complete
-in-memory view. `{}` is a valid empty registry. Query failure, malformed
-UTxOs, duplicate identities, unexpected addresses, and mismatched topic policy
+registries. Deployments must provide those metadata files and a readable node
+socket for registry queries. The replication server also needs its own Cardano
+payment key for HTTP request signing. A successful UTxO query is validated
+before replacing the complete in-memory view. `{}` is a valid empty registry.
+Query failure, malformed UTxOs, duplicate identities, unexpected addresses,
+and mismatched topic policy
 tokens leave the previous valid view intact.
 
-The testbed settings in `ops/config/phase-0.9/testbed.yaml` are:
+Configure these observation settings for each deployment:
 
-| Setting | Value | Effect |
+| Setting | Example | Effect |
 | --- | ---: | --- |
 | `registry.pollIntervalMs` | 5000 | Each instance polls each registry immediately at startup and then once per interval. |
 | `CARDANO_CLI_TIMEOUT_MS` | 15000 | A CLI query can take at most 15 seconds before it fails. |
@@ -34,9 +33,8 @@ registry-dependent work fails. `/v1/ops/registry` reports each registry's
 for operations diagnostics. Both applications use the shared `RegistryDiagnostics`
 helper to assemble that response. The last valid values may be stale; event
 authorization and placement use the fresh registry views instead.
-`REGISTRY_OBSERVED` logs contain registry, instance, result category, age,
-duration, and chain position when available. The current CLI UTxO query does
-not return a chain position, so logs mark it unavailable.
+`REGISTRY_OBSERVED` logs contain registry, instance, result, age, and duration.
+The current CLI UTxO query does not provide a chain position.
 
 Registry observation and failure recovery are covered by
 [`test/acceptance/registry-replication-recovery.sh`](../test/acceptance/registry-replication-recovery.sh),
